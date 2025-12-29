@@ -6636,6 +6636,38 @@ function Library:CreateWindow(WindowInfo)
         MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateTabBarSize)
 
+        -- Recalculate layouts and groupbox sizes when the main window resizes
+        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            task.defer(function()
+                ApplySidebarLayout()
+
+                for _, TabObject in pairs(Library.Tabs) do
+                    pcall(function()
+                        if TabObject.Groupboxes then
+                            for _, GB in pairs(TabObject.Groupboxes) do
+                                if GB and GB.Resize then
+                                    GB:Resize()
+                                end
+                            end
+                        end
+
+                        if TabObject.Tabboxes then
+                            for _, TB in pairs(TabObject.Tabboxes) do
+                                if TB.ActiveTab and TB.ActiveTab.Resize then
+                                    TB.ActiveTab:Resize()
+                                end
+                                for _, Sub in pairs(TB.Tabs) do
+                                    if Sub and Sub.Resize then
+                                        Sub:Resize()
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end)
+
         --// Container \\--
         Container = New("Frame", {
             AnchorPoint = Vector2.new(0, 0),
@@ -6660,19 +6692,6 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.EnableSidebarResize then
             warn("Sidebar resizing is disabled when using the top-aligned tab bar layout")
         end
-
-        -- Ensure layout updates when main window size or position changes
-        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            ApplySidebarLayout()
-            for _, Tab in pairs(Library.Tabs) do
-                if Tab.Resize then
-                    pcall(function() Tab:Resize(true) end)
-                end
-            end
-        end)
-        MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-            ApplySidebarLayout()
-        end)
 
         task.defer(ApplySidebarLayout)
     end
