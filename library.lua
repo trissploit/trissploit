@@ -626,7 +626,9 @@ local function RestoreDepbox(Box)
 
         if ElementInfo.SubButton then
             ElementInfo.Base.Visible = ElementInfo.Visible
-            ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+            if ElementInfo.SubButton.Base then
+                ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+            end
         end
     end
 
@@ -668,7 +670,9 @@ function Library:UpdateSearch(SearchText)
 
                 if ElementInfo.SubButton then
                     ElementInfo.Base.Visible = ElementInfo.Visible
-                    ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+                    if ElementInfo.SubButton.Base then
+                        ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+                    end
                 end
             end
 
@@ -692,7 +696,9 @@ function Library:UpdateSearch(SearchText)
 
                     if ElementInfo.SubButton then
                         ElementInfo.Base.Visible = ElementInfo.Visible
-                        ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+                        if ElementInfo.SubButton.Base then
+                            ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+                        end
                     end
                 end
 
@@ -724,7 +730,9 @@ function Library:UpdateSearch(SearchText)
 
                 if ElementInfo.SubButton then
                     ElementInfo.Base.Visible = ElementInfo.Visible
-                    ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+                    if ElementInfo.SubButton.Base then
+                        ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
+                    end
                 end
             end
 
