@@ -6163,7 +6163,7 @@ function Library:CreateWindow(WindowInfo)
         -- Update tab bar window position to stay centered above main window
         if LayoutRefs.TabBarWindow and LayoutRefs.TabsFrame and LayoutRefs.TabsList then
             -- Use the same logic as UpdateTabBarSize for consistency
-            local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 16
+            local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 12
             tabsWidth = math.max(tabsWidth, 100)  -- Minimum width
             local mainPos = MainFrame.AbsolutePosition
             local mainSize = MainFrame.AbsoluteSize
@@ -6631,7 +6631,7 @@ function Library:CreateWindow(WindowInfo)
         local function UpdateTabBarSize()
             task.defer(function()
                 if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not LayoutRefs.TabsList then return end
-                local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 16
+                local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 12
                 tabsWidth = math.max(tabsWidth, 100)
                 local mainPos = MainFrame.AbsolutePosition
                 local mainSize = MainFrame.AbsoluteSize
