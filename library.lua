@@ -6151,7 +6151,7 @@ function Library:CreateWindow(WindowInfo)
         end
 
         if LayoutRefs.ContainerFrame then
-            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 89)
+            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 93)
             LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -110)
         end
 
@@ -6566,7 +6566,7 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "Container",
-            Position = UDim2.fromOffset(0, 89),
+            Position = UDim2.fromOffset(0, 93),
             Size = UDim2.new(1, 0, 1, -110),
             Parent = MainFrame,
         })
@@ -6768,9 +6768,22 @@ function Library:CreateWindow(WindowInfo)
             })
             table.insert(LayoutRefs.TabPadding, ButtonPadding)
 
+            -- Container for centering icon and text
+            local TabContent = New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 1, 0),
+                Parent = TabButton,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Center,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 6),
+                Parent = TabContent,
+            })
+
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(30, 0),
                 AutomaticSize = Enum.AutomaticSize.X,
                 Size = UDim2.new(0, 0, 1, 0),
                 Text = Name,
@@ -6778,7 +6791,7 @@ function Library:CreateWindow(WindowInfo)
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not LayoutState.IsCompact,
-                Parent = TabButton,
+                Parent = TabContent,
             })
             table.insert(LayoutRefs.TabLabels, TabLabel)
 
@@ -6789,9 +6802,8 @@ function Library:CreateWindow(WindowInfo)
                     ImageRectOffset = Icon.ImageRectOffset,
                     ImageRectSize = Icon.ImageRectSize,
                     ImageTransparency = 0.5,
-                    Size = UDim2.fromScale(1, 1),
-                    SizeConstraint = Enum.SizeConstraint.RelativeYY,
-                    Parent = TabButton,
+                    Size = UDim2.fromOffset(16, 16),
+                    Parent = TabContent,
                 })
             end
 
@@ -7505,9 +7517,22 @@ function Library:CreateWindow(WindowInfo)
             })
             table.insert(LayoutRefs.TabPadding, KeyTabPadding)
 
+            -- Container for centering icon and text
+            local TabContent = New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 1, 0),
+                Parent = TabButton,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Center,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 6),
+                Parent = TabContent,
+            })
+
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(30, 0),
                 AutomaticSize = Enum.AutomaticSize.X,
                 Size = UDim2.new(0, 0, 1, 0),
                 Text = Name,
@@ -7515,7 +7540,7 @@ function Library:CreateWindow(WindowInfo)
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not LayoutState.IsCompact,
-                Parent = TabButton,
+                Parent = TabContent,
             })
             table.insert(LayoutRefs.TabLabels, TabLabel)
 
@@ -7526,9 +7551,8 @@ function Library:CreateWindow(WindowInfo)
                     ImageRectOffset = Icon.ImageRectOffset,
                     ImageRectSize = Icon.ImageRectSize,
                     ImageTransparency = 0.5,
-                    Size = UDim2.fromScale(1, 1),
-                    SizeConstraint = Enum.SizeConstraint.RelativeYY,
-                    Parent = TabButton,
+                    Size = UDim2.fromOffset(16, 16),
+                    Parent = TabContent,
                 })
             end
 
