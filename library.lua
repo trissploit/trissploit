@@ -6161,7 +6161,7 @@ function Library:CreateWindow(WindowInfo)
         end
 
         if LayoutRefs.TitleHolder then
-            LayoutRefs.TitleHolder.Size = UDim2.new(0, math.max(LayoutState.CompactWidth, SidebarWidth), 1, 0)
+            LayoutRefs.TitleHolder.Size = UDim2.new(1, 0, 1, 0)
         end
 
         if LayoutRefs.WindowIcon then
@@ -6175,8 +6175,7 @@ function Library:CreateWindow(WindowInfo)
         if LayoutRefs.WindowTitle then
             LayoutRefs.WindowTitle.Visible = not IsCompact
             if not IsCompact then
-                local MaxTextWidth =
-                    math.max(0, SidebarWidth - (WindowInfo.Icon and WindowInfo.IconSize.X.Offset + 12 or 12))
+                local MaxTextWidth = 1000 -- Use a large max width since title spans full width now
                 local TextWidth =
                     Library:GetTextBounds(LayoutRefs.WindowTitle.Text, Library.Scheme.Font, 20, MaxTextWidth)
                 LayoutRefs.WindowTitle.Size = UDim2.new(0, TextWidth, 1, 0)
@@ -6372,9 +6371,9 @@ function Library:CreateWindow(WindowInfo)
         --// Top Right Bar
         local RightWrapper = New("Frame", {
             BackgroundTransparency = 1,
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.new(0, InitialSidebarWidth + 8, 0.5, 0),
-            Size = UDim2.new(1, -(InitialSidebarWidth + 16 + MoveReservedWidth), 1, -16),
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -8, 0.5, 0),
+            Size = UDim2.new(0, 200, 1, -16), -- Fixed width for right-side buttons
             Parent = TopBar,
         })
         LayoutRefs.RightWrapper = RightWrapper
@@ -6773,7 +6772,7 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticSize = Enum.AutomaticSize.X,
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(0, 0, 0, 40),
+                Size = UDim2.new(0, 80, 0, 40),
                 Text = "",
                 Parent = Tabs,
             })
