@@ -6154,15 +6154,16 @@ function Library:CreateWindow(WindowInfo)
         end
 
         -- Update tab bar window position to stay centered above main window
-        if LayoutRefs.TabBarWindow and LayoutRefs.TabsFrame then
-            local tabsWidth = LayoutRefs.TabsFrame.AbsoluteSize.X + 16  -- Add padding
+        if LayoutRefs.TabBarWindow and LayoutRefs.TabsFrame and LayoutRefs.TabsList then
+            -- Use the same logic as UpdateTabBarSize for consistency
+            local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 16
             tabsWidth = math.max(tabsWidth, 100)  -- Minimum width
             local mainPos = MainFrame.AbsolutePosition
             local mainSize = MainFrame.AbsoluteSize
-            local tabBarX = mainPos.X + (mainSize.X / 2) - (tabsWidth / 2)
+            local centerX = mainPos.X + (mainSize.X / 2)
             local tabBarY = mainPos.Y - TabBarHeight - 6  -- 6px gap above main window
             
-            LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(tabBarX), math.floor(tabBarY))
+            LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(centerX), math.floor(tabBarY))
             LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), TabBarHeight)
         end
 
@@ -6615,12 +6616,13 @@ function Library:CreateWindow(WindowInfo)
             Parent = Tabs,
         })
         LayoutRefs.TabsFrame = Tabs
+        LayoutRefs.TabsList = TabsList
 
         -- Update tab bar window size when tabs change
         local function UpdateTabBarSize()
             task.defer(function()
-                if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not TabsList then return end
-                local tabsWidth = TabsList.AbsoluteContentSize.X + 16
+                if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not LayoutRefs.TabsList then return end
+                local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 16
                 tabsWidth = math.max(tabsWidth, 100)
                 local mainPos = MainFrame.AbsolutePosition
                 local mainSize = MainFrame.AbsoluteSize
@@ -6632,7 +6634,7 @@ function Library:CreateWindow(WindowInfo)
             end)
         end
         
-        TabsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateTabBarSize)
+        LayoutRefs.TabsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateTabBarSize)
 
