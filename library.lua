@@ -6594,14 +6594,9 @@ function Library:CreateWindow(WindowInfo)
         LayoutRefs.TabBarWindow = TabBarWindow
 
         --// Tabs \\--
-        Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.X,
+        Tabs = New("Frame", {
             BackgroundTransparency = 1,
-            CanvasSize = UDim2.fromOffset(0, 0),
-            ElasticBehavior = Enum.ElasticBehavior.Never,
             Position = UDim2.fromOffset(0, 0),
-            ScrollBarThickness = 0,
-            ScrollingDirection = Enum.ScrollingDirection.X,
             Size = UDim2.fromScale(1, 1),
             Parent = TabBarWindow,
         })
@@ -6610,7 +6605,7 @@ function Library:CreateWindow(WindowInfo)
             PaddingRight = UDim.new(0, 8),
             Parent = Tabs,
         })
-        New("UIListLayout", {
+        local TabsList = New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
             Padding = UDim.new(0, 6),
@@ -6622,8 +6617,8 @@ function Library:CreateWindow(WindowInfo)
         -- Update tab bar window size when tabs change
         local function UpdateTabBarSize()
             task.defer(function()
-                if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow then return end
-                local tabsWidth = LayoutRefs.TabsFrame.AbsoluteCanvasSize.X + 16
+                if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not TabsList then return end
+                local tabsWidth = TabsList.AbsoluteContentSize.X + 16
                 tabsWidth = math.max(tabsWidth, 100)
                 local mainPos = MainFrame.AbsolutePosition
                 local mainSize = MainFrame.AbsoluteSize
@@ -6635,7 +6630,7 @@ function Library:CreateWindow(WindowInfo)
             end)
         end
         
-        Tabs:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(UpdateTabBarSize)
+        TabsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateTabBarSize)
 
