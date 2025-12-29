@@ -6737,6 +6737,17 @@ function Library:CreateWindow(WindowInfo)
                 Parent = Tabs,
             })
 
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = TabButton,
+            })
+
+            local TabOutline, TabShadow = Library:AddOutline(TabButton)
+            if not Library.Registry[TabButton] then
+                Library:AddToRegistry(TabButton, {})
+            end
+            Library.Registry[TabButton].BackgroundColor3 = "MainColor"
+
             New("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal,
                 HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -7272,17 +7283,6 @@ function Library:CreateWindow(WindowInfo)
                     HorizontalFlex = Enum.UIFlexAlignment.Fill,
                     Parent = TabboxButtons,
                 })
-
-                -- Fill that highlights the entire tabbar side for this tabbox
-                local TabboxFill = New("Frame", {
-                    BackgroundColor3 = "AccentColor",
-                    BackgroundTransparency = 0,
-                    Size = UDim2.new(1, 0, 0, 34),
-                    Position = UDim2.fromOffset(0, 0),
-                    ZIndex = TabboxButtons.ZIndex - 1,
-                    Visible = false,
-                    Parent = TabboxHolder,
-                })
             end
 
             local Tabbox = {
@@ -7346,10 +7346,6 @@ function Library:CreateWindow(WindowInfo)
                     Button.BackgroundTransparency = 1
                     Button.TextTransparency = 0
                     Line.Visible = false
-                    -- show the full-side fill for this tabbox (doesn't change button size)
-                    if TabboxFill then
-                        TabboxFill.Visible = true
-                    end
 
                     Container.Visible = true
 
@@ -7361,9 +7357,6 @@ function Library:CreateWindow(WindowInfo)
                     Button.BackgroundTransparency = 0
                     Button.TextTransparency = 0.5
                     Line.Visible = true
-                    if TabboxFill then
-                        TabboxFill.Visible = false
-                    end
                     Container.Visible = false
 
                     Tabbox.ActiveTab = nil
@@ -7539,6 +7532,17 @@ function Library:CreateWindow(WindowInfo)
                 Text = "",
                 Parent = Tabs,
             })
+
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = TabButton,
+            })
+
+            local KeyTabOutline, KeyTabShadow = Library:AddOutline(TabButton)
+            if not Library.Registry[TabButton] then
+                Library:AddToRegistry(TabButton, {})
+            end
+            Library.Registry[TabButton].BackgroundColor3 = "MainColor"
             New("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal,
                 HorizontalAlignment = Enum.HorizontalAlignment.Center,
