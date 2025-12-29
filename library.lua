@@ -6661,41 +6661,6 @@ function Library:CreateWindow(WindowInfo)
             warn("Sidebar resizing is disabled when using the top-aligned tab bar layout")
         end
 
-        -- Keep layout and contents in sync when the main window resizes
-        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if Library.Unloaded then
-                return
-            end
-
-            ApplySidebarLayout()
-
-            -- Resize all tabs, groupboxes and tabboxes to match new window size
-            for _, Tab in pairs(Library.Tabs) do
-                pcall(function()
-                    if Tab.Resize then
-                        Tab:Resize(true)
-                    end
-
-                    if Tab.Groupboxes then
-                        for _, Groupbox in pairs(Tab.Groupboxes) do
-                            pcall(function() if Groupbox.Resize then Groupbox:Resize() end end)
-                        end
-                    end
-
-                    if Tab.Tabboxes then
-                        for _, Tabbox in pairs(Tab.Tabboxes) do
-                            if Tabbox.ActiveTab then
-                                pcall(function() if Tabbox.ActiveTab.Resize then Tabbox.ActiveTab:Resize() end end)
-                            end
-                            for _, SubTab in pairs(Tabbox.Tabs or {}) do
-                                pcall(function() if SubTab.Resize then SubTab:Resize() end end)
-                            end
-                        end
-                    end
-                end)
-            end
-        end)
-
         task.defer(ApplySidebarLayout)
     end
 
@@ -6876,6 +6841,11 @@ function Library:CreateWindow(WindowInfo)
 
                 TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
                 Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
+
+                TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                    TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
+                    Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
+                end)
             end
 
             TabRight = New("ScrollingFrame", {
@@ -6912,6 +6882,11 @@ function Library:CreateWindow(WindowInfo)
 
                 TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
                 Library:UpdateDPI(TabRight, { Size = TabRight.Size })
+
+                TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                    TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
+                    Library:UpdateDPI(TabRight, { Size = TabRight.Size })
+                end)
             end
 		end
 
@@ -7103,6 +7078,13 @@ function Library:CreateWindow(WindowInfo)
 				})
 			end
 		end
+
+        -- Connect to TabContainer size changes to refresh sides automatically
+        TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            if Tab == Library.ActiveTab then
+                Tab:RefreshSides()
+            end
+        end)
 
         function Tab:Resize(ResizeWarningBox: boolean?)
 			if ResizeWarningBox then
