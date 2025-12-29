@@ -6155,7 +6155,7 @@ function Library:CreateWindow(WindowInfo)
 
         -- Update tab bar window position to stay centered above main window
         if LayoutRefs.TabBarWindow and LayoutRefs.TabsFrame then
-            local tabsWidth = LayoutRefs.TabsFrame.AbsoluteSize.X + 16  -- Add padding
+            local tabsWidth = LayoutRefs.TabsFrame.AbsoluteCanvasSize.X + 16  -- Add padding
             tabsWidth = math.max(tabsWidth, 100)  -- Minimum width
             local mainPos = MainFrame.AbsolutePosition
             local mainSize = MainFrame.AbsoluteSize
@@ -6596,9 +6596,12 @@ function Library:CreateWindow(WindowInfo)
         TabBarWindow.Visible = MainFrame and MainFrame.Visible or false
 
         --// Tabs \\--
-        Tabs = New("Frame", {
+        Tabs = New("ScrollingFrame", {
+            AutomaticCanvasSize = Enum.AutomaticSize.X,
             BackgroundTransparency = 1,
+            CanvasSize = UDim2.fromScale(0, 0),
             Position = UDim2.fromOffset(0, 0),
+            ScrollBarThickness = 0,
             Size = UDim2.fromScale(1, 1),
             Parent = TabBarWindow,
         })
