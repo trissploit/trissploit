@@ -6147,12 +6147,12 @@ function Library:CreateWindow(WindowInfo)
         end
 
         if LayoutRefs.TabsFrame then
-            LayoutRefs.TabsFrame.Size = UDim2.new(1, 0, 0, 40)
+            -- Tabs are now in a separate frame, no layout changes needed
         end
 
         if LayoutRefs.ContainerFrame then
-            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 93)
-            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -110)
+            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 49)
+            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -70)
         end
 
         if LayoutRefs.SidebarGrabber then
@@ -6231,6 +6231,49 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.AnchorPoint = Vector2.new(0, 0.5)
         Library.KeybindFrame.Position = UDim2.new(0, 6, 0.5, 0)
         Library.KeybindFrame.Visible = false
+
+        --// Separate Tabs Frame \\--
+        Library.TabsFrame = New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = "BackgroundColor",
+            Position = UDim2.fromOffset(6, 60),
+            Size = UDim2.fromOffset(0, 40),
+            ZIndex = 10,
+            Visible = false,
+            Parent = ScreenGui,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Library.TabsFrame,
+        })
+        Library:AddOutline(Library.TabsFrame)
+        Library:MakeDraggable(Library.TabsFrame, Library.TabsFrame, false, true)
+        Library:UpdateDPI(Library.TabsFrame, {
+            Position = false,
+            Size = false,
+        })
+
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            PaddingTop = UDim.new(0, 0),
+            PaddingBottom = UDim.new(0, 0),
+            Parent = Library.TabsFrame,
+        })
+
+        Tabs = New("ScrollingFrame", {
+            AutomaticCanvasSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            CanvasSize = UDim2.fromScale(0, 0),
+            Size = UDim2.new(1, 0, 1, 0),
+            ScrollBarThickness = 0,
+            Parent = Library.TabsFrame,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            Parent = Tabs,
+        })
+        LayoutRefs.TabsFrame = Tabs
 
         MainFrame = New("TextButton", {
             BackgroundColor3 = function()
@@ -6543,22 +6586,6 @@ function Library:CreateWindow(WindowInfo)
             Parent = ResizeButton,
         })
 
-        --// Tabs \\--
-        Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = "BackgroundColor",
-            CanvasSize = UDim2.fromScale(0, 0),
-            Position = UDim2.fromOffset(0, 49),
-            ScrollBarThickness = 0,
-            Size = UDim2.new(1, 0, 0, 40),
-            Parent = MainFrame,
-        })
-        New("UIListLayout", {
-            FillDirection = Enum.FillDirection.Horizontal,
-            Parent = Tabs,
-        })
-        LayoutRefs.TabsFrame = Tabs
-
         --// Container \\--
         Container = New("Frame", {
             AnchorPoint = Vector2.new(0, 0),
@@ -6566,8 +6593,8 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "Container",
-            Position = UDim2.fromOffset(0, 93),
-            Size = UDim2.new(1, 0, 1, -110),
+            Position = UDim2.fromOffset(0, 49),
+            Size = UDim2.new(1, 0, 1, -70),
             Parent = MainFrame,
         })
         New("UIPadding", {
@@ -7743,6 +7770,9 @@ function Library:CreateWindow(WindowInfo)
         end
 
         MainFrame.Visible = Library.Toggled
+        if Library.TabsFrame then
+            Library.TabsFrame.Visible = Library.Toggled
+        end
 
         if WindowInfo.UnlockMouseWhileOpen then
             ModalElement.Modal = Library.Toggled
