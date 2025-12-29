@@ -6321,12 +6321,11 @@ function Library:CreateWindow(WindowInfo)
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
 
-        --// Top Bar \\-
+        --// Top Bar \\
         local TopBar = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, TopBarHeight),
             Parent = WindowInfo.SeparateSidebar and ScreenGui or MainFrame,
-            ZIndex = WindowInfo.SeparateSidebar and 1000 or nil,
         })
         Library:MakeDraggable(MainFrame, TopBar, false, true)
 
@@ -6570,17 +6569,17 @@ function Library:CreateWindow(WindowInfo)
             Parent = ResizeButton,
         })
 
-        --// Tabs \\--
+        --// Tabs \\
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.X,
             BackgroundColor3 = "BackgroundColor",
             CanvasSize = UDim2.fromOffset(0, 0),
             ElasticBehavior = Enum.ElasticBehavior.Never,
-            Position = UDim2.fromOffset(0, TopContentOffset),
+            Position = UDim2.fromOffset(0, 0),
             ScrollBarThickness = 0,
             ScrollingDirection = Enum.ScrollingDirection.X,
-            Size = UDim2.new(1, 0, 0, TabBarHeight),
-            Parent = WindowInfo.SeparateSidebar and ScreenGui or MainFrame,
+            Size = UDim2.new(1, 0, 1, 0),
+            Parent = TopBar,
         })
         New("UIPadding", {
             PaddingLeft = UDim.new(0, 8),
@@ -6597,7 +6596,7 @@ function Library:CreateWindow(WindowInfo)
         LayoutRefs.TabsFrame = Tabs
 
         if WindowInfo.SeparateSidebar then
-            local function RepositionTopBar()
+            local function RepositionSeparateTopBar()
                 if not MainFrame or not TopBar then
                     return
                 end
@@ -6608,18 +6607,18 @@ function Library:CreateWindow(WindowInfo)
                 TopBar.Position = UDim2.fromOffset(absPos.X, absPos.Y)
                 TopBar.Size = UDim2.fromOffset(absSize.X, TopBarHeight)
 
-                -- ensure tabs are parented to the TopBar so they remain visually connected
-                if Tabs and Tabs.Parent ~= TopBar then
-                    Tabs.Parent = TopBar
-                end
+                -- Tabs are children of TopBar, make sure they fill it
                 if Tabs then
-                    Tabs.Position = UDim2.fromOffset(0, TopContentOffset - TopContentOffset) -- local inside TopBar
-                    Tabs.Size = UDim2.fromOffset(absSize.X, TabBarHeight)
+                    Tabs.Position = UDim2.fromOffset(0, 0)
+                    Tabs.Size = UDim2.new(1, 0, 1, 0)
                 end
+
+                -- Re-run layout so RightWrapper & title sizing update
+                ApplySidebarLayout()
             end
 
-            RepositionTopBar()
-            Library:GiveSignal(RunService.Heartbeat:Connect(RepositionTopBar))
+            RepositionSeparateTopBar()
+            Library:GiveSignal(RunService.Heartbeat:Connect(RepositionSeparateTopBar))
         end
 
         --// Container \\--
