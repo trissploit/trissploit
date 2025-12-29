@@ -6636,34 +6636,6 @@ function Library:CreateWindow(WindowInfo)
         MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateTabBarSize)
 
-        -- Keep layout and child elements responsive when the main window resizes
-        local function UpdateOnMainResize()
-            ApplySidebarLayout()
-            -- Resize each registered tab and its groupboxes
-            for _, tab in pairs(Library.Tabs) do
-                pcall(function()
-                    if tab.Resize then
-                        tab:Resize()
-                    end
-                    if tab.Groupboxes then
-                        for _, gb in pairs(tab.Groupboxes) do
-                            if gb and gb.Resize then
-                                pcall(gb.Resize, gb)
-                            end
-                        end
-                    end
-                    if tab.Tabboxes then
-                        for _, tb in pairs(tab.Tabboxes) do
-                            if tb and tb.ActiveTab and tb.ActiveTab.Resize then
-                                pcall(tb.ActiveTab.Resize, tb.ActiveTab)
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateOnMainResize)
-
         --// Container \\--
         Container = New("Frame", {
             AnchorPoint = Vector2.new(0, 0),
@@ -6688,6 +6660,41 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.EnableSidebarResize then
             warn("Sidebar resizing is disabled when using the top-aligned tab bar layout")
         end
+
+        -- Keep layout and contents in sync when the main window resizes
+        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            if Library.Unloaded then
+                return
+            end
+
+            ApplySidebarLayout()
+
+            -- Resize all tabs, groupboxes and tabboxes to match new window size
+            for _, Tab in pairs(Library.Tabs) do
+                pcall(function()
+                    if Tab.Resize then
+                        Tab:Resize(true)
+                    end
+
+                    if Tab.Groupboxes then
+                        for _, Groupbox in pairs(Tab.Groupboxes) do
+                            pcall(function() if Groupbox.Resize then Groupbox:Resize() end end)
+                        end
+                    end
+
+                    if Tab.Tabboxes then
+                        for _, Tabbox in pairs(Tab.Tabboxes) do
+                            if Tabbox.ActiveTab then
+                                pcall(function() if Tabbox.ActiveTab.Resize then Tabbox.ActiveTab:Resize() end end)
+                            end
+                            for _, SubTab in pairs(Tabbox.Tabs or {}) do
+                                pcall(function() if SubTab.Resize then SubTab:Resize() end end)
+                            end
+                        end
+                    end
+                end)
+            end
+        end)
 
         task.defer(ApplySidebarLayout)
     end
