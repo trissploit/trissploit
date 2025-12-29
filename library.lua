@@ -6155,13 +6155,21 @@ function Library:CreateWindow(WindowInfo)
 
         -- Update tab bar window position to stay centered above main window
         if LayoutRefs.TabBarWindow and LayoutRefs.TabsFrame then
-            local tabsWidth = LayoutRefs.TabsFrame.AbsoluteCanvasSize.X + 16  -- Add padding
-            tabsWidth = math.max(tabsWidth, 100)  -- Minimum width
-            local mainPos = MainFrame.AbsolutePosition
-            local mainSize = MainFrame.AbsoluteSize
+            local tabsWidth = 100
+            local tabsFrame = LayoutRefs.TabsFrame
+            local list = tabsFrame and tabsFrame:FindFirstChildOfClass("UIListLayout")
+            if list and list.AbsoluteContentSize then
+                tabsWidth = list.AbsoluteContentSize.X + 16 -- Add padding
+            elseif tabsFrame and tabsFrame.AbsoluteSize then
+                tabsWidth = tabsFrame.AbsoluteSize.X
+            end
+            tabsWidth = math.max(tabsWidth, 100) -- Minimum width
+
+            local mainPos = MainFrame and MainFrame.AbsolutePosition or Vector2.new(0,0)
+            local mainSize = MainFrame and MainFrame.AbsoluteSize or Vector2.new(0,0)
             local tabBarX = mainPos.X + (mainSize.X / 2) - (tabsWidth / 2)
-            local tabBarY = mainPos.Y - TabBarHeight - 6  -- 6px gap above main window
-            
+            local tabBarY = mainPos.Y - TabBarHeight - 6 -- 6px gap above main window
+
             LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(tabBarX), math.floor(tabBarY))
             LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), TabBarHeight)
         end
