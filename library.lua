@@ -6661,6 +6661,19 @@ function Library:CreateWindow(WindowInfo)
             warn("Sidebar resizing is disabled when using the top-aligned tab bar layout")
         end
 
+        -- Ensure layout updates when main window size or position changes
+        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            ApplySidebarLayout()
+            for _, Tab in pairs(Library.Tabs) do
+                if Tab.Resize then
+                    pcall(function() Tab:Resize(true) end)
+                end
+            end
+        end)
+        MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+            ApplySidebarLayout()
+        end)
+
         task.defer(ApplySidebarLayout)
     end
 
