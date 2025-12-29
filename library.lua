@@ -3709,6 +3709,65 @@ do
         return Dropdown
     end
 
+    function Funcs:AddDependencyGroupbox(Name)
+        local ParentGroupbox = self
+        local Container = ParentGroupbox.Container
+
+        local Background = Library:MakeOutline(Container, Library.CornerRadius)
+        Background.Size = UDim2.fromScale(1, 0)
+
+        local GroupboxHolder = New("Frame", {
+            BackgroundColor3 = "BackgroundColor",
+            Position = UDim2.fromOffset(2, 2),
+            Size = UDim2.new(1, -4, 1, -4),
+            Parent = Background,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, (Library.CornerRadius or 6) - 1),
+            Parent = GroupboxHolder,
+        })
+        Library:MakeLine(GroupboxHolder, {
+            Position = UDim2.fromOffset(0, 34),
+            Size = UDim2.new(1, 0, 0, 1),
+        })
+
+        local GroupboxContainer = New("Frame", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(0, 35),
+            Size = UDim2.new(1, 0, 1, -35),
+            Parent = GroupboxHolder,
+        })
+
+        local GroupboxList = New("UIListLayout", {
+            Padding = UDim.new(0, 8),
+            Parent = GroupboxContainer,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 7),
+            PaddingLeft = UDim.new(0, 7),
+            PaddingRight = UDim.new(0, 7),
+            PaddingTop = UDim.new(0, 7),
+            Parent = GroupboxContainer,
+        })
+
+        local DepGroupbox = {
+            Holder = Background,
+            Container = GroupboxContainer,
+            Elements = {},
+        }
+
+        function DepGroupbox:Resize()
+            Background.Size = UDim2.new(1, 0, 0, GroupboxList.AbsoluteContentSize.Y + 53 * (Library.DPIScale or 1))
+        end
+
+        setmetatable(DepGroupbox, BaseGroupbox)
+
+        DepGroupbox:Resize()
+        table.insert(ParentGroupbox.Elements, DepGroupbox)
+
+        return DepGroupbox
+    end
+
     BaseGroupbox.__index = Funcs
     BaseGroupbox.__namecall = function(_, Key, ...)
         return Funcs[Key](...)
