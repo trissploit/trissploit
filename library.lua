@@ -6592,6 +6592,8 @@ function Library:CreateWindow(WindowInfo)
         })
         Library:AddOutline(TabBarWindow)
         LayoutRefs.TabBarWindow = TabBarWindow
+        -- initialize tab bar visibility to match main window
+        TabBarWindow.Visible = MainFrame and MainFrame.Visible or false
 
         --// Tabs \\--
         Tabs = New("Frame", {
@@ -6622,10 +6624,10 @@ function Library:CreateWindow(WindowInfo)
                 tabsWidth = math.max(tabsWidth, 100)
                 local mainPos = MainFrame.AbsolutePosition
                 local mainSize = MainFrame.AbsoluteSize
-                local tabBarX = mainPos.X + (mainSize.X / 2) - (tabsWidth / 2)
+                local centerX = mainPos.X + (mainSize.X / 2)
                 local tabBarY = mainPos.Y - TabBarHeight - 6
-                
-                LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(tabBarX), math.floor(tabBarY))
+
+                LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(centerX), math.floor(tabBarY))
                 LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), TabBarHeight)
             end)
         end
