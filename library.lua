@@ -230,14 +230,16 @@ local Templates = {
     Frame = {
         BorderSizePixel = 0,
     },
-    ImageLabel = {
-        BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Parent = TabBarWindow,
         BorderSizePixel = 0,
-    },
-    ImageButton = {
-        AutoButtonColor = false,
-        BorderSizePixel = 0,
-    },
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, LayoutState.IsCompact and 14 or 12),
+            PaddingRight = UDim.new(0, LayoutState.IsCompact and 14 or 12),
+            PaddingTop = UDim.new(0, LayoutState.IsCompact and 7 or 11),
+            PaddingBottom = UDim.new(0, LayoutState.IsCompact and 7 or 11),
+            Parent = Tabs,
+        })
     ScrollingFrame = {
         BorderSizePixel = 0,
     },
@@ -6155,16 +6157,25 @@ function Library:CreateWindow(WindowInfo)
 
         -- Update tab bar window position to stay centered above main window
         if LayoutRefs.TabBarWindow and LayoutRefs.TabsFrame and LayoutRefs.TabsList then
-            -- Use the same logic as UpdateTabBarSize for consistency
-            local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 16
+            local padLeft = (LayoutState.IsCompact and 14 or 12)
+            local padRight = padLeft
+            local padTop = (LayoutState.IsCompact and 7 or 11)
+            local padBottom = padTop
+
+            local contentWidth = LayoutRefs.TabsList.AbsoluteContentSize.X
+            local tabsWidth = contentWidth + padLeft + padRight
             tabsWidth = math.max(tabsWidth, 100)  -- Minimum width
+
+            local contentHeight = 40 -- tab button height
+            local desiredHeight = contentHeight + padTop + padBottom
+
             local mainPos = MainFrame.AbsolutePosition
             local mainSize = MainFrame.AbsoluteSize
             local centerX = mainPos.X + (mainSize.X / 2)
-            local tabBarY = mainPos.Y - TabBarHeight - 6  -- 6px gap above main window
-            
+            local tabBarY = mainPos.Y - desiredHeight - 6  -- 6px gap above main window
+
             LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(centerX), math.floor(tabBarY))
-            LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), TabBarHeight)
+            LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), math.floor(desiredHeight))
         end
 
         if LayoutRefs.ContainerFrame then
@@ -6604,16 +6615,16 @@ function Library:CreateWindow(WindowInfo)
             Parent = TabBarWindow,
         })
         New("UIPadding", {
-            PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 8),
-            PaddingTop = UDim.new(0, 8),
-            PaddingBottom = UDim.new(0, 8),
+            PaddingLeft = UDim.new(0, LayoutState.IsCompact and 14 or 12),
+            PaddingRight = UDim.new(0, LayoutState.IsCompact and 14 or 12),
+            PaddingTop = UDim.new(0, LayoutState.IsCompact and 7 or 11),
+            PaddingBottom = UDim.new(0, LayoutState.IsCompact and 7 or 11),
             Parent = Tabs,
         })
         local TabsList = New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
-            Padding = UDim.new(0, 8),
+            Padding = UDim.new(0, 6),
             VerticalAlignment = Enum.VerticalAlignment.Center,
             Parent = Tabs,
         })
@@ -6624,15 +6635,25 @@ function Library:CreateWindow(WindowInfo)
         local function UpdateTabBarSize()
             task.defer(function()
                 if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not LayoutRefs.TabsList then return end
-                local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 16
+                local padLeft = (LayoutState.IsCompact and 14 or 12)
+                local padRight = padLeft
+                local padTop = (LayoutState.IsCompact and 7 or 11)
+                local padBottom = padTop
+
+                local contentWidth = LayoutRefs.TabsList.AbsoluteContentSize.X
+                local tabsWidth = contentWidth + padLeft + padRight
                 tabsWidth = math.max(tabsWidth, 100)
+
+                local contentHeight = 40 -- tab button height
+                local desiredHeight = contentHeight + padTop + padBottom
+
                 local mainPos = MainFrame.AbsolutePosition
                 local mainSize = MainFrame.AbsoluteSize
                 local centerX = mainPos.X + (mainSize.X / 2)
-                local tabBarY = mainPos.Y - TabBarHeight - 6
+                local tabBarY = mainPos.Y - desiredHeight - 6
 
                 LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(centerX), math.floor(tabBarY))
-                LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), TabBarHeight)
+                LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), math.floor(desiredHeight))
             end)
         end
         
