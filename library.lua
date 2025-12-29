@@ -7285,8 +7285,8 @@ function Library:CreateWindow(WindowInfo)
             function Tabbox:AddTab(Name)
                 local Button = New("TextButton", {
                     BackgroundColor3 = "MainColor",
-                    BackgroundTransparency = 0,
-                    Size = UDim2.fromOffset(0, 34),
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 34),
                     Text = Name,
                     TextSize = 15,
                     TextTransparency = 0.5,
@@ -7332,7 +7332,7 @@ function Library:CreateWindow(WindowInfo)
                         Tabbox.ActiveTab:Hide()
                     end
 
-                    Button.BackgroundTransparency = 1
+                    Button.BackgroundTransparency = 0
                     Button.TextTransparency = 0
                     Line.Visible = false
 
@@ -7343,7 +7343,7 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 function Tab:Hide()
-                    Button.BackgroundTransparency = 0
+                    Button.BackgroundTransparency = 1
                     Button.TextTransparency = 0.5
                     Line.Visible = true
                     Container.Visible = false
