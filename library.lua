@@ -6621,8 +6621,8 @@ function Library:CreateWindow(WindowInfo)
         -- Update tab bar window size when tabs change
         local function UpdateTabBarSize()
             task.defer(function()
-                if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not LayoutRefs.TabsList then return end
-                local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 16
+                if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not TabsList then return end
+                local tabsWidth = TabsList.AbsoluteContentSize.X + 16
                 tabsWidth = math.max(tabsWidth, 100)
                 local mainPos = MainFrame.AbsolutePosition
                 local mainSize = MainFrame.AbsoluteSize
