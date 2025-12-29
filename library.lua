@@ -6155,8 +6155,12 @@ function Library:CreateWindow(WindowInfo)
         end
 
         if LayoutRefs.TabsFrame then
-            LayoutRefs.TabsFrame.Position = UDim2.fromOffset(0, TabStartY)
-            LayoutRefs.TabsFrame.Size = UDim2.new(1, 0, 0, TabBarHeight)
+            if not WindowInfo.SeparateSidebar then
+                LayoutRefs.TabsFrame.Position = UDim2.fromOffset(0, TabStartY)
+                LayoutRefs.TabsFrame.Size = UDim2.new(1, 0, 0, TabBarHeight)
+            else
+                -- separate sidebar keeps its own position/size; ensure labels/padding update
+            end
         end
 
         if LayoutRefs.ContainerFrame then
@@ -6570,46 +6574,58 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Tabs \\--
-        Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = "BackgroundColor",
-            CanvasSize = UDim2.fromOffset(0, 0),
-            ElasticBehavior = Enum.ElasticBehavior.Never,
-            Position = UDim2.fromOffset(0, TopContentOffset),
-            ScrollBarThickness = 0,
-            ScrollingDirection = Enum.ScrollingDirection.X,
-            Size = UDim2.new(1, 0, 0, TabBarHeight),
-            Parent = WindowInfo.SeparateSidebar and ScreenGui or MainFrame,
-        })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 8),
-            Parent = Tabs,
-        })
-        New("UIListLayout", {
-            FillDirection = Enum.FillDirection.Horizontal,
-            HorizontalAlignment = Enum.HorizontalAlignment.Left,
-            Padding = UDim.new(0, 6),
-            VerticalAlignment = Enum.VerticalAlignment.Center,
-            Parent = Tabs,
-        })
-        LayoutRefs.TabsFrame = Tabs
-
         if WindowInfo.SeparateSidebar then
-            local function RepositionSeparateTabs()
-                if not MainFrame or not Tabs then
-                    return
-                end
+            local SidebarGui = New("ScreenGui", {
+                Name = WindowInfo.SidebarName or "ObsidianSidebar",
+                DisplayOrder = 1000,
+                ResetOnSpawn = false,
+            })
+            ParentUI(SidebarGui)
 
-                local absPos = MainFrame.AbsolutePosition
-                local absSize = MainFrame.AbsoluteSize
+            Tabs = New("ScrollingFrame", {
+                AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                BackgroundColor3 = "BackgroundColor",
+                CanvasSize = UDim2.fromScale(0, 0),
+                Position = WindowInfo.SeparateSidebarPosition or UDim2.fromOffset(6, TopContentOffset),
+                ScrollBarThickness = 0,
+                Size = UDim2.fromOffset(WindowInfo.SidebarMinWidth, WindowInfo.Size.Y.Offset - (TopContentOffset + BottomContentOffset)),
+                Parent = SidebarGui,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Vertical,
+                HorizontalAlignment = Enum.HorizontalAlignment.Left,
+                Padding = UDim.new(0, 6),
+                VerticalAlignment = Enum.VerticalAlignment.Top,
+                Parent = Tabs,
+            })
 
-                Tabs.Position = UDim2.fromOffset(absPos.X, absPos.Y + TopContentOffset)
-                Tabs.Size = UDim2.fromOffset(absSize.X, TabBarHeight)
-            end
+            LayoutRefs.TabsFrame = Tabs
+        else
+            Tabs = New("ScrollingFrame", {
+                AutomaticCanvasSize = Enum.AutomaticSize.X,
+                BackgroundColor3 = "BackgroundColor",
+                CanvasSize = UDim2.fromOffset(0, 0),
+                ElasticBehavior = Enum.ElasticBehavior.Never,
+                Position = UDim2.fromOffset(0, TopContentOffset),
+                ScrollBarThickness = 0,
+                ScrollingDirection = Enum.ScrollingDirection.X,
+                Size = UDim2.new(1, 0, 0, TabBarHeight),
+                Parent = MainFrame,
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 8),
+                PaddingRight = UDim.new(0, 8),
+                Parent = Tabs,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Left,
+                Padding = UDim.new(0, 6),
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Parent = Tabs,
+            })
 
-            RepositionSeparateTabs()
-            Library:GiveSignal(RunService.Heartbeat:Connect(RepositionSeparateTabs))
+            LayoutRefs.TabsFrame = Tabs
         end
 
         --// Container \\--
@@ -6749,6 +6765,15 @@ function Library:CreateWindow(WindowInfo)
             end
 
             UpdateTabWidth = function()
+                if WindowInfo.SeparateSidebar then
+                    if LayoutState.IsCompact then
+                        TabButton.Size = UDim2.fromOffset(LayoutState.CompactWidth, 40)
+                    else
+                        TabButton.Size = UDim2.new(1, 0, 0, 40)
+                    end
+                    return
+                end
+
                 local textWidth = Library:GetTextBounds(Name, Library.Scheme.Font, 16)
                 local iconWidth = 0
 
@@ -6770,6 +6795,15 @@ function Library:CreateWindow(WindowInfo)
             UpdateTabWidth()
 
             local function UpdateTabWidth()
+                if WindowInfo.SeparateSidebar then
+                    if LayoutState.IsCompact then
+                        TabButton.Size = UDim2.fromOffset(LayoutState.CompactWidth, 40)
+                    else
+                        TabButton.Size = UDim2.new(1, 0, 0, 40)
+                    end
+                    return
+                end
+
                 local textWidth = Library:GetTextBounds(Name, Library.Scheme.Font, 16)
                 local iconWidth = 0
 
