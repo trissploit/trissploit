@@ -1804,21 +1804,35 @@ function Library:AddContextMenu(
         if CurrentMenu == Table then
             return
         elseif CurrentMenu then
-            CurrentMenu:Close()
-        end
 
-        CurrentMenu = Table
-        Table.Active = true
+            TweenService:Create(TabButton, Library.TweenInfo, {
+                BackgroundTransparency = 0,
+            }):Play()
 
-        if typeof(Offset) == "function" then
-            Menu.Position = UDim2.fromOffset(
-                math.floor(Holder.AbsolutePosition.X + Offset()[1]),
-                math.floor(Holder.AbsolutePosition.Y + Offset()[2])
-            )
-        else
-            Menu.Position = UDim2.fromOffset(
-                math.floor(Holder.AbsolutePosition.X + Offset[1]),
-                math.floor(Holder.AbsolutePosition.Y + Offset[2])
+            -- Expand the selected tab button to fill the tab bar window
+            if LayoutRefs.TabBarWindow and LayoutRefs.TabBarWindow.AbsoluteSize then
+                local function applyFullWidth()
+                    local innerWidth = math.max(0, LayoutRefs.TabBarWindow.AbsoluteSize.X - 16)
+                    TabButton.Size = UDim2.fromOffset(math.floor(innerWidth), 40)
+                end
+                applyFullWidth()
+                -- update when the tab bar window resizes
+                if Tab._barConn and Tab._barConn.Connected then
+                    Tab._barConn:Disconnect()
+                end
+                Tab._barConn = LayoutRefs.TabBarWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyFullWidth)
+            end
+
+            TweenService:Create(TabLabel, Library.TweenInfo, {
+                TextTransparency = 0,
+            }):Play()
+            if TabIcon then
+                TweenService:Create(TabIcon, Library.TweenInfo, {
+                    ImageTransparency = 0,
+                }):Play()
+            end
+
+            if Description then
             )
         end
         if typeof(Table.Size) == "function" then
@@ -7285,8 +7299,8 @@ function Library:CreateWindow(WindowInfo)
             function Tabbox:AddTab(Name)
                 local Button = New("TextButton", {
                     BackgroundColor3 = "MainColor",
-                    BackgroundTransparency = 1,
-                    Size = UDim2.new(1, 0, 0, 34),
+                    BackgroundTransparency = 0,
+                    Size = UDim2.new(1, 0, 1, 0),
                     Text = Name,
                     TextSize = 15,
                     TextTransparency = 0.5,
@@ -7332,7 +7346,7 @@ function Library:CreateWindow(WindowInfo)
                         Tabbox.ActiveTab:Hide()
                     end
 
-                    Button.BackgroundTransparency = 0
+                    Button.BackgroundTransparency = 1
                     Button.TextTransparency = 0
                     Line.Visible = false
 
@@ -7343,7 +7357,7 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 function Tab:Hide()
-                    Button.BackgroundTransparency = 1
+                    Button.BackgroundTransparency = 0
                     Button.TextTransparency = 0.5
                     Line.Visible = true
                     Container.Visible = false
@@ -7458,6 +7472,16 @@ function Library:CreateWindow(WindowInfo)
                 }):Play()
             end
             TabContainer.Visible = false
+
+            -- restore button width to its calculated size
+            if UpdateTabWidth then
+                UpdateTabWidth()
+            end
+            -- disconnect resize listener
+            if Tab._barConn and Tab._barConn.Connected then
+                Tab._barConn:Disconnect()
+                Tab._barConn = nil
+            end
 
             if IsDefaultSearchbarSize then
                 SearchBox.Size = UDim2.fromScale(1, 1)
@@ -7691,6 +7715,20 @@ function Library:CreateWindow(WindowInfo)
             TweenService:Create(TabButton, Library.TweenInfo, {
                 BackgroundTransparency = 0,
             }):Play()
+
+            -- Expand the selected key tab button to fill the tab bar window
+            if LayoutRefs.TabBarWindow and LayoutRefs.TabBarWindow.AbsoluteSize then
+                local function applyFullWidth()
+                    local innerWidth = math.max(0, LayoutRefs.TabBarWindow.AbsoluteSize.X - 16)
+                    TabButton.Size = UDim2.fromOffset(math.floor(innerWidth), 40)
+                end
+                applyFullWidth()
+                if Tab._barConn and Tab._barConn.Connected then
+                    Tab._barConn:Disconnect()
+                end
+                Tab._barConn = LayoutRefs.TabBarWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyFullWidth)
+            end
+
             TweenService:Create(TabLabel, Library.TweenInfo, {
                 TextTransparency = 0,
             }):Play()
@@ -7734,6 +7772,15 @@ function Library:CreateWindow(WindowInfo)
                 }):Play()
             end
             TabContainer.Visible = false
+
+            -- restore button width to its calculated size
+            if UpdateTabWidth then
+                UpdateTabWidth()
+            end
+            if Tab._barConn and Tab._barConn.Connected then
+                Tab._barConn:Disconnect()
+                Tab._barConn = nil
+            end
 
             if IsDefaultSearchbarSize then
                 SearchBox.Size = UDim2.fromScale(1, 1)
