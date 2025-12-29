@@ -6805,7 +6805,8 @@ function Library:CreateWindow(WindowInfo)
             --// Tab Container \\--
             TabContainer = New("Frame", {
                 BackgroundTransparency = 1,
-                Size = UDim2.fromScale(1, 1),
+                Position = UDim2.fromOffset(6, 0),
+                Size = UDim2.new(1, -12, 1, 0),
                 Visible = false,
                 Parent = Container,
             })
@@ -7551,7 +7552,8 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
                 ScrollBarThickness = 0,
-                Size = UDim2.fromScale(1, 1),
+                Position = UDim2.fromOffset(6, 0),
+                Size = UDim2.new(1, -12, 1, 0),
                 Visible = false,
                 Parent = Container,
             })
