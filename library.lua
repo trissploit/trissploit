@@ -6606,12 +6606,14 @@ function Library:CreateWindow(WindowInfo)
         New("UIPadding", {
             PaddingLeft = UDim.new(0, 8),
             PaddingRight = UDim.new(0, 8),
+            PaddingTop = UDim.new(0, 2),
+            PaddingBottom = UDim.new(0, 2),
             Parent = Tabs,
         })
         local TabsList = New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
-            Padding = UDim.new(0, 6),
+            Padding = UDim.new(0, 2),
             VerticalAlignment = Enum.VerticalAlignment.Center,
             Parent = Tabs,
         })
