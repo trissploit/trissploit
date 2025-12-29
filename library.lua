@@ -6152,7 +6152,7 @@ function Library:CreateWindow(WindowInfo)
 
         if LayoutRefs.ContainerFrame then
             LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 94)
-            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -114)
+            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -115)
         end
 
         if LayoutRefs.SidebarGrabber then
@@ -6567,7 +6567,7 @@ function Library:CreateWindow(WindowInfo)
             end,
             Name = "Container",
             Position = UDim2.fromOffset(0, 94),
-            Size = UDim2.new(1, 0, 1, -114),
+            Size = UDim2.new(1, 0, 1, -115),
             Parent = MainFrame,
         })
         New("UIPadding", {
@@ -6768,10 +6768,10 @@ function Library:CreateWindow(WindowInfo)
             })
 
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, LayoutState.IsCompact and 7 or 11),
-                PaddingLeft = UDim.new(0, LayoutState.IsCompact and 14 or 12),
-                PaddingRight = UDim.new(0, LayoutState.IsCompact and 14 or 12),
-                PaddingTop = UDim.new(0, LayoutState.IsCompact and 7 or 11),
+                PaddingBottom = UDim.new(0, 8),
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 12),
+                PaddingTop = UDim.new(0, 8),
                 Parent = TabButton,
             })
             table.insert(LayoutRefs.TabPadding, ButtonPadding)
@@ -6796,8 +6796,8 @@ function Library:CreateWindow(WindowInfo)
                     ImageRectOffset = Icon.ImageRectOffset,
                     ImageRectSize = Icon.ImageRectSize,
                     ImageTransparency = 0.5,
-                    Size = UDim2.fromScale(1, 1),
-                    SizeConstraint = Enum.SizeConstraint.RelativeYY,
+                    Size = UDim2.fromOffset(16, 16),
+                    BackgroundTransparency = 1,
                     Parent = TabButton,
                 })
             end
@@ -7511,10 +7511,10 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local KeyTabPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, LayoutState.IsCompact and 7 or 11),
-                PaddingLeft = UDim.new(0, LayoutState.IsCompact and 14 or 12),
-                PaddingRight = UDim.new(0, LayoutState.IsCompact and 14 or 12),
-                PaddingTop = UDim.new(0, LayoutState.IsCompact and 7 or 11),
+                PaddingBottom = UDim.new(0, 8),
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 12),
+                PaddingTop = UDim.new(0, 8),
                 Parent = TabButton,
             })
             table.insert(LayoutRefs.TabPadding, KeyTabPadding)
