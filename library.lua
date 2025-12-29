@@ -6048,8 +6048,9 @@ function Library:CreateWindow(WindowInfo)
 
     local TopBarHeight = 48
     local TabBarHeight = 44
+    local TotalTopBarHeight = TopBarHeight + TabBarHeight
     local BottomBarHeight = 20
-    local TopContentOffset = TopBarHeight + 1
+    local TopContentOffset = TotalTopBarHeight + 1
     local BottomContentOffset = BottomBarHeight + 1
 
     local LayoutState = {
@@ -6146,22 +6147,15 @@ function Library:CreateWindow(WindowInfo)
 
         local SidebarWidth = GetSidebarWidth()
         local IsCompact = LayoutState.IsCompact
-        local TabStartY = TopContentOffset
-        local ContentStartY = TabStartY + TabBarHeight
 
         if LayoutRefs.DividerLine then
-            LayoutRefs.DividerLine.Position = UDim2.fromOffset(0, ContentStartY)
+            LayoutRefs.DividerLine.Position = UDim2.fromOffset(0, 0)
             LayoutRefs.DividerLine.Size = UDim2.new(1, 0, 0, 1)
         end
 
-        if LayoutRefs.TabsFrame then
-            LayoutRefs.TabsFrame.Position = UDim2.fromOffset(0, TabStartY)
-            LayoutRefs.TabsFrame.Size = UDim2.new(1, 0, 0, TabBarHeight)
-        end
-
         if LayoutRefs.ContainerFrame then
-            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, ContentStartY)
-            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -(ContentStartY + BottomContentOffset))
+            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 0)
+            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -BottomContentOffset)
         end
 
         if LayoutRefs.SidebarGrabber then
@@ -6284,19 +6278,15 @@ function Library:CreateWindow(WindowInfo)
                 + (WindowInfo.Icon and WindowInfo.IconSize.X.Offset + 12 or 12)
         )
         LayoutRefs.DividerLine = Library:MakeLine(MainFrame, {
-            Position = UDim2.fromOffset(0, TopContentOffset + TabBarHeight),
+            Position = UDim2.fromOffset(0, 0),
             Size = UDim2.new(1, 0, 0, 1),
             ZIndex = 2,
         })
 
         local Lines = {
             {
-                Position = UDim2.fromOffset(0, 48),
-                Size = UDim2.new(1, 0, 0, 1),
-            },
-            {
                 AnchorPoint = Vector2.new(0, 1),
-                Position = UDim2.new(0, 0, 1, -20),
+                Position = UDim2.new(0, 0, 1, -BottomBarHeight),
                 Size = UDim2.new(1, 0, 0, 1),
             },
         }
@@ -6321,18 +6311,33 @@ function Library:CreateWindow(WindowInfo)
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
 
-        --// Top Bar \\
+        --// Top Bar (Separate) \\-
         local TopBar = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, TopBarHeight),
-            Parent = WindowInfo.SeparateSidebar and ScreenGui or MainFrame,
+            Size = UDim2.new(1, 0, 0, TotalTopBarHeight),
+            Parent = ScreenGui,
         })
-        Library:MakeDraggable(MainFrame, TopBar, false, true)
+        Library:MakeDraggable(TopBar, nil, false, true) -- Make TopBar draggable separately
 
-        --// Title
+        local function RepositionTopBar()
+            if not MainFrame or not TopBar then
+                return
+            end
+
+            local absPos = MainFrame.AbsolutePosition
+            local absSize = MainFrame.AbsoluteSize
+
+            TopBar.Position = UDim2.fromOffset(absPos.X, absPos.Y - TotalTopBarHeight)
+            TopBar.Size = UDim2.fromOffset(absSize.X, TotalTopBarHeight)
+        end
+
+        RepositionTopBar()
+        Library:GiveSignal(RunService.Heartbeat:Connect(RepositionTopBar))
+
+        --// Title (in TopBar)
         local TitleHolder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(0, InitialTitleWidth, 1, 0),
+            Size = UDim2.new(0, InitialTitleWidth, 0, TopBarHeight),
             Parent = TopBar,
         })
         New("UIListLayout", {
@@ -6505,6 +6510,32 @@ function Library:CreateWindow(WindowInfo)
             })
         end
 
+        --// Tabs (in TopBar) \\--
+        Tabs = New("ScrollingFrame", {
+            AutomaticCanvasSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = "BackgroundColor",
+            CanvasSize = UDim2.fromOffset(0, 0),
+            ElasticBehavior = Enum.ElasticBehavior.Never,
+            Position = UDim2.fromOffset(0, TopBarHeight),
+            ScrollBarThickness = 0,
+            ScrollingDirection = Enum.ScrollingDirection.X,
+            Size = UDim2.new(1, 0, 0, TabBarHeight),
+            Parent = TopBar,
+        })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 8),
+            Parent = Tabs,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Left,
+            Padding = UDim.new(0, 6),
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Parent = Tabs,
+        })
+        LayoutRefs.TabsFrame = Tabs
+
         --// Bottom Bar \\--
         local BottomBar = New("Frame", {
             AnchorPoint = Vector2.new(0, 1),
@@ -6569,58 +6600,6 @@ function Library:CreateWindow(WindowInfo)
             Parent = ResizeButton,
         })
 
-        --// Tabs \\
-        Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = "BackgroundColor",
-            CanvasSize = UDim2.fromOffset(0, 0),
-            ElasticBehavior = Enum.ElasticBehavior.Never,
-            Position = UDim2.fromOffset(0, 0),
-            ScrollBarThickness = 0,
-            ScrollingDirection = Enum.ScrollingDirection.X,
-            Size = UDim2.new(1, 0, 1, 0),
-            Parent = TopBar,
-        })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 8),
-            Parent = Tabs,
-        })
-        New("UIListLayout", {
-            FillDirection = Enum.FillDirection.Horizontal,
-            HorizontalAlignment = Enum.HorizontalAlignment.Left,
-            Padding = UDim.new(0, 6),
-            VerticalAlignment = Enum.VerticalAlignment.Center,
-            Parent = Tabs,
-        })
-        LayoutRefs.TabsFrame = Tabs
-
-        if WindowInfo.SeparateSidebar then
-            local function RepositionSeparateTopBar()
-                if not MainFrame or not TopBar then
-                    return
-                end
-
-                local absPos = MainFrame.AbsolutePosition
-                local absSize = MainFrame.AbsoluteSize
-
-                TopBar.Position = UDim2.fromOffset(absPos.X, absPos.Y)
-                TopBar.Size = UDim2.fromOffset(absSize.X, TopBarHeight)
-
-                -- Tabs are children of TopBar, make sure they fill it
-                if Tabs then
-                    Tabs.Position = UDim2.fromOffset(0, 0)
-                    Tabs.Size = UDim2.new(1, 0, 1, 0)
-                end
-
-                -- Re-run layout so RightWrapper & title sizing update
-                ApplySidebarLayout()
-            end
-
-            RepositionSeparateTopBar()
-            Library:GiveSignal(RunService.Heartbeat:Connect(RepositionSeparateTopBar))
-        end
-
         --// Container \\--
         Container = New("Frame", {
             AnchorPoint = Vector2.new(0, 0),
@@ -6628,8 +6607,8 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "Container",
-            Position = UDim2.fromOffset(0, TopContentOffset + TabBarHeight),
-            Size = UDim2.new(1, 0, 1, -(TopContentOffset + TabBarHeight + BottomContentOffset)),
+            Position = UDim2.fromOffset(0, 0),
+            Size = UDim2.new(1, 0, 1, -BottomContentOffset),
             Parent = MainFrame,
         })
         New("UIPadding", {
