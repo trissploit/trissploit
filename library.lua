@@ -3709,85 +3709,6 @@ do
         return Dropdown
     end
 
-    function Funcs:AddDependencyGroupbox()
-        local Groupbox = self
-
-        local Background = Library:MakeOutline(Groupbox.Container, WindowInfo.CornerRadius)
-        Background.Size = UDim2.fromScale(1, 0)
-
-        local Holder = New("Frame", {
-            BackgroundColor3 = "BackgroundColor",
-            Position = UDim2.fromOffset(2, 2),
-            Size = UDim2.new(1, -4, 1, -4),
-            Parent = Background,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, WindowInfo.CornerRadius - 1),
-            Parent = Holder,
-        })
-
-        New("UIListLayout", {
-            Padding = UDim.new(0, 8),
-            Parent = Holder,
-        })
-        New("UIPadding", {
-            PaddingBottom = UDim.new(0, 7),
-            PaddingLeft = UDim.new(0, 7),
-            PaddingRight = UDim.new(0, 7),
-            PaddingTop = UDim.new(0, 7),
-            Parent = Holder,
-        })
-
-        local Dep = {
-            Holder = Background,
-            Container = Holder,
-            Elements = {},
-        }
-
-        function Dep:SetupDependencies(Deps)
-            Dep._deps = Deps or {}
-
-            local function Update()
-                local Visible = true
-                for _, pair in ipairs(Dep._deps) do
-                    local Opt = pair[1]
-                    local Want = pair[2]
-                    local Val = Opt and Opt.Value
-
-                    if type(Val) == "table" then
-                        if not Val[Want] then
-                            Visible = false
-                            break
-                        end
-                    else
-                        if Val ~= Want then
-                            Visible = false
-                            break
-                        end
-                    end
-                end
-
-                Dep.Holder.Visible = Visible
-                Dep.Container.Visible = Visible
-                Groupbox:Resize()
-            end
-
-            for _, pair in ipairs(Deps or {}) do
-                local Opt = pair[1]
-                if type(Opt) == "table" and Opt.OnChanged then
-                    Opt:OnChanged(Update)
-                end
-            end
-
-            Update()
-        end
-
-        setmetatable(Dep, BaseGroupbox)
-        table.insert(Groupbox.Elements, Dep)
-
-        return Dep
-    end
-
     BaseGroupbox.__index = Funcs
     BaseGroupbox.__namecall = function(_, Key, ...)
         return Funcs[Key](...)
@@ -4059,7 +3980,6 @@ function Library:CreateWindow(WindowInfo)
     local ResizeButton
     local Tabs
     local Container
-    local TabBarHeight = 40
     do
         Library.KeybindFrame, Library.KeybindContainer = Library:AddDraggableMenu("Keybinds")
         Library.KeybindFrame.AnchorPoint = Vector2.new(0, 0.5)
@@ -4095,7 +4015,7 @@ function Library:CreateWindow(WindowInfo)
                     Size = UDim2.new(1, 0, 0, 1),
                 },
                 {
-                    Position = UDim2.fromOffset(0, 49 + TabBarHeight),
+                    Position = UDim2.fromOffset(0, 89),
                     Size = UDim2.new(1, 0, 0, 1),
                 },
                 {
@@ -4163,8 +4083,8 @@ function Library:CreateWindow(WindowInfo)
             AnchorPoint = Vector2.new(0, 0.5),
             BackgroundColor3 = "MainColor",
             PlaceholderText = "Search",
-            Position = UDim2.new(0.3, 8, 0.5, 0),
-            Size = UDim2.new(0.7, -57, 1, -16),
+            Position = UDim2.new(0, 8, 0.5, 0),
+            Size = UDim2.new(1, -65, 1, -16),
             TextScaled = true,
             Parent = TopBar,
         })
@@ -4279,37 +4199,30 @@ function Library:CreateWindow(WindowInfo)
         --// Tabs \\--
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = "BackgroundColor",
-            CanvasSize = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = "MainColor",
+            CanvasSize = UDim2.fromScale(0, 0),
             Position = UDim2.fromOffset(0, 49),
             ScrollBarThickness = 0,
-            ScrollingDirection = Enum.ScrollingDirection.X,
-            Size = UDim2.new(1, 0, 0, TabBarHeight),
+            Size = UDim2.new(1, 0, 0, 40),
             Parent = MainFrame,
         })
 
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Left,
-            Padding = UDim.new(0, 6),
             VerticalAlignment = Enum.VerticalAlignment.Center,
-            Parent = Tabs,
-        })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 6),
-            PaddingRight = UDim.new(0, 6),
+            Padding = UDim.new(0, 4),
             Parent = Tabs,
         })
 
         --// Container \\--
         Container = New("Frame", {
-            AnchorPoint = Vector2.new(0, 0),
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "Container",
-            Position = UDim2.fromOffset(0, 50 + TabBarHeight),
-            Size = UDim2.new(1, -2, 1, -(TabBarHeight + 71)),
+            Position = UDim2.fromOffset(0, 89),
+            Size = UDim2.new(1, 0, 1, -109),
             Parent = MainFrame,
         })
 
@@ -4344,16 +4257,16 @@ function Library:CreateWindow(WindowInfo)
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(0, 150, 1, 0),
+                Size = UDim2.new(0, 120, 0, 40),
                 Text = "",
                 Parent = Tabs,
             })
 
             New("UIPadding", {
-                PaddingBottom = UDim.new(0, 8),
+                PaddingBottom = UDim.new(0, 11),
                 PaddingLeft = UDim.new(0, 12),
                 PaddingRight = UDim.new(0, 12),
-                PaddingTop = UDim.new(0, 8),
+                PaddingTop = UDim.new(0, 11),
                 Parent = TabButton,
             })
 
@@ -4412,7 +4325,7 @@ function Library:CreateWindow(WindowInfo)
                     Parent = TabLeft,
                 })
 
-                TabLeft.Size = UDim2.new(0.5, -3, 1, 0)
+                TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
                 Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
             end
 
@@ -4441,7 +4354,7 @@ function Library:CreateWindow(WindowInfo)
                     Parent = TabRight,
                 })
 
-                TabRight.Size = UDim2.new(0.5, -3, 1, 0)
+                TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
                 Library:UpdateDPI(TabRight, { Size = TabRight.Size })
             end
 
@@ -4573,8 +4486,8 @@ function Library:CreateWindow(WindowInfo)
 
             local Offset = WarningBox.Visible and WarningBox.AbsoluteSize.Y + 6 or 0
             for _, Side in pairs(Tab.Sides) do
-                Side.Position = UDim2.new(Side.Position.X.Scale, Side.Position.X.Offset, 0, Offset)
-                Side.Size = UDim2.new(0.5, -3, 1, -Offset)
+                Side.Position = UDim2.new(Side.Position.X.Scale, 0, 0, Offset)
+                Side.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -Offset)
                 Library:UpdateDPI(Side, {
                     Position = Side.Position,
                     Size = Side.Size,
@@ -4870,12 +4783,6 @@ function Library:CreateWindow(WindowInfo)
             Library.ActiveTab = nil
         end
 
-        TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            Tab:Resize()
-        end)
-
-        Tab:Resize(true)
-
         --// Execution \\--
         if not Library.ActiveTab then
             Tab:Show()
@@ -4905,15 +4812,15 @@ function Library:CreateWindow(WindowInfo)
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(0, 150, 1, 0),
+                Size = UDim2.new(0, 120, 0, 40),
                 Text = "",
                 Parent = Tabs,
             })
             New("UIPadding", {
-                PaddingBottom = UDim.new(0, 8),
+                PaddingBottom = UDim.new(0, 11),
                 PaddingLeft = UDim.new(0, 12),
                 PaddingRight = UDim.new(0, 12),
-                PaddingTop = UDim.new(0, 8),
+                PaddingTop = UDim.new(0, 11),
                 Parent = TabButton,
             })
 
