@@ -291,6 +291,7 @@ local Templates = {
         MobileButtonsSide = "Left",
         UnlockMouseWhileOpen = true,
         Compact = false,
+        SeparateSidebar = false,
         EnableSidebarResize = false,
         SidebarMinWidth = 180,
         SidebarCompactWidth = 54,
@@ -6578,7 +6579,7 @@ function Library:CreateWindow(WindowInfo)
             ScrollBarThickness = 0,
             ScrollingDirection = Enum.ScrollingDirection.X,
             Size = UDim2.new(1, 0, 0, TabBarHeight),
-            Parent = MainFrame,
+            Parent = WindowInfo.SeparateSidebar and ScreenGui or MainFrame,
         })
         New("UIPadding", {
             PaddingLeft = UDim.new(0, 8),
@@ -6593,6 +6594,23 @@ function Library:CreateWindow(WindowInfo)
             Parent = Tabs,
         })
         LayoutRefs.TabsFrame = Tabs
+
+        if WindowInfo.SeparateSidebar then
+            local function RepositionSeparateTabs()
+                if not MainFrame or not Tabs then
+                    return
+                end
+
+                local absPos = MainFrame.AbsolutePosition
+                local absSize = MainFrame.AbsoluteSize
+
+                Tabs.Position = UDim2.fromOffset(absPos.X, absPos.Y + TopContentOffset)
+                Tabs.Size = UDim2.fromOffset(absSize.X, TabBarHeight)
+            end
+
+            RepositionSeparateTabs()
+            Library:GiveSignal(RunService.Heartbeat:Connect(RepositionSeparateTabs))
+        end
 
         --// Container \\--
         Container = New("Frame", {
