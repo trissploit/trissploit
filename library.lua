@@ -689,6 +689,10 @@ function Library:UpdateSearch(SearchText)
         for _, Tabbox in pairs(Tab.Tabboxes) do
             for _, SubTab in pairs(Tabbox.Tabs) do
                 for _, ElementInfo in pairs(SubTab.Elements) do
+                    if not ElementInfo then
+                        continue
+                    end
+
                     ElementInfo.Holder.Visible =
                         typeof(ElementInfo.Visible) == "boolean" and ElementInfo.Visible or true
 
