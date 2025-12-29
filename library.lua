@@ -6046,7 +6046,7 @@ function Library:CreateWindow(WindowInfo)
     local SidebarHighlightCallback = WindowInfo.SidebarHighlightCallback
 
     local TopBarHeight = 48
-    local TabBarHeight = 56
+    local TabBarHeight = 44
     local BottomBarHeight = 20
     local TopContentOffset = TopBarHeight + 1
     local BottomContentOffset = BottomBarHeight + 1
@@ -6604,10 +6604,8 @@ function Library:CreateWindow(WindowInfo)
             Parent = TabBarWindow,
         })
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 8),
             PaddingLeft = UDim.new(0, 8),
             PaddingRight = UDim.new(0, 8),
-            PaddingTop = UDim.new(0, 8),
             Parent = Tabs,
         })
         local TabsList = New("UIListLayout", {
