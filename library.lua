@@ -6636,37 +6636,33 @@ function Library:CreateWindow(WindowInfo)
         MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateTabBarSize)
 
-        -- Recalculate layouts and groupbox sizes when the main window resizes
-        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            task.defer(function()
-                ApplySidebarLayout()
-
-                for _, TabObject in pairs(Library.Tabs) do
-                    pcall(function()
-                        if TabObject.Groupboxes then
-                            for _, GB in pairs(TabObject.Groupboxes) do
-                                if GB and GB.Resize then
-                                    GB:Resize()
-                                end
+        -- Keep layout and child elements responsive when the main window resizes
+        local function UpdateOnMainResize()
+            ApplySidebarLayout()
+            -- Resize each registered tab and its groupboxes
+            for _, tab in pairs(Library.Tabs) do
+                pcall(function()
+                    if tab.Resize then
+                        tab:Resize()
+                    end
+                    if tab.Groupboxes then
+                        for _, gb in pairs(tab.Groupboxes) do
+                            if gb and gb.Resize then
+                                pcall(gb.Resize, gb)
                             end
                         end
-
-                        if TabObject.Tabboxes then
-                            for _, TB in pairs(TabObject.Tabboxes) do
-                                if TB.ActiveTab and TB.ActiveTab.Resize then
-                                    TB.ActiveTab:Resize()
-                                end
-                                for _, Sub in pairs(TB.Tabs) do
-                                    if Sub and Sub.Resize then
-                                        Sub:Resize()
-                                    end
-                                end
+                    end
+                    if tab.Tabboxes then
+                        for _, tb in pairs(tab.Tabboxes) do
+                            if tb and tb.ActiveTab and tb.ActiveTab.Resize then
+                                pcall(tb.ActiveTab.Resize, tb.ActiveTab)
                             end
                         end
-                    end)
-                end
-            end)
-        end)
+                    end
+                end)
+            end
+        end
+        MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateOnMainResize)
 
         --// Container \\--
         Container = New("Frame", {
