@@ -3709,63 +3709,83 @@ do
         return Dropdown
     end
 
-    function Funcs:AddDependencyGroupbox(Name)
-        local ParentGroupbox = self
-        local Container = ParentGroupbox.Container
+    function Funcs:AddDependencyGroupbox()
+        local Groupbox = self
 
-        local Background = Library:MakeOutline(Container, Library.CornerRadius)
+        local Background = Library:MakeOutline(Groupbox.Container, WindowInfo.CornerRadius)
         Background.Size = UDim2.fromScale(1, 0)
 
-        local GroupboxHolder = New("Frame", {
+        local Holder = New("Frame", {
             BackgroundColor3 = "BackgroundColor",
             Position = UDim2.fromOffset(2, 2),
             Size = UDim2.new(1, -4, 1, -4),
             Parent = Background,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, (Library.CornerRadius or 6) - 1),
-            Parent = GroupboxHolder,
-        })
-        Library:MakeLine(GroupboxHolder, {
-            Position = UDim2.fromOffset(0, 34),
-            Size = UDim2.new(1, 0, 0, 1),
+            CornerRadius = UDim.new(0, WindowInfo.CornerRadius - 1),
+            Parent = Holder,
         })
 
-        local GroupboxContainer = New("Frame", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, 35),
-            Size = UDim2.new(1, 0, 1, -35),
-            Parent = GroupboxHolder,
-        })
-
-        local GroupboxList = New("UIListLayout", {
+        New("UIListLayout", {
             Padding = UDim.new(0, 8),
-            Parent = GroupboxContainer,
+            Parent = Holder,
         })
         New("UIPadding", {
             PaddingBottom = UDim.new(0, 7),
             PaddingLeft = UDim.new(0, 7),
             PaddingRight = UDim.new(0, 7),
             PaddingTop = UDim.new(0, 7),
-            Parent = GroupboxContainer,
+            Parent = Holder,
         })
 
-        local DepGroupbox = {
+        local Dep = {
             Holder = Background,
-            Container = GroupboxContainer,
+            Container = Holder,
             Elements = {},
         }
 
-        function DepGroupbox:Resize()
-            Background.Size = UDim2.new(1, 0, 0, GroupboxList.AbsoluteContentSize.Y + 53 * (Library.DPIScale or 1))
+        function Dep:SetupDependencies(Deps)
+            Dep._deps = Deps or {}
+
+            local function Update()
+                local Visible = true
+                for _, pair in ipairs(Dep._deps) do
+                    local Opt = pair[1]
+                    local Want = pair[2]
+                    local Val = Opt and Opt.Value
+
+                    if type(Val) == "table" then
+                        if not Val[Want] then
+                            Visible = false
+                            break
+                        end
+                    else
+                        if Val ~= Want then
+                            Visible = false
+                            break
+                        end
+                    end
+                end
+
+                Dep.Holder.Visible = Visible
+                Dep.Container.Visible = Visible
+                Groupbox:Resize()
+            end
+
+            for _, pair in ipairs(Deps or {}) do
+                local Opt = pair[1]
+                if type(Opt) == "table" and Opt.OnChanged then
+                    Opt:OnChanged(Update)
+                end
+            end
+
+            Update()
         end
 
-        setmetatable(DepGroupbox, BaseGroupbox)
+        setmetatable(Dep, BaseGroupbox)
+        table.insert(Groupbox.Elements, Dep)
 
-        DepGroupbox:Resize()
-        table.insert(ParentGroupbox.Elements, DepGroupbox)
-
-        return DepGroupbox
+        return Dep
     end
 
     BaseGroupbox.__index = Funcs
