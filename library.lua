@@ -3980,6 +3980,7 @@ function Library:CreateWindow(WindowInfo)
     local ResizeButton
     local Tabs
     local Container
+    local TabBarHeight = 40
     do
         Library.KeybindFrame, Library.KeybindContainer = Library:AddDraggableMenu("Keybinds")
         Library.KeybindFrame.AnchorPoint = Vector2.new(0, 0.5)
@@ -4015,8 +4016,8 @@ function Library:CreateWindow(WindowInfo)
                     Size = UDim2.new(1, 0, 0, 1),
                 },
                 {
-                    Position = UDim2.fromScale(0.3, 0),
-                    Size = UDim2.new(0, 1, 1, -21),
+                    Position = UDim2.fromOffset(0, 49 + TabBarHeight),
+                    Size = UDim2.new(1, 0, 0, 1),
                 },
                 {
                     AnchorPoint = Vector2.new(0, 1),
@@ -4198,28 +4199,38 @@ function Library:CreateWindow(WindowInfo)
 
         --// Tabs \\--
         Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            AutomaticCanvasSize = Enum.AutomaticSize.X,
             BackgroundColor3 = "BackgroundColor",
-            CanvasSize = UDim2.fromScale(0, 0),
+            CanvasSize = UDim2.fromOffset(0, 0),
             Position = UDim2.fromOffset(0, 49),
             ScrollBarThickness = 0,
-            Size = UDim2.new(0.3, 0, 1, -70),
+            ScrollingDirection = Enum.ScrollingDirection.X,
+            Size = UDim2.new(1, 0, 0, TabBarHeight),
             Parent = MainFrame,
         })
 
         New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Left,
+            Padding = UDim.new(0, 6),
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Parent = Tabs,
+        })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
             Parent = Tabs,
         })
 
         --// Container \\--
         Container = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0),
+            AnchorPoint = Vector2.new(0, 0),
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "Container",
-            Position = UDim2.new(1, 0, 0, 49),
-            Size = UDim2.new(0.7, -1, 1, -70),
+            Position = UDim2.fromOffset(0, 50 + TabBarHeight),
+            Size = UDim2.new(1, -2, 1, -(TabBarHeight + 71)),
             Parent = MainFrame,
         })
 
@@ -4254,16 +4265,16 @@ function Library:CreateWindow(WindowInfo)
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 40),
+                Size = UDim2.new(0, 150, 1, 0),
                 Text = "",
                 Parent = Tabs,
             })
 
             New("UIPadding", {
-                PaddingBottom = UDim.new(0, 11),
+                PaddingBottom = UDim.new(0, 8),
                 PaddingLeft = UDim.new(0, 12),
                 PaddingRight = UDim.new(0, 12),
-                PaddingTop = UDim.new(0, 11),
+                PaddingTop = UDim.new(0, 8),
                 Parent = TabButton,
             })
 
@@ -4292,14 +4303,11 @@ function Library:CreateWindow(WindowInfo)
             end
 
             --// Tab Container \\--
-            -- Parent to MainFrame and align with the content area so the tab content
-            -- is separated from the tabs list and properly scales with the window.
             TabContainer = New("Frame", {
                 BackgroundTransparency = 1,
-                Position = UDim2.new(0.3, 0, 0, 49),
-                Size = UDim2.new(0.7, -1, 1, -70),
+                Size = UDim2.fromScale(1, 1),
                 Visible = false,
-                Parent = MainFrame,
+                Parent = Container,
             })
 
             TabLeft = New("ScrollingFrame", {
@@ -4325,7 +4333,7 @@ function Library:CreateWindow(WindowInfo)
                     Parent = TabLeft,
                 })
 
-                TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
+                TabLeft.Size = UDim2.new(0.5, -3, 1, 0)
                 Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
             end
 
@@ -4354,7 +4362,7 @@ function Library:CreateWindow(WindowInfo)
                     Parent = TabRight,
                 })
 
-                TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
+                TabRight.Size = UDim2.new(0.5, -3, 1, 0)
                 Library:UpdateDPI(TabRight, { Size = TabRight.Size })
             end
 
@@ -4486,8 +4494,8 @@ function Library:CreateWindow(WindowInfo)
 
             local Offset = WarningBox.Visible and WarningBox.AbsoluteSize.Y + 6 or 0
             for _, Side in pairs(Tab.Sides) do
-                Side.Position = UDim2.new(Side.Position.X.Scale, 0, 0, Offset)
-                Side.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -Offset)
+                Side.Position = UDim2.new(Side.Position.X.Scale, Side.Position.X.Offset, 0, Offset)
+                Side.Size = UDim2.new(0.5, -3, 1, -Offset)
                 Library:UpdateDPI(Side, {
                     Position = Side.Position,
                     Size = Side.Size,
@@ -4783,6 +4791,12 @@ function Library:CreateWindow(WindowInfo)
             Library.ActiveTab = nil
         end
 
+        TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            Tab:Resize()
+        end)
+
+        Tab:Resize(true)
+
         --// Execution \\--
         if not Library.ActiveTab then
             Tab:Show()
@@ -4812,15 +4826,15 @@ function Library:CreateWindow(WindowInfo)
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 40),
+                Size = UDim2.new(0, 150, 1, 0),
                 Text = "",
                 Parent = Tabs,
             })
             New("UIPadding", {
-                PaddingBottom = UDim.new(0, 11),
+                PaddingBottom = UDim.new(0, 8),
                 PaddingLeft = UDim.new(0, 12),
                 PaddingRight = UDim.new(0, 12),
-                PaddingTop = UDim.new(0, 11),
+                PaddingTop = UDim.new(0, 8),
                 Parent = TabButton,
             })
 
@@ -4848,17 +4862,15 @@ function Library:CreateWindow(WindowInfo)
                 })
             end
 
-            --// Tab Container \\
-            -- Key-tab variant: parent to MainFrame and align with content area like regular tabs
+            --// Tab Container \\--
             TabContainer = New("ScrollingFrame", {
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
                 ScrollBarThickness = 0,
-                Position = UDim2.new(0.3, 0, 0, 49),
-                Size = UDim2.new(0.7, -1, 1, -70),
+                Size = UDim2.fromScale(1, 1),
                 Visible = false,
-                Parent = MainFrame,
+                Parent = Container,
             })
             New("UIListLayout", {
                 HorizontalAlignment = Enum.HorizontalAlignment.Center,
