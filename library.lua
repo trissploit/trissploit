@@ -6147,12 +6147,12 @@ function Library:CreateWindow(WindowInfo)
         end
 
         if LayoutRefs.TabsFrame then
-            -- Tabs are now in a separate frame, no layout changes needed
+            LayoutRefs.TabsFrame.Size = UDim2.new(1, 0, 0, 40)
         end
 
         if LayoutRefs.ContainerFrame then
-            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 49)
-            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -70)
+            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, 94)
+            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -114)
         end
 
         if LayoutRefs.SidebarGrabber then
@@ -6231,49 +6231,6 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.AnchorPoint = Vector2.new(0, 0.5)
         Library.KeybindFrame.Position = UDim2.new(0, 6, 0.5, 0)
         Library.KeybindFrame.Visible = false
-
-        --// Separate Tabs Frame \\--
-        Library.TabsFrame = New("Frame", {
-            AutomaticSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = "BackgroundColor",
-            Position = UDim2.fromOffset(6, 60),
-            Size = UDim2.fromOffset(0, 40),
-            ZIndex = 10,
-            Visible = false,
-            Parent = ScreenGui,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = Library.TabsFrame,
-        })
-        Library:AddOutline(Library.TabsFrame)
-        Library:MakeDraggable(Library.TabsFrame, Library.TabsFrame, false, true)
-        Library:UpdateDPI(Library.TabsFrame, {
-            Position = false,
-            Size = false,
-        })
-
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 6),
-            PaddingRight = UDim.new(0, 6),
-            PaddingTop = UDim.new(0, 0),
-            PaddingBottom = UDim.new(0, 0),
-            Parent = Library.TabsFrame,
-        })
-
-        Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.X,
-            BackgroundTransparency = 1,
-            CanvasSize = UDim2.fromScale(0, 0),
-            Size = UDim2.new(1, 0, 1, 0),
-            ScrollBarThickness = 0,
-            Parent = Library.TabsFrame,
-        })
-        New("UIListLayout", {
-            FillDirection = Enum.FillDirection.Horizontal,
-            Parent = Tabs,
-        })
-        LayoutRefs.TabsFrame = Tabs
 
         MainFrame = New("TextButton", {
             BackgroundColor3 = function()
@@ -6586,6 +6543,22 @@ function Library:CreateWindow(WindowInfo)
             Parent = ResizeButton,
         })
 
+        --// Tabs \\--
+        Tabs = New("ScrollingFrame", {
+            AutomaticCanvasSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = "BackgroundColor",
+            CanvasSize = UDim2.fromScale(0, 0),
+            Position = UDim2.fromOffset(0, 49),
+            ScrollBarThickness = 0,
+            Size = UDim2.new(1, 0, 0, 40),
+            Parent = MainFrame,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            Parent = Tabs,
+        })
+        LayoutRefs.TabsFrame = Tabs
+
         --// Container \\--
         Container = New("Frame", {
             AnchorPoint = Vector2.new(0, 0),
@@ -6593,8 +6566,8 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "Container",
-            Position = UDim2.fromOffset(0, 49),
-            Size = UDim2.new(1, 0, 1, -70),
+            Position = UDim2.fromOffset(0, 94),
+            Size = UDim2.new(1, 0, 1, -114),
             Parent = MainFrame,
         })
         New("UIPadding", {
@@ -6786,6 +6759,14 @@ function Library:CreateWindow(WindowInfo)
                 Parent = Tabs,
             })
 
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Center,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 8),
+                Parent = TabButton,
+            })
+
             local ButtonPadding = New("UIPadding", {
                 PaddingBottom = UDim.new(0, LayoutState.IsCompact and 7 or 11),
                 PaddingLeft = UDim.new(0, LayoutState.IsCompact and 14 or 12),
@@ -6794,20 +6775,6 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             table.insert(LayoutRefs.TabPadding, ButtonPadding)
-
-            -- Container for centering icon and text
-            local TabContent = New("Frame", {
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 1, 0),
-                Parent = TabButton,
-            })
-            New("UIListLayout", {
-                FillDirection = Enum.FillDirection.Horizontal,
-                HorizontalAlignment = Enum.HorizontalAlignment.Center,
-                VerticalAlignment = Enum.VerticalAlignment.Center,
-                Padding = UDim.new(0, 6),
-                Parent = TabContent,
-            })
 
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
@@ -6818,7 +6785,7 @@ function Library:CreateWindow(WindowInfo)
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not LayoutState.IsCompact,
-                Parent = TabContent,
+                Parent = TabButton,
             })
             table.insert(LayoutRefs.TabLabels, TabLabel)
 
@@ -6829,8 +6796,9 @@ function Library:CreateWindow(WindowInfo)
                     ImageRectOffset = Icon.ImageRectOffset,
                     ImageRectSize = Icon.ImageRectSize,
                     ImageTransparency = 0.5,
-                    Size = UDim2.fromOffset(16, 16),
-                    Parent = TabContent,
+                    Size = UDim2.fromScale(1, 1),
+                    SizeConstraint = Enum.SizeConstraint.RelativeYY,
+                    Parent = TabButton,
                 })
             end
 
@@ -7535,6 +7503,13 @@ function Library:CreateWindow(WindowInfo)
                 Text = "",
                 Parent = Tabs,
             })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Center,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 8),
+                Parent = TabButton,
+            })
             local KeyTabPadding = New("UIPadding", {
                 PaddingBottom = UDim.new(0, LayoutState.IsCompact and 7 or 11),
                 PaddingLeft = UDim.new(0, LayoutState.IsCompact and 14 or 12),
@@ -7543,20 +7518,6 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             table.insert(LayoutRefs.TabPadding, KeyTabPadding)
-
-            -- Container for centering icon and text
-            local TabContent = New("Frame", {
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 1, 0),
-                Parent = TabButton,
-            })
-            New("UIListLayout", {
-                FillDirection = Enum.FillDirection.Horizontal,
-                HorizontalAlignment = Enum.HorizontalAlignment.Center,
-                VerticalAlignment = Enum.VerticalAlignment.Center,
-                Padding = UDim.new(0, 6),
-                Parent = TabContent,
-            })
 
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
@@ -7567,7 +7528,7 @@ function Library:CreateWindow(WindowInfo)
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not LayoutState.IsCompact,
-                Parent = TabContent,
+                Parent = TabButton,
             })
             table.insert(LayoutRefs.TabLabels, TabLabel)
 
@@ -7579,7 +7540,8 @@ function Library:CreateWindow(WindowInfo)
                     ImageRectSize = Icon.ImageRectSize,
                     ImageTransparency = 0.5,
                     Size = UDim2.fromOffset(16, 16),
-                    Parent = TabContent,
+                    BackgroundTransparency = 1,
+                    Parent = TabButton,
                 })
             end
 
@@ -7770,9 +7732,6 @@ function Library:CreateWindow(WindowInfo)
         end
 
         MainFrame.Visible = Library.Toggled
-        if Library.TabsFrame then
-            Library.TabsFrame.Visible = Library.Toggled
-        end
 
         if WindowInfo.UnlockMouseWhileOpen then
             ModalElement.Modal = Library.Toggled
