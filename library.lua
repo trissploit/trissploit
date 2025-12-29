@@ -6149,18 +6149,15 @@ function Library:CreateWindow(WindowInfo)
         local ContentStartY = TabStartY + TabBarHeight
 
         if LayoutRefs.DividerLine then
-            LayoutRefs.DividerLine.Position = UDim2.fromOffset(0, ContentStartY)
+            LayoutRefs.DividerLine.Position = UDim2.fromOffset(0, TopContentOffset)
             LayoutRefs.DividerLine.Size = UDim2.new(1, 0, 0, 1)
         end
 
-        if LayoutRefs.TabsFrame then
-            LayoutRefs.TabsFrame.Position = UDim2.fromOffset(0, TabStartY)
-            LayoutRefs.TabsFrame.Size = UDim2.new(1, 0, 0, TabBarHeight)
-        end
+        -- Tab bar is now separate, no need to position here
 
         if LayoutRefs.ContainerFrame then
-            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, ContentStartY)
-            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -(ContentStartY + BottomContentOffset))
+            LayoutRefs.ContainerFrame.Position = UDim2.fromOffset(0, TopContentOffset)
+            LayoutRefs.ContainerFrame.Size = UDim2.new(1, 0, 1, -(TopContentOffset + BottomContentOffset))
         end
 
         if LayoutRefs.SidebarGrabber then
@@ -6283,7 +6280,7 @@ function Library:CreateWindow(WindowInfo)
                 + (WindowInfo.Icon and WindowInfo.IconSize.X.Offset + 12 or 12)
         )
         LayoutRefs.DividerLine = Library:MakeLine(MainFrame, {
-            Position = UDim2.fromOffset(0, TopContentOffset + TabBarHeight),
+            Position = UDim2.fromOffset(0, TopContentOffset),
             Size = UDim2.new(1, 0, 0, 1),
             ZIndex = 2,
         })
@@ -6319,6 +6316,30 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.Center then
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
+
+        -- Adjust main window position to be below tab bar
+        MainFrame.Position = UDim2.new(MainFrame.Position.X.Scale, MainFrame.Position.X.Offset, MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset + TabBarHeight + 6)
+
+        --// Tab Bar Frame \\--
+        local TabBarFrame = New("Frame", {
+            BackgroundColor3 = "BackgroundColor",
+            AnchorPoint = Vector2.new(0.5, 0),
+            Position = UDim2.new(0.5, 0, 0, MainFrame.Position.Y.Offset - TabBarHeight - 6),
+            Size = UDim2.new(0, 0, 0, TabBarHeight),
+            AutomaticSize = Enum.AutomaticSize.X,
+            Visible = false,
+            Parent = ScreenGui,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+            Parent = TabBarFrame,
+        })
+        Library:AddOutline(TabBarFrame)
+
+        -- Update tab bar position when main frame moves
+        MainFrame:GetPropertyChangedSignal("Position"):Connect(function()
+            TabBarFrame.Position = UDim2.new(0.5, 0, 0, MainFrame.Position.Y.Offset - TabBarHeight - 6)
+        end)
 
         --// Top Bar \\-
         local TopBar = New("Frame", {
@@ -6571,14 +6592,14 @@ function Library:CreateWindow(WindowInfo)
         --// Tabs \\--
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = "BackgroundColor",
+            BackgroundTransparency = 1,
             CanvasSize = UDim2.fromOffset(0, 0),
             ElasticBehavior = Enum.ElasticBehavior.Never,
-            Position = UDim2.fromOffset(0, TopContentOffset),
+            Position = UDim2.fromScale(0, 0),
             ScrollBarThickness = 0,
             ScrollingDirection = Enum.ScrollingDirection.X,
-            Size = UDim2.new(1, 0, 0, TabBarHeight),
-            Parent = MainFrame,
+            Size = UDim2.new(1, 0, 1, 0),
+            Parent = TabBarFrame,
         })
         New("UIPadding", {
             PaddingLeft = UDim.new(0, 8),
@@ -6601,8 +6622,8 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "Container",
-            Position = UDim2.fromOffset(0, TopContentOffset + TabBarHeight),
-            Size = UDim2.new(1, 0, 1, -(TopContentOffset + TabBarHeight + BottomContentOffset)),
+            Position = UDim2.fromOffset(0, TopContentOffset),
+            Size = UDim2.new(1, 0, 1, -(TopContentOffset + BottomContentOffset)),
             Parent = MainFrame,
         })
         New("UIPadding", {
@@ -7715,6 +7736,10 @@ function Library:CreateWindow(WindowInfo)
 
         MainFrame.Visible = Library.Toggled
 
+        if Library.TabBarFrame then
+            Library.TabBarFrame.Visible = Library.Toggled
+        end
+
         if WindowInfo.UnlockMouseWhileOpen then
             ModalElement.Modal = Library.Toggled
         end
@@ -7809,6 +7834,8 @@ function Library:CreateWindow(WindowInfo)
     Library:GiveSignal(UserInputService.WindowFocusReleased:Connect(function()
         Library.IsRobloxFocused = false
     end))
+
+    Library.TabBarFrame = TabBarFrame
 
     return Window
 end
