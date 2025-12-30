@@ -3604,6 +3604,13 @@ do
                     TextTransparency = 0,
                 })
                 Button.Tween:Play()
+                if Button.Stroke then
+                    StopTween(Button.StrokeTween)
+                    Button.StrokeTween = TweenService:Create(Button.Stroke, Library.TweenInfo, {
+                        Color = Library.Scheme.AccentColor,
+                    })
+                    Button.StrokeTween:Play()
+                end
             end)
             Button.Base.MouseLeave:Connect(function()
                 if Button.Disabled then
@@ -3614,6 +3621,13 @@ do
                     TextTransparency = 0.4,
                 })
                 Button.Tween:Play()
+                if Button.Stroke then
+                    StopTween(Button.StrokeTween)
+                    Button.StrokeTween = TweenService:Create(Button.Stroke, Library.TweenInfo, {
+                        Color = Library.Scheme.OutlineColor,
+                    })
+                    Button.StrokeTween:Play()
+                end
             end)
 
             Button.Base.MouseButton1Click:Connect(function()
@@ -3865,6 +3879,19 @@ do
             Color = "OutlineColor",
             Parent = Checkbox,
         })
+        Library.Registry[CheckboxStroke] = { Color = "OutlineColor" }
+        Button.MouseEnter:Connect(function()
+            if Toggle.Disabled then return end
+            StopTween(Checkbox.StrokeTween)
+            Checkbox.StrokeTween = TweenService:Create(CheckboxStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
+            Checkbox.StrokeTween:Play()
+        end)
+        Button.MouseLeave:Connect(function()
+            if Toggle.Disabled then return end
+            StopTween(Checkbox.StrokeTween)
+            Checkbox.StrokeTween = TweenService:Create(CheckboxStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
+            Checkbox.StrokeTween:Play()
+        end)
 
         local CheckboxGradient = New("UIGradient", {
             Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
@@ -4463,6 +4490,23 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Bar,
         })
+        local BarStroke = New("UIStroke", {
+            Color = "OutlineColor",
+            Parent = Bar,
+        })
+        Library.Registry[BarStroke] = { Color = "OutlineColor" }
+        Bar.MouseEnter:Connect(function()
+            if Slider.Disabled then return end
+            StopTween(Bar.StrokeTween)
+            Bar.StrokeTween = TweenService:Create(BarStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
+            Bar.StrokeTween:Play()
+        end)
+        Bar.MouseLeave:Connect(function()
+            if Slider.Disabled then return end
+            StopTween(Bar.StrokeTween)
+            Bar.StrokeTween = TweenService:Create(BarStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
+            Bar.StrokeTween:Play()
+        end)
 
         local DisplayLabel = New("TextLabel", {
             BackgroundTransparency = 1,
@@ -4749,6 +4793,23 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Display,
         })
+        local DisplayStroke = New("UIStroke", {
+            Color = "OutlineColor",
+            Parent = Display,
+        })
+        Library.Registry[DisplayStroke] = { Color = "OutlineColor" }
+        Display.MouseEnter:Connect(function()
+            if Dropdown.Disabled then return end
+            StopTween(Display.StrokeTween)
+            Display.StrokeTween = TweenService:Create(DisplayStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
+            Display.StrokeTween:Play()
+        end)
+        Display.MouseLeave:Connect(function()
+            if Dropdown.Disabled then return end
+            StopTween(Display.StrokeTween)
+            Display.StrokeTween = TweenService:Create(DisplayStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
+            Display.StrokeTween:Play()
+        end)
 
         New("UIPadding", {
             PaddingLeft = UDim.new(0, 8),
