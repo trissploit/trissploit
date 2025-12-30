@@ -1805,6 +1805,123 @@ do
     end
 end
 
+--// Watermark (Name | FPS | PING) - New implementation
+do
+    local WM = {
+        Holder = nil,
+        Label = nil,
+        Enabled = false,
+        Name = "",
+        _conn = nil,
+    }
+
+    function Library:CreateWatermark(Name)
+        if WM.Holder then
+            return
+        end
+
+        WM.Name = Name or ""
+
+        WM.Holder = New("Frame", {
+            BackgroundColor3 = "BackgroundColor",
+            BorderColor3 = "OutlineColor",
+            BorderSizePixel = 1,
+            AnchorPoint = Vector2.new(0, 0),
+            Position = UDim2.fromOffset(6, 6),
+            Size = UDim2.fromOffset(200, 20),
+            ZIndex = 999,
+            Parent = ScreenGui,
+        })
+        New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
+        New("UIStroke", { Color = "OutlineColor", Thickness = 1, Parent = WM.Holder })
+
+        WM.Label = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Text = "",
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 1000,
+            Parent = WM.Holder,
+        })
+
+        Library.Registry[WM.Holder] = { BackgroundColor3 = "BackgroundColor", BorderColor3 = "OutlineColor" }
+        Library.Registry[WM.Label] = { TextColor3 = "FontColor" }
+
+        local lastTime = tick()
+        local frameCount = 0
+        local fps = 0
+
+        local function getPingMs()
+            local ok, ping = pcall(function()
+                if LocalPlayer and typeof(LocalPlayer.GetNetworkPing) == "function" then
+                    return LocalPlayer:GetNetworkPing() * 1000
+                else
+                    return 0
+                end
+            end)
+            if ok and type(ping) == "number" then
+                return math.floor(ping)
+            end
+            return 0
+        end
+
+        WM._conn = RunService.RenderStepped:Connect(function(dt)
+            if not WM.Enabled then
+                return
+            end
+
+            frameCount = frameCount + 1
+            local now = tick()
+            if now - lastTime >= 0.25 then
+                fps = math.floor(frameCount / (now - lastTime) + 0.5)
+                frameCount = 0
+                lastTime = now
+            end
+
+            local ping = getPingMs()
+            WM.Label.Text = string.format("%s | %d FPS | %dms", WM.Name or "", fps, ping)
+
+            -- adjust size automatically
+            local X, Y = Library:GetTextBounds(WM.Label.Text, WM.Label.FontFace, WM.Label.TextSize)
+            WM.Holder.Size = UDim2.fromOffset((X + 16) * Library.DPIScale, (Y + 8) * Library.DPIScale)
+            Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(X + 16, Y + 8) })
+        end)
+
+        WM.Holder.Visible = false
+        WM.Enabled = false
+        return WM
+    end
+
+    function Library:ToggleWatermark(Enable)
+        if not WM.Holder then
+            return
+        end
+        WM.Enabled = Enable and true or false
+        WM.Holder.Visible = WM.Enabled
+    end
+
+    function Library:SetWatermarkName(Name)
+        if not WM.Holder then
+            return
+        end
+        WM.Name = Name or ""
+    end
+
+    function Library:DestroyWatermark()
+        if WM._conn then
+            WM._conn:Disconnect()
+            WM._conn = nil
+        end
+        if WM.Holder then
+            WM.Holder:Destroy()
+            WM.Holder = nil
+            WM.Label = nil
+            WM.Enabled = false
+        end
+    end
+end
+
 --// Context Menu \\--
 local CurrentMenu
 function Library:AddContextMenu(
