@@ -3355,17 +3355,17 @@ do
                 Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
             })
-            local LeftLineGrad = New("UIGradient", {
-                Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
+            local LeftGrad = New("UIGradient", {
+                Color = ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
                     NumberSequenceKeypoint.new(1, 0),
                 }),
                 Parent = LeftLine,
             })
-            Library.Registry[LeftLineGrad] = {
+            Library.Registry[LeftGrad] = {
                 Color = function()
-                    return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                    return ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor)
                 end,
             }
 
@@ -3377,17 +3377,17 @@ do
                 Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
             })
-            local RightLineGrad = New("UIGradient", {
-                Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
+            local RightGrad = New("UIGradient", {
+                Color = ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 0),
                     NumberSequenceKeypoint.new(1, 1),
                 }),
                 Parent = RightLine,
             })
-            Library.Registry[RightLineGrad] = {
+            Library.Registry[RightGrad] = {
                 Color = function()
-                    return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                    return ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor)
                 end,
             }
         else
@@ -3400,7 +3400,7 @@ do
                 Parent = Holder,
             })
             local LineGrad = New("UIGradient", {
-                Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
+                Color = ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
                     NumberSequenceKeypoint.new(0.5, 0),
@@ -3410,7 +3410,7 @@ do
             })
             Library.Registry[LineGrad] = {
                 Color = function()
-                    return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                    return ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor)
                 end,
             }
         end
