@@ -1031,10 +1031,12 @@ end
 function Library:UpdateColorsUsingRegistry()
     for Instance, Properties in pairs(Library.Registry) do
         for Property, ColorIdx in pairs(Properties) do
-            if typeof(ColorIdx) == "string" then
+            if typeof(ColorIdx) == "string" and Library.Scheme[ColorIdx] then
                 Instance[Property] = Library.Scheme[ColorIdx]
             elseif typeof(ColorIdx) == "function" then
                 Instance[Property] = ColorIdx()
+            elseif Property:find("Color3") then
+                Instance[Property] = Color3.new(1, 1, 1)
             end
         end
     end
@@ -1240,7 +1242,11 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
             end
         end
 
-        Instance[k] = v
+        if typeof(v) == "string" and k:find("Color3") and not Library.Scheme[v] then
+            Instance[k] = Color3.new(1, 1, 1)
+        else
+            Instance[k] = v
+        end
     end
 
     if GetTableSize(ThemeProperties) > 0 then
