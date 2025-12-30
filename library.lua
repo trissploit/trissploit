@@ -4475,6 +4475,10 @@ do
                 Size = true,
             },
         })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
+            Parent = Fill,
+        })
 
         function Slider:UpdateColors()
             if Library.Unloaded then
@@ -4716,6 +4720,10 @@ do
             TextSize = 14,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Holder,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
+            Parent = Display,
         })
 
         New("UIPadding", {
