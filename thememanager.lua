@@ -49,75 +49,75 @@ do
     ThemeManager.BuiltInThemes = {
         ["Default"] = {
             1,
-            { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", BackgroundColor = "0f0f0f", OutlineColor = "282828", GradientColor1 = "7d55ff", GradientColor2 = "4a2a99", GradientRotation = "0" },
+            { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", BackgroundColor = "0f0f0f", OutlineColor = "282828", GradientColor1 = "7d55ff", GradientColor2 = "4d2a99", GradientRotation = "0" },
         },
         ["BBot"] = {
             2,
-            { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "7e48a3", BackgroundColor = "232323", OutlineColor = "141414" },
+            { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "7e48a3", BackgroundColor = "232323", OutlineColor = "141414", GradientColor1 = "7e48a3", GradientColor2 = "4a1f5c", GradientRotation = "0" },
         },
         ["Fatality"] = {
             3,
-            { FontColor = "ffffff", MainColor = "1e1842", AccentColor = "c50754", BackgroundColor = "191335", OutlineColor = "3c355d" },
+            { FontColor = "ffffff", MainColor = "1e1842", AccentColor = "c50754", BackgroundColor = "191335", OutlineColor = "3c355d", GradientColor1 = "c50754", GradientColor2 = "7a0327", GradientRotation = "0" },
         },
         ["Jester"] = {
             4,
-            { FontColor = "ffffff", MainColor = "242424", AccentColor = "db4467", BackgroundColor = "1c1c1c", OutlineColor = "373737" },
+            { FontColor = "ffffff", MainColor = "242424", AccentColor = "db4467", BackgroundColor = "1c1c1c", OutlineColor = "373737", GradientColor1 = "db4467", GradientColor2 = "9a1f3a", GradientRotation = "0" },
         },
         ["Mint"] = {
             5,
-            { FontColor = "ffffff", MainColor = "242424", AccentColor = "3db488", BackgroundColor = "1c1c1c", OutlineColor = "373737" },
+            { FontColor = "ffffff", MainColor = "242424", AccentColor = "3db488", BackgroundColor = "1c1c1c", OutlineColor = "373737", GradientColor1 = "3db488", GradientColor2 = "1f6b4a", GradientRotation = "0" },
         },
         ["Tokyo Night"] = {
             6,
-            { FontColor = "ffffff", MainColor = "191925", AccentColor = "6759b3", BackgroundColor = "16161f", OutlineColor = "323232" },
+            { FontColor = "ffffff", MainColor = "191925", AccentColor = "6759b3", BackgroundColor = "16161f", OutlineColor = "323232", GradientColor1 = "6759b3", GradientColor2 = "3d3466", GradientRotation = "0" },
         },
         ["Ubuntu"] = {
             7,
-            { FontColor = "ffffff", MainColor = "3e3e3e", AccentColor = "e2581e", BackgroundColor = "323232", OutlineColor = "191919" },
+            { FontColor = "ffffff", MainColor = "3e3e3e", AccentColor = "e2581e", BackgroundColor = "323232", OutlineColor = "191919", GradientColor1 = "e2581e", GradientColor2 = "8f2f0a", GradientRotation = "0" },
         },
         ["Quartz"] = {
             8,
-            { FontColor = "ffffff", MainColor = "232330", AccentColor = "426e87", BackgroundColor = "1d1b26", OutlineColor = "27232f" },
+            { FontColor = "ffffff", MainColor = "232330", AccentColor = "426e87", BackgroundColor = "1d1b26", OutlineColor = "27232f", GradientColor1 = "426e87", GradientColor2 = "254049", GradientRotation = "0" },
         },
         ["Nord"] = {
             9,
-            { FontColor = "eceff4", MainColor = "3b4252", AccentColor = "88c0d0", BackgroundColor = "2e3440", OutlineColor = "4c566a" },
+            { FontColor = "eceff4", MainColor = "3b4252", AccentColor = "88c0d0", BackgroundColor = "2e3440", OutlineColor = "4c566a", GradientColor1 = "88c0d0", GradientColor2 = "4a6b75", GradientRotation = "0" },
         },
         ["Dracula"] = {
             10,
-            { FontColor = "f8f8f2", MainColor = "44475a", AccentColor = "ff79c6", BackgroundColor = "282a36", OutlineColor = "6272a4" },
+            { FontColor = "f8f8f2", MainColor = "44475a", AccentColor = "ff79c6", BackgroundColor = "282a36", OutlineColor = "6272a4", GradientColor1 = "ff79c6", GradientColor2 = "bf4a8a", GradientRotation = "0" },
         },
         ["Monokai"] = {
             11,
-            { FontColor = "f8f8f2", MainColor = "272822", AccentColor = "f92672", BackgroundColor = "1e1f1c", OutlineColor = "49483e" },
+            { FontColor = "f8f8f2", MainColor = "272822", AccentColor = "f92672", BackgroundColor = "1e1f1c", OutlineColor = "49483e", GradientColor1 = "f92672", GradientColor2 = "b71a4a", GradientRotation = "0" },
         },
         ["Gruvbox"] = {
             12,
-            { FontColor = "ebdbb2", MainColor = "3c3836", AccentColor = "fb4934", BackgroundColor = "282828", OutlineColor = "504945" },
+            { FontColor = "ebdbb2", MainColor = "3c3836", AccentColor = "fb4934", BackgroundColor = "282828", OutlineColor = "504945", GradientColor1 = "fb4934", GradientColor2 = "b72c26", GradientRotation = "0" },
         },
         ["Solarized"] = {
             13,
-            { FontColor = "839496", MainColor = "073642", AccentColor = "cb4b16", BackgroundColor = "002b36", OutlineColor = "586e75" },
+            { FontColor = "839496", MainColor = "073642", AccentColor = "cb4b16", BackgroundColor = "002b36", OutlineColor = "586e75", GradientColor1 = "cb4b16", GradientColor2 = "7d2d0a", GradientRotation = "0" },
         },
         ["Catppuccin"] = {
             14,
-            { FontColor = "d9e0ee", MainColor = "302d41", AccentColor = "f5c2e7", BackgroundColor = "1e1e2e", OutlineColor = "575268" },
+            { FontColor = "d9e0ee", MainColor = "302d41", AccentColor = "f5c2e7", BackgroundColor = "1e1e2e", OutlineColor = "575268", GradientColor1 = "f5c2e7", GradientColor2 = "b784a7", GradientRotation = "0" },
         },
         ["One Dark"] = {
             15,
-            { FontColor = "abb2bf", MainColor = "282c34", AccentColor = "c678dd", BackgroundColor = "21252b", OutlineColor = "5c6370" },
+            { FontColor = "abb2bf", MainColor = "282c34", AccentColor = "c678dd", BackgroundColor = "21252b", OutlineColor = "5c6370", GradientColor1 = "c678dd", GradientColor2 = "8a4aa3", GradientRotation = "0" },
         },
         ["Cyberpunk"] = {
             16,
-            { FontColor = "f9f9f9", MainColor = "262335", AccentColor = "00ff9f", BackgroundColor = "1a1a2e", OutlineColor = "413c5e" },
+            { FontColor = "f9f9f9", MainColor = "262335", AccentColor = "00ff9f", BackgroundColor = "1a1a2e", OutlineColor = "413c5e", GradientColor1 = "00ff9f", GradientColor2 = "00bf6f", GradientRotation = "0" },
         },
         ["Oceanic Next"] = {
             17,
-            { FontColor = "d8dee9", MainColor = "1b2b34", AccentColor = "6699cc", BackgroundColor = "16232a", OutlineColor = "343d46" },
+            { FontColor = "d8dee9", MainColor = "1b2b34", AccentColor = "6699cc", BackgroundColor = "16232a", OutlineColor = "343d46", GradientColor1 = "6699cc", GradientColor2 = "3d5a7a", GradientRotation = "0" },
         },
         ["Material"] = {
             18,
-            { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", BackgroundColor = "151515", OutlineColor = "424242" },
+            { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", BackgroundColor = "151515", OutlineColor = "424242", GradientColor1 = "82aaff", GradientColor2 = "4a7fcc", GradientRotation = "0" },
         }
     }
 
@@ -263,18 +263,7 @@ do
         local FinalTheme = {}
         local LibraryScheme = {}
         for _, field in ThemeFields do
-            if field == "GradientRotation" then
-                if typeof(theme[field]) == "number" then
-                    FinalTheme[field] = tostring(theme[field])
-                    LibraryScheme[field] = theme[field]
-                elseif typeof(theme[field]) == "string" then
-                    FinalTheme[field] = theme[field]
-                    LibraryScheme[field] = tonumber(theme[field]) or 0
-                else
-                    FinalTheme[field] = ThemeManager.BuiltInThemes["Default"][2][field]
-                    LibraryScheme[field] = tonumber(ThemeManager.BuiltInThemes["Default"][2][field]) or 0
-                end
-            elseif typeof(theme[field]) == "Color3" then
+            if typeof(theme[field]) == "Color3" then
                 FinalTheme[field] = "#" .. theme[field]:ToHex()
                 LibraryScheme[field] = theme[field]
 
@@ -308,11 +297,7 @@ do
         self.Library.Scheme = LibraryScheme
         self.BuiltInThemes["Default"] = { 1, FinalTheme }
 
-        selfif field == "GradientRotation" then
-                theme[field] = tostring(self.Library.Options[field].Value)
-            else
-                theme[field] = self.Library.Options[field].Value:ToHex()
-            end
+        self.Library:UpdateColorsUsingRegistry()
     end
 
     function ThemeManager:SaveCustomTheme(file)
@@ -391,12 +376,6 @@ do
             Default = "Code",
             Values = { "BuilderSans", "Code", "Fantasy", "Gotham", "Jura", "Roboto", "RobotoMono", "SourceSans" },
         })
-
-        groupbox:AddDivider()
-        groupbox:AddLabel("Gradient settings (when enabled)")
-        groupbox:AddLabel("Gradient start color"):AddColorPicker("GradientColor1", { Default = self.Library.Scheme.GradientColor1 or self.Library.Scheme.AccentColor })
-        groupbox:AddLabel("Gradient end color"):AddColorPicker("GradientColor2", { Default = self.Library.Scheme.GradientColor2 or Color3.fromHex("4a2a99") })
-        groupbox:AddSlider("GradientRotation", { Text = "Gradient rotation", Default = self.Library.Scheme.GradientRotation or 0, Min = 0, Max = 360, Rounding = 0 })
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do
