@@ -40,8 +40,7 @@ end
 
 local ThemeManager = {}
 do
-    local ThemeFields = { "FontColor", "MainColor", "BackgroundColor", "OutlineColor" }
-    local GradientFields = { "GradientColor1", "GradientColor2" }
+    local ThemeFields = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
     ThemeManager.Folder = "ObsidianLibSettings"
     -- if not isfolder(ThemeManager.Folder) then makefolder(ThemeManager.Folder) end
 
@@ -177,38 +176,13 @@ do
 
         local scheme = data[2]
         for idx, val in pairs(customThemeData or scheme) do
-            if idx == "VideoLink" or idx == "EnableGradients" or idx == "GradientRotation" then
+            if idx == "VideoLink" then
                 continue
             elseif idx == "FontFace" then
                 self.Library:SetFont(Enum.Font[val])
 
                 if self.Library.Options[idx] then
                     self.Library.Options[idx]:SetValue(val)
-                end
-            elseif idx == "GradientColor1" or idx == "GradientColor2" then
-                local success, color = pcall(Color3.fromHex, Color3, val)
-                if success and typeof(color) == "Color3" then
-                    self.Library[idx] = color
-                    if self.Library.Options[idx] then
-                        self.Library.Options[idx]:SetValueRGB(color)
-                    end
-                else
-                    -- Fallback to default gradient colors if parsing fails
-                    self.Library[idx] = idx == "GradientColor1" and Color3.fromRGB(125, 85, 255) or Color3.fromRGB(75, 50, 155)
-                end
-            elseif idx == "AccentColor" then
-                -- Convert legacy AccentColor to GradientColor1
-                local success, color = pcall(Color3.fromHex, Color3, val)
-                if success and typeof(color) == "Color3" then
-                    self.Library.GradientColor1 = color
-                    self.Library.GradientColor2 = color:Lerp(Color3.new(0, 0, 0), 0.4)
-                    self.Library.Scheme.AccentColor = color
-                    if self.Library.Options.GradientColor1 then
-                        self.Library.Options.GradientColor1:SetValueRGB(color)
-                    end
-                    if self.Library.Options.GradientColor2 then
-                        self.Library.Options.GradientColor2:SetValueRGB(color:Lerp(Color3.new(0, 0, 0), 0.4))
-                    end
                 end
             else
                 self.Library.Scheme[idx] = Color3.fromHex(val)
@@ -219,8 +193,6 @@ do
             end
         end
 
-        -- Always enable gradients
-        self.Library.EnableGradients = true
         self:ThemeUpdate()
     end
 
@@ -231,31 +203,7 @@ do
             end
         end
 
-        -- Update gradient settings with validation
-        for i, field in GradientFields do
-            if self.Library.Options and self.Library.Options[field] then
-                local value = self.Library.Options[field].Value
-                -- Validate gradient colors
-                if typeof(value) == "Color3" then
-                    self.Library[field] = value
-                    -- Also update AccentColor for compatibility
-                    if field == "GradientColor1" then
-                        self.Library.Scheme.AccentColor = value
-                    end
-                else
-                    -- Fallback to default if invalid
-                    self.Library[field] = field == "GradientColor1" and Color3.fromRGB(125, 85, 255) or Color3.fromRGB(75, 50, 155)
-                end
-            end
-        end
-
-        -- Always enable gradients
-        self.Library.EnableGradients = true
-
         self.Library:UpdateColorsUsingRegistry()
-        if self.Library.UpdateGradients then
-            self.Library:UpdateGradients()
-        end
     end
 
     --// Get, Load, Save, Delete, Refresh \\--
@@ -357,16 +305,6 @@ do
             theme[field] = self.Library.Options[field].Value:ToHex()
         end
         theme["FontFace"] = self.Library.Options["FontFace"].Value
-        
-        -- Save gradient settings
-        for _, field in GradientFields do
-            if self.Library.Options[field] then
-                local color = self.Library.Options[field].Value
-                if typeof(color) == "Color3" then
-                    theme[field] = color:ToHex()
-                end
-            end
-        end
 
         writefile(self.Folder .. "/themes/" .. file .. ".json", HttpService:JSONEncode(theme))
     end
@@ -422,6 +360,7 @@ do
             :AddLabel("Background color")
             :AddColorPicker("BackgroundColor", { Default = self.Library.Scheme.BackgroundColor })
         groupbox:AddLabel("Main color"):AddColorPicker("MainColor", { Default = self.Library.Scheme.MainColor })
+        groupbox:AddLabel("Accent color"):AddColorPicker("AccentColor", { Default = self.Library.Scheme.AccentColor })
         groupbox
             :AddLabel("Outline color")
             :AddColorPicker("OutlineColor", { Default = self.Library.Scheme.OutlineColor })
@@ -431,10 +370,6 @@ do
             Default = "Code",
             Values = { "BuilderSans", "Code", "Fantasy", "Gotham", "Jura", "Roboto", "RobotoMono", "SourceSans" },
         })
-
-        groupbox:AddDivider()
-        groupbox:AddLabel("Gradient start color"):AddColorPicker("GradientColor1", { Default = self.Library.GradientColor1 or Color3.fromRGB(125, 85, 255) })
-        groupbox:AddLabel("Gradient end color"):AddColorPicker("GradientColor2", { Default = self.Library.GradientColor2 or Color3.fromRGB(75, 50, 155) })
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do
@@ -544,29 +479,12 @@ do
 
         self.Library.Options.BackgroundColor:OnChanged(UpdateTheme)
         self.Library.Options.MainColor:OnChanged(UpdateTheme)
+        self.Library.Options.AccentColor:OnChanged(UpdateTheme)
         self.Library.Options.OutlineColor:OnChanged(UpdateTheme)
         self.Library.Options.FontColor:OnChanged(UpdateTheme)
         self.Library.Options.FontFace:OnChanged(function(Value)
             self.Library:SetFont(Enum.Font[Value])
             self.Library:UpdateColorsUsingRegistry()
-        end)
-        
-        -- Gradient option listeners with validation
-        self.Library.Options.GradientColor1:OnChanged(function(Value)
-            if typeof(Value) == "Color3" then
-                self.Library.GradientColor1 = Value
-                if self.Library.UpdateGradients then
-                    self.Library:UpdateGradients()
-                end
-            end
-        end)
-        self.Library.Options.GradientColor2:OnChanged(function(Value)
-            if typeof(Value) == "Color3" then
-                self.Library.GradientColor2 = Value
-                if self.Library.UpdateGradients then
-                    self.Library:UpdateGradients()
-                end
-            end
         end)
     end
 
