@@ -178,8 +178,8 @@ local Library = {
     ForceCheckbox = false,
     ShowToggleFrameInKeybinds = true,
     NotifyOnError = false,
-    -- Gradients enabled by default and configurable via ThemeManager
-    EnableGradients = true,
+    -- Gradients disabled by default; enabled via ThemeManager toggle
+    EnableGradients = false,
     GradientColor1 = nil,
     GradientColor2 = nil,
     GradientRotation = 0,
@@ -1379,8 +1379,8 @@ function Library:GetDarkerColor(Color: Color3): Color3
 end
 
 function Library:SetGradients(Enabled: boolean)
-    -- Always enable gradients when this is called; ignore false param to ensure gradients system remains active
-    Library.EnableGradients = true
+    -- Respect the requested state; enable/disable gradients accordingly
+    Library.EnableGradients = not not Enabled
     Library:UpdateColorsUsingRegistry()
     Library:UpdateGradients()
 end
