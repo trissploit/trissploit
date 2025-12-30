@@ -179,6 +179,9 @@ local Library = {
     ShowToggleFrameInKeybinds = true,
     NotifyOnError = false,
     EnableGradients = false,
+    GradientColor1 = nil,
+    GradientColor2 = nil,
+    GradientRotation = 0,
 
     CantDragForced = false,
 
@@ -1036,11 +1039,13 @@ function Library:UpdateColorsUsingRegistry()
         if Library.EnableGradients then
             local gradient = Instance:FindFirstChildOfClass("UIGradient")
             if gradient and Properties.BackgroundColor3 == "AccentColor" then
+                local color1 = Library.GradientColor1 or Library.Scheme.AccentColor
+                local color2 = Library.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4)
                 gradient.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Library.Scheme.GradientColor1 or Library.Scheme.AccentColor),
-                    ColorSequenceKeypoint.new(1, Library.Scheme.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
+                    ColorSequenceKeypoint.new(0, color1),
+                    ColorSequenceKeypoint.new(1, color2)
                 })
-                gradient.Rotation = Library.Scheme.GradientRotation or 0
+                gradient.Rotation = Library.GradientRotation or 0
             end
         end
     end
@@ -1369,6 +1374,29 @@ end
 function Library:SetGradients(Enabled: boolean)
     Library.EnableGradients = Enabled
     Library:UpdateColorsUsingRegistry()
+    Library:UpdateGradients()
+end
+
+function Library:UpdateGradients()
+    -- Update all existing gradients with new colors/rotation
+    local color1 = Library.GradientColor1 or Library.Scheme.AccentColor
+    local color2 = Library.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4)
+    local rotation = Library.GradientRotation or 0
+    
+    for Instance, Properties in pairs(Library.Registry) do
+        local gradient = Instance:FindFirstChildOfClass("UIGradient")
+        if gradient then
+            -- Update gradient colors
+            gradient.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, color1),
+                ColorSequenceKeypoint.new(1, color2)
+            })
+            -- Update gradient rotation
+            gradient.Rotation = rotation
+            -- Enable/disable based on settings
+            gradient.Enabled = Library.EnableGradients and (Properties.BackgroundColor3 == "AccentColor")
+        end
+    end
 end
 
 function Library:GetKeyString(KeyCode: Enum.KeyCode)
@@ -3935,14 +3963,24 @@ do
                 local existingGradient = Checkbox:FindFirstChildOfClass("UIGradient")
                 if Toggle.Value then
                     if not existingGradient then
+                        local color1 = Library.GradientColor1 or Library.Scheme.AccentColor
+                        local color2 = Library.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4)
                         existingGradient = New("UIGradient", {
                             Color = ColorSequence.new({
-                                ColorSequenceKeypoint.new(0, Library.Scheme.GradientColor1 or Library.Scheme.AccentColor),
-                                ColorSequenceKeypoint.new(1, Library.Scheme.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
+                                ColorSequenceKeypoint.new(0, color1),
+                                ColorSequenceKeypoint.new(1, color2)
                             }),
-                            Rotation = Library.Scheme.GradientRotation or 0,
+                            Rotation = Library.GradientRotation or 0,
                             Parent = Checkbox,
                         })
+                    else
+                        local color1 = Library.GradientColor1 or Library.Scheme.AccentColor
+                        local color2 = Library.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4)
+                        existingGradient.Color = ColorSequence.new({
+                            ColorSequenceKeypoint.new(0, color1),
+                            ColorSequenceKeypoint.new(1, color2)
+                        })
+                        existingGradient.Rotation = Library.GradientRotation or 0
                     end
                     existingGradient.Enabled = true
                 elseif existingGradient then
@@ -4535,14 +4573,24 @@ do
             if Library.EnableGradients and not Slider.Disabled then
                 local existingGradient = Fill:FindFirstChildOfClass("UIGradient")
                 if not existingGradient then
+                    local color1 = Library.GradientColor1 or Library.Scheme.AccentColor
+                    local color2 = Library.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4)
                     existingGradient = New("UIGradient", {
                         Color = ColorSequence.new({
-                            ColorSequenceKeypoint.new(0, Library.Scheme.GradientColor1 or Library.Scheme.AccentColor),
-                            ColorSequenceKeypoint.new(1, Library.Scheme.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
+                            ColorSequenceKeypoint.new(0, color1),
+                            ColorSequenceKeypoint.new(1, color2)
                         }),
-                        Rotation = Library.Scheme.GradientRotation or 0,
+                        Rotation = Library.GradientRotation or 0,
                         Parent = Fill,
                     })
+                else
+                    local color1 = Library.GradientColor1 or Library.Scheme.AccentColor
+                    local color2 = Library.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4)
+                    existingGradient.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, color1),
+                        ColorSequenceKeypoint.new(1, color2)
+                    })
+                    existingGradient.Rotation = Library.GradientRotation or 0
                 end
                 existingGradient.Enabled = true
             else
