@@ -1962,16 +1962,29 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
         TooltipLabel.Text = TooltipTable.Disabled and DisabledInfoStr or InfoStr
         TooltipLabel.Visible = true
 
+        -- Position tooltip directly above the tab button
+        local ButtonPos = HoverInstance.AbsolutePosition
+        local ButtonSize = HoverInstance.AbsoluteSize
+        
+        -- Calculate tooltip position (centered above button with small gap)
+        -- First set a temporary position to allow size calculation
+        TooltipLabel.Position = UDim2.fromOffset(ButtonPos.X + ButtonSize.X / 2, ButtonPos.Y - 50)
+        
+        -- Wait a frame for size calculation
+        RunService.RenderStepped:Wait()
+        
+        -- Now position it properly centered
+        local TooltipX = ButtonPos.X + (ButtonSize.X / 2) - (TooltipLabel.AbsoluteSize.X / 2)
+        local TooltipY = ButtonPos.Y - TooltipLabel.AbsoluteSize.Y - 8
+        
+        TooltipLabel.Position = UDim2.fromOffset(TooltipX, TooltipY)
+
         while
             Library.Toggled
             and Library:MouseIsOverFrame(HoverInstance, Mouse)
             and not (CurrentMenu and Library:MouseIsOverFrame(CurrentMenu.Menu, Mouse))
         do
-            TooltipLabel.Position = UDim2.fromOffset(
-                Mouse.X + (Library.ShowCustomCursor and 8 or 14),
-                Mouse.Y + (Library.ShowCustomCursor and 8 or 12)
-            )
-
+            -- Keep tooltip position fixed above the button
             RunService.RenderStepped:Wait()
         end
 
