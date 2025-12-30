@@ -167,6 +167,8 @@ local Library = {
 
     Toggled = false,
     Unloaded = false,
+    Watermark = false,
+    CurrentWindowTitle = "",
 
     Labels = Labels,
     Buttons = Buttons,
@@ -1923,6 +1925,33 @@ do
             WM.Enabled = false
         end
     end
+    -- monitor global/getgenv and Library.Watermark for changes
+    task.spawn(function()
+        local last = nil
+        while not Library.Unloaded do
+            local ok, g = pcall(function() return getgenv and getgenv().watermark end)
+            local globalVal = (ok and g) and true or (ok and g == false and false) or nil
+            local libVal = Library.Watermark
+
+            local want
+            if globalVal ~= nil then
+                want = globalVal
+            else
+                want = libVal
+            end
+
+            if want ~= last then
+                if not WM.Holder then
+                    Library:CreateWatermark(Library.CurrentWindowTitle or "")
+                end
+                Library:ToggleWatermark(want)
+                Library.Watermark = want
+                last = want
+            end
+
+            task.wait(0.2)
+        end
+    end)
 end
 
 --// Context Menu \\--
@@ -6555,6 +6584,7 @@ function Library:CreateWindow(WindowInfo)
             Library:SetWatermarkName(WindowInfo.Title)
         end)
     end
+    Library.CurrentWindowTitle = WindowInfo.Title
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
     Library.GlobalSearch = WindowInfo.GlobalSearch
 
@@ -6916,6 +6946,13 @@ function Library:CreateWindow(WindowInfo)
         end
 
         LayoutRefs.WindowTitle = WindowTitle
+
+        WindowTitle:GetPropertyChangedSignal("Text"):Connect(function()
+            Library.CurrentWindowTitle = WindowTitle.Text
+            pcall(function()
+                Library:SetWatermarkName(WindowTitle.Text)
+            end)
+        end)
 
         --// Top Right Bar
         local RightWrapper = New("Frame", {
