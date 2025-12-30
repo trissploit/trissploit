@@ -415,7 +415,7 @@ do
         })
 
         groupbox:AddDivider()
-        groupbox:AddToggle("EnableGradients", { Text = "Enable Gradients", Default = self.Library.EnableGradients or false })
+        groupbox:AddToggle("EnableGradients", { Text = "Enable Gradients", Default = false })
         groupbox:AddLabel("Gradient color 1"):AddColorPicker("GradientColor1", { Default = self.Library.GradientColor1 or self.Library.Scheme.AccentColor })
         groupbox:AddLabel("Gradient color 2"):AddColorPicker("GradientColor2", { Default = self.Library.GradientColor2 or self.Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4) })
         groupbox:AddSlider("GradientRotation", { Text = "Gradient Rotation", Default = self.Library.GradientRotation or 0, Min = 0, Max = 360, Rounding = 0, Suffix = "°" })
@@ -538,43 +538,31 @@ do
         
         -- Gradient option listeners
         self.Library.Options.EnableGradients:OnChanged(function(Value)
-            if self.Library.SetGradients then
-                self.Library:SetGradients(Value)
-            else
-                self.Library.EnableGradients = Value
-                if self.Library.UpdateGradients then
-                    self.Library:UpdateGradients()
-                end
+            self.Library.EnableGradients = Value
+            if self.Library.UpdateGradients then
+                self.Library:UpdateGradients()
             end
         end)
         self.Library.Options.GradientColor1:OnChanged(function(Value)
-            if self.Library.SetGradientColors then
-                self.Library:SetGradientColors(Value, self.Library.GradientColor2, self.Library.GradientRotation)
-            else
-                self.Library.GradientColor1 = Value
-                if self.Library.UpdateGradients then
-                    self.Library:UpdateGradients()
-                end
+            self.Library.GradientColor1 = Value
+            -- Update both registry colors and gradients to apply new color
+            self.Library:UpdateColorsUsingRegistry()
+            if self.Library.UpdateGradients then
+                self.Library:UpdateGradients()
             end
         end)
         self.Library.Options.GradientColor2:OnChanged(function(Value)
-            if self.Library.SetGradientColors then
-                self.Library:SetGradientColors(self.Library.GradientColor1, Value, self.Library.GradientRotation)
-            else
-                self.Library.GradientColor2 = Value
-                if self.Library.UpdateGradients then
-                    self.Library:UpdateGradients()
-                end
+            self.Library.GradientColor2 = Value
+            -- Update both registry colors and gradients to apply new color
+            self.Library:UpdateColorsUsingRegistry()
+            if self.Library.UpdateGradients then
+                self.Library:UpdateGradients()
             end
         end)
         self.Library.Options.GradientRotation:OnChanged(function(Value)
-            if self.Library.SetGradientColors then
-                self.Library:SetGradientColors(self.Library.GradientColor1, self.Library.GradientColor2, Value)
-            else
-                self.Library.GradientRotation = Value
-                if self.Library.UpdateGradients then
-                    self.Library:UpdateGradients()
-                end
+            self.Library.GradientRotation = Value
+            if self.Library.UpdateGradients then
+                self.Library:UpdateGradients()
             end
         end)
     end
