@@ -3906,6 +3906,7 @@ do
                 -- Use black-to-grey gradient when disabled
                 CheckboxGradient.Color = ColorSequence.new(Color3.fromRGB(0, 0, 0), Color3.fromRGB(80, 80, 80))
                 CheckboxGradient.Enabled = true
+                -- Set background immediately (no tween) to avoid accent color flash
                 Checkbox.BackgroundColor3 = Library.Scheme.BackgroundColor
                 Library.Registry[Checkbox].BackgroundColor3 = "BackgroundColor"
                 return
@@ -3920,10 +3921,8 @@ do
             CheckboxGradient.Enabled = Toggle.Value
 
             -- Fill the checkbox with accent color when checked, main color when unchecked
-            TweenService:Create(Checkbox, Library.TweenInfo, {
-                BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor,
-            }):Play()
-
+            -- Set immediately to avoid flash when re-enabling
+            Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
             Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
         end
 
