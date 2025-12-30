@@ -1919,7 +1919,6 @@ local TooltipLabel = New("TextLabel", {
     ZIndex = 20,
     Parent = ScreenGui,
 })
-local TooltipFadeTween = nil
 TooltipLabel:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
     if Library.Unloaded then
         return
@@ -1961,17 +1960,15 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
         CurrentHoverInstance = HoverInstance
 
         TooltipLabel.Text = TooltipTable.Disabled and DisabledInfoStr or InfoStr
-        TooltipLabel.TextTransparency = 1
         TooltipLabel.BackgroundTransparency = 1
+        TooltipLabel.TextTransparency = 1
         TooltipLabel.Visible = true
-        if TooltipFadeTween and TooltipFadeTween.PlaybackState == Enum.PlaybackState.Playing then
-            TooltipFadeTween:Cancel()
-        end
-        TooltipFadeTween = TweenService:Create(TooltipLabel, Library.TweenInfo, {
-            TextTransparency = 0,
+        
+        -- Fade in animation
+        TweenService:Create(TooltipLabel, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0,
-        })
-        TooltipFadeTween:Play()
+            TextTransparency = 0,
+        }):Play()
 
         while
             Library.Toggled
@@ -1986,19 +1983,15 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
             RunService.RenderStepped:Wait()
         end
 
-        if TooltipFadeTween and TooltipFadeTween.PlaybackState == Enum.PlaybackState.Playing then
-            TooltipFadeTween:Cancel()
-        end
-        TooltipFadeTween = TweenService:Create(TooltipLabel, Library.TweenInfo, {
-            TextTransparency = 1,
+        -- Fade out animation
+        local fadeTween = TweenService:Create(TooltipLabel, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 1,
+            TextTransparency = 1,
         })
-        TooltipFadeTween.Completed:Connect(function()
-            if CurrentHoverInstance ~= HoverInstance then
-                TooltipLabel.Visible = false
-            end
+        fadeTween.Completed:Connect(function()
+            TooltipLabel.Visible = false
         end)
-        TooltipFadeTween:Play()
+        fadeTween:Play()
         CurrentHoverInstance = nil
     end
 
@@ -2018,7 +2011,15 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
             return
         end
 
-        TooltipLabel.Visible = false
+        -- Fade out animation
+        local fadeTween = TweenService:Create(TooltipLabel, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 1,
+            TextTransparency = 1,
+        })
+        fadeTween.Completed:Connect(function()
+            TooltipLabel.Visible = false
+        end)
+        fadeTween:Play()
         CurrentHoverInstance = nil
     end))
 
@@ -2056,7 +2057,7 @@ end
         CornerRadius = UDim.new(0, Library.CornerRadius),
         Parent = TabInfoHolder,
     })
-    local TabInfoStroke = New("UIStroke", {
+    New("UIStroke", {
         Color = "Dark",
         ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
         Parent = TabInfoHolder,
@@ -2099,7 +2100,6 @@ end
 
     local TabInfoRender = nil
     local TabInfoActive = false
-    local TabInfoFadeTween = nil
 
     local function UpdateTabInfoSize()
         if not TabInfoHolder then return end
@@ -2128,26 +2128,24 @@ end
         TabInfoTitle.Text = Title
         TabInfoDesc.Text = Description or ""
         UpdateTabInfoSize()
-        TabInfoHolder.Visible = true
-        TabInfoActive = true
-
-        -- prepare fade-in
+        
+        -- Set initial transparency for fade in
         TabInfoHolder.BackgroundTransparency = 1
         TabInfoTitle.TextTransparency = 1
         TabInfoDesc.TextTransparency = 1
-        if TabInfoStroke then TabInfoStroke.Transparency = 1 end
-
-        if TabInfoFadeTween and TabInfoFadeTween.PlaybackState == Enum.PlaybackState.Playing then
-            TabInfoFadeTween:Cancel()
-        end
-
-        TabInfoFadeTween = TweenService:Create(TabInfoHolder, Library.TweenInfo, {
+        TabInfoHolder.Visible = true
+        TabInfoActive = true
+        
+        -- Fade in animation
+        TweenService:Create(TabInfoHolder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0,
-        })
-        TabInfoFadeTween:Play()
-        TweenService:Create(TabInfoTitle, Library.TweenInfo, { TextTransparency = 0 }):Play()
-        TweenService:Create(TabInfoDesc, Library.TweenInfo, { TextTransparency = 0 }):Play()
-        if TabInfoStroke then TweenService:Create(TabInfoStroke, Library.TweenInfo, { Transparency = 0 }):Play() end
+        }):Play()
+        TweenService:Create(TabInfoTitle, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 0,
+        }):Play()
+        TweenService:Create(TabInfoDesc, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 0.4,
+        }):Play()
 
         if TabInfoRender and TabInfoRender.Connected then
             TabInfoRender:Disconnect()
@@ -2162,9 +2160,8 @@ end
 
         local absPos = HoverInstance.AbsolutePosition
         local absSize = HoverInstance.AbsoluteSize
-        local gap = 6 -- match tabbar/main UI gap
         local centerX = math.floor(absPos.X + (absSize.X / 2))
-        local topY = math.floor(absPos.Y) - gap
+        local topY = math.floor(absPos.Y) - 6
         local px = math.floor(centerX - (TabInfoHolder.AbsoluteSize.X / 2))
         local py = topY - TabInfoHolder.AbsoluteSize.Y
         TabInfoHolder.Position = UDim2.fromOffset(px, py)
@@ -2177,21 +2174,21 @@ end
             TabInfoRender:Disconnect()
             TabInfoRender = nil
         end
-
-        if TabInfoFadeTween and TabInfoFadeTween.PlaybackState == Enum.PlaybackState.Playing then
-            TabInfoFadeTween:Cancel()
-        end
-
-        local fadeOut = TweenService:Create(TabInfoHolder, Library.TweenInfo, {
+        
+        -- Fade out animation
+        local fadeTween = TweenService:Create(TabInfoHolder, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 1,
         })
-        fadeOut.Completed:Connect(function()
+        TweenService:Create(TabInfoTitle, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 1,
+        }):Play()
+        TweenService:Create(TabInfoDesc, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TextTransparency = 1,
+        }):Play()
+        fadeTween.Completed:Connect(function()
             TabInfoHolder.Visible = false
         end)
-        fadeOut:Play()
-        TweenService:Create(TabInfoTitle, Library.TweenInfo, { TextTransparency = 1 }):Play()
-        TweenService:Create(TabInfoDesc, Library.TweenInfo, { TextTransparency = 1 }):Play()
-        if TabInfoStroke then TweenService:Create(TabInfoStroke, Library.TweenInfo, { Transparency = 1 }):Play() end
+        fadeTween:Play()
     end
 
 function Library:OnUnload(Callback)
