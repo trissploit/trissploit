@@ -1044,11 +1044,6 @@ function Library:AddToGradientRegistry(Gradient, Config)
     Library.GradientRegistry[Gradient] = Config
 end
 
-function Library:SetGradients(Enabled: boolean?)
-    -- Stub for backwards compatibility - gradients are always enabled
-    Library.EnableGradients = Enabled ~= false
-end
-
 function Library:UpdateGradients()
     for Gradient, Config in pairs(Library.GradientRegistry) do
         if not Gradient or not Gradient.Parent then
@@ -1069,6 +1064,13 @@ function Library:UpdateGradients()
             ColorSequenceKeypoint.new(1, color2),
         })
         Gradient.Rotation = rotation
+    end
+end
+
+function Library:SetGradients(enabled)
+    self.EnableGradients = enabled
+    if enabled then
+        self:UpdateGradients()
     end
 end
 
