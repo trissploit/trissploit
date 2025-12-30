@@ -3355,17 +3355,19 @@ do
                 Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
             })
-            New("UIGradient", {
-                Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
-                    ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1)),
-                }),
+            local LeftLineGrad = New("UIGradient", {
+                Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
                     NumberSequenceKeypoint.new(1, 0),
                 }),
                 Parent = LeftLine,
             })
+            Library.Registry[LeftLineGrad] = {
+                Color = function()
+                    return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                end,
+            }
 
             local RightLine = New("Frame", {
                 AnchorPoint = Vector2.new(1, 0.5),
@@ -3375,17 +3377,19 @@ do
                 Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
             })
-            New("UIGradient", {
-                Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
-                    ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1)),
-                }),
+            local RightLineGrad = New("UIGradient", {
+                Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 0),
                     NumberSequenceKeypoint.new(1, 1),
                 }),
                 Parent = RightLine,
             })
+            Library.Registry[RightLineGrad] = {
+                Color = function()
+                    return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                end,
+            }
         else
             local Line = New("Frame", {
                 AnchorPoint = Vector2.new(0.5, 0.5),
@@ -3395,11 +3399,8 @@ do
                 Size = UDim2.new(1, 0, 0, 1),
                 Parent = Holder,
             })
-            New("UIGradient", {
-                Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
-                    ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1)),
-                }),
+            local LineGrad = New("UIGradient", {
+                Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
                     NumberSequenceKeypoint.new(0.5, 0),
@@ -3407,6 +3408,11 @@ do
                 }),
                 Parent = Line,
             })
+            Library.Registry[LineGrad] = {
+                Color = function()
+                    return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                end,
+            }
         end
 
         Groupbox:Resize()
