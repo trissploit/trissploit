@@ -1860,8 +1860,8 @@ do
         Library.Registry[WM.Label] = { TextColor3 = "FontColor", FontFace = "Font" }
         Library.Registry[WMStroke] = { Color = "OutlineColor" }
 
-        -- make watermark draggable
-        Library:MakeDraggable(WM.Holder, WM.Holder, true)
+        -- make watermark draggable (only when main UI is open)
+        Library:MakeDraggable(WM.Holder, WM.Holder, false)
 
         local lastTime = tick()
         local frameCount = 0
