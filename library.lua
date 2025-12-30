@@ -3328,13 +3328,13 @@ do
 
         local Holder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 6),
+            Size = UDim2.new(1, 0, 0, 12),
             Parent = Container,
         })
 
         if Text then
             local TextLabel = New("TextLabel", {
-                AutomaticSize = Enum.AutomaticSize.X;
+                AutomaticSize = Enum.AutomaticSize.X,
                 BackgroundTransparency = 1,
                 Size = UDim2.fromScale(1, 0),
                 Text = Text,
@@ -3347,33 +3347,65 @@ do
             local X, _ = Library:GetTextBounds(Text, TextLabel.FontFace, TextLabel.TextSize, TextLabel.AbsoluteSize.X)
             local SizeX = X//2 + 10
 
-            New("Frame", {
+            local LeftLine = New("Frame", {
                 AnchorPoint = Vector2.new(0, 0.5),
-                BackgroundColor3 = "MainColor",
-                BorderColor3 = "OutlineColor",
-                BorderSizePixel = 1,
+                BackgroundColor3 = "AccentColor",
+                BorderSizePixel = 0,
                 Position = UDim2.fromScale(0, 0.5),
-                Size = UDim2.new(0.5, -SizeX, 0, 2),
+                Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
             })
-            New("Frame", {
+            New("UIGradient", {
+                Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
+                    ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1)),
+                }),
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(1, 0),
+                }),
+                Parent = LeftLine,
+            })
+
+            local RightLine = New("Frame", {
                 AnchorPoint = Vector2.new(1, 0.5),
-                BackgroundColor3 = "MainColor",
-                BorderColor3 = "OutlineColor",
-                BorderSizePixel = 1,
+                BackgroundColor3 = "AccentColor",
+                BorderSizePixel = 0,
                 Position = UDim2.fromScale(1, 0.5),
-                Size = UDim2.new(0.5, -SizeX, 0, 2),
+                Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
+            })
+            New("UIGradient", {
+                Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
+                    ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1)),
+                }),
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0),
+                    NumberSequenceKeypoint.new(1, 1),
+                }),
+                Parent = RightLine,
             })
         else
-            New("Frame", {
-                AnchorPoint = Vector2.new(0, 0.5),
-                BackgroundColor3 = "MainColor",
-                BorderColor3 = "OutlineColor",
-                BorderSizePixel = 1,
-                Position = UDim2.fromScale(0, 0.5),
-                Size = UDim2.new(1, 0, 0, 2),
+            local Line = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = "AccentColor",
+                BorderSizePixel = 0,
+                Position = UDim2.fromScale(0.5, 0.5),
+                Size = UDim2.new(1, 0, 0, 1),
                 Parent = Holder,
+            })
+            New("UIGradient", {
+                Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
+                    ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1)),
+                }),
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(0.5, 0),
+                    NumberSequenceKeypoint.new(1, 1),
+                }),
+                Parent = Line,
             })
         end
 
@@ -3604,13 +3636,9 @@ do
                     TextTransparency = 0,
                 })
                 Button.Tween:Play()
-
-                -- outline transition to accent on hover
-                StopTween(Button.StrokeTween)
-                Button.StrokeTween = TweenService:Create(Button.Stroke, Library.TweenInfo, {
+                TweenService:Create(Button.Stroke, Library.TweenInfo, {
                     Color = Library.Scheme.AccentColor,
-                })
-                Button.StrokeTween:Play()
+                }):Play()
             end)
             Button.Base.MouseLeave:Connect(function()
                 if Button.Disabled then
@@ -3621,13 +3649,9 @@ do
                     TextTransparency = 0.4,
                 })
                 Button.Tween:Play()
-
-                -- revert outline color
-                StopTween(Button.StrokeTween)
-                Button.StrokeTween = TweenService:Create(Button.Stroke, Library.TweenInfo, {
+                TweenService:Create(Button.Stroke, Library.TweenInfo, {
                     Color = Library.Scheme.OutlineColor,
-                })
-                Button.StrokeTween:Play()
+                }):Play()
             end)
 
             Button.Base.MouseButton1Click:Connect(function()
@@ -3880,18 +3904,18 @@ do
             Parent = Checkbox,
         })
 
-        -- hover outline tween on the checkbox holder
+        -- Add hover effect to checkbox
         Button.MouseEnter:Connect(function()
-            if Button.Active == false then return end
-            StopTween(CheckboxStroke.Tween)
-            CheckboxStroke.Tween = TweenService:Create(CheckboxStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
-            CheckboxStroke.Tween:Play()
+            if Toggle.Disabled then return end
+            TweenService:Create(CheckboxStroke, Library.TweenInfo, {
+                Color = Library.Scheme.AccentColor,
+            }):Play()
         end)
         Button.MouseLeave:Connect(function()
-            if Button.Active == false then return end
-            StopTween(CheckboxStroke.Tween)
-            CheckboxStroke.Tween = TweenService:Create(CheckboxStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
-            CheckboxStroke.Tween:Play()
+            if Toggle.Disabled then return end
+            TweenService:Create(CheckboxStroke, Library.TweenInfo, {
+                Color = Library.Scheme.OutlineColor,
+            }):Play()
         end)
 
         local CheckboxGradient = New("UIGradient", {
@@ -3931,7 +3955,7 @@ do
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
-                -- hide gradient when disabled; use background color as solid base
+                -- Disable gradient and use dark background when disabled
                 CheckboxGradient.Enabled = false
                 Checkbox.BackgroundColor3 = Library.Scheme.BackgroundColor
                 Library.Registry[Checkbox].BackgroundColor3 = "BackgroundColor"
@@ -3946,9 +3970,9 @@ do
             CheckboxGradient.Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
             CheckboxGradient.Enabled = Toggle.Value
 
-            -- Fill the checkbox: keep solid main color background, use gradient for accent
-            Checkbox.BackgroundColor3 = Library.Scheme.MainColor
-            Library.Registry[Checkbox].BackgroundColor3 = "MainColor"
+            -- Fill the checkbox with gradient start color when checked, main color when unchecked
+            Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentGradientStart or Library.Scheme.MainColor
+            Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentGradientStart" or "MainColor"
         end
 
         function Toggle:OnChanged(Func)
@@ -4117,20 +4141,6 @@ do
             Parent = Switch,
         })
 
-        -- hover outline tween for the switch holder
-        Button.MouseEnter:Connect(function()
-            if Button.Active == false then return end
-            StopTween(SwitchStroke.Tween)
-            SwitchStroke.Tween = TweenService:Create(SwitchStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
-            SwitchStroke.Tween:Play()
-        end)
-        Button.MouseLeave:Connect(function()
-            if Button.Active == false then return end
-            StopTween(SwitchStroke.Tween)
-            SwitchStroke.Tween = TweenService:Create(SwitchStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
-            SwitchStroke.Tween:Play()
-        end)
-
         local Ball = New("Frame", {
             BackgroundColor3 = "FontColor",
             Size = UDim2.fromScale(1, 1),
@@ -4156,12 +4166,11 @@ do
             Switch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
             SwitchStroke.Transparency = Toggle.Disabled and 0.75 or 0
 
-            -- Keep switch background/stroke neutral; accent will be shown via gradients elsewhere
-            Switch.BackgroundColor3 = Library.Scheme.MainColor
-            SwitchStroke.Color = Library.Scheme.OutlineColor
+            Switch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
+            SwitchStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
 
-            Library.Registry[Switch].BackgroundColor3 = "MainColor"
-            Library.Registry[SwitchStroke].Color = "OutlineColor"
+            Library.Registry[Switch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
+            Library.Registry[SwitchStroke].Color = Toggle.Value and "AccentColor" or "OutlineColor"
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
@@ -4507,17 +4516,19 @@ do
             Color = "OutlineColor",
             Parent = Bar,
         })
+
+        -- Add hover effect to slider
         Bar.MouseEnter:Connect(function()
-            if not Bar.Active then return end
-            StopTween(BarStroke.Tween)
-            BarStroke.Tween = TweenService:Create(BarStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
-            BarStroke.Tween:Play()
+            if Slider.Disabled then return end
+            TweenService:Create(BarStroke, Library.TweenInfo, {
+                Color = Library.Scheme.AccentColor,
+            }):Play()
         end)
         Bar.MouseLeave:Connect(function()
-            if not Bar.Active then return end
-            StopTween(BarStroke.Tween)
-            BarStroke.Tween = TweenService:Create(BarStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
-            BarStroke.Tween:Play()
+            if Slider.Disabled then return end
+            TweenService:Create(BarStroke, Library.TweenInfo, {
+                Color = Library.Scheme.OutlineColor,
+            }):Play()
         end)
 
         local DisplayLabel = New("TextLabel", {
@@ -4536,7 +4547,7 @@ do
         })
 
         local Fill = New("Frame", {
-            BackgroundColor3 = "AccentColor",
+            BackgroundColor3 = "AccentGradientStart",
             Size = UDim2.fromScale(0.5, 1),
             Parent = Bar,
 
@@ -4570,8 +4581,8 @@ do
             DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or 0
 
             FillGradient.Enabled = not Slider.Disabled
-            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.MainColor
-            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "MainColor"
+            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentGradientStart
+            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentGradientStart"
         end
 
         function Slider:Display()
@@ -4809,17 +4820,19 @@ do
             Color = "OutlineColor",
             Parent = Display,
         })
+
+        -- Add hover effect to dropdown
         Display.MouseEnter:Connect(function()
-            if not Display.Active then return end
-            StopTween(DisplayStroke.Tween)
-            DisplayStroke.Tween = TweenService:Create(DisplayStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
-            DisplayStroke.Tween:Play()
+            if Dropdown.Disabled then return end
+            TweenService:Create(DisplayStroke, Library.TweenInfo, {
+                Color = Library.Scheme.AccentColor,
+            }):Play()
         end)
         Display.MouseLeave:Connect(function()
-            if not Display.Active then return end
-            StopTween(DisplayStroke.Tween)
-            DisplayStroke.Tween = TweenService:Create(DisplayStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
-            DisplayStroke.Tween:Play()
+            if Dropdown.Disabled then return end
+            TweenService:Create(DisplayStroke, Library.TweenInfo, {
+                Color = Library.Scheme.OutlineColor,
+            }):Play()
         end)
 
         New("UIPadding", {
@@ -4996,22 +5009,6 @@ do
                         return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
                     end,
                 }
-                local ButtonStroke = New("UIStroke", {
-                    Color = "OutlineColor",
-                    Parent = Button,
-                })
-                Button.MouseEnter:Connect(function()
-                    if IsDisabled then return end
-                    StopTween(ButtonStroke.Tween)
-                    ButtonStroke.Tween = TweenService:Create(ButtonStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor })
-                    ButtonStroke.Tween:Play()
-                end)
-                Button.MouseLeave:Connect(function()
-                    if IsDisabled then return end
-                    StopTween(ButtonStroke.Tween)
-                    ButtonStroke.Tween = TweenService:Create(ButtonStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor })
-                    ButtonStroke.Tween:Play()
-                end)
                 New("UIPadding", {
                     PaddingLeft = UDim.new(0, 7),
                     PaddingRight = UDim.new(0, 7),
