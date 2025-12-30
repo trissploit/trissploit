@@ -1037,9 +1037,10 @@ function Library:UpdateColorsUsingRegistry()
             local gradient = Instance:FindFirstChildOfClass("UIGradient")
             if gradient and Properties.BackgroundColor3 == "AccentColor" then
                 gradient.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
-                    ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
+                    ColorSequenceKeypoint.new(0, Library.Scheme.GradientColor1 or Library.Scheme.AccentColor),
+                    ColorSequenceKeypoint.new(1, Library.Scheme.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
                 })
+                gradient.Rotation = Library.Scheme.GradientRotation or 0
             end
         end
     end
@@ -3936,9 +3937,10 @@ do
                     if not existingGradient then
                         existingGradient = New("UIGradient", {
                             Color = ColorSequence.new({
-                                ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
-                                ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
+                                ColorSequenceKeypoint.new(0, Library.Scheme.GradientColor1 or Library.Scheme.AccentColor),
+                                ColorSequenceKeypoint.new(1, Library.Scheme.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
                             }),
+                            Rotation = Library.Scheme.GradientRotation or 0,
                             Parent = Checkbox,
                         })
                     end
@@ -4535,9 +4537,10 @@ do
                 if not existingGradient then
                     existingGradient = New("UIGradient", {
                         Color = ColorSequence.new({
-                            ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
-                            ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
+                            ColorSequenceKeypoint.new(0, Library.Scheme.GradientColor1 or Library.Scheme.AccentColor),
+                            ColorSequenceKeypoint.new(1, Library.Scheme.GradientColor2 or Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
                         }),
+                        Rotation = Library.Scheme.GradientRotation or 0,
                         Parent = Fill,
                     })
                 end
