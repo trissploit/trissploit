@@ -1948,6 +1948,40 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
         Signals = {},
     }
 
+    local TooltipTween = nil
+
+    local function ShowTooltipAnimated()
+        if not TooltipLabel then return end
+        TooltipLabel.BackgroundTransparency = 1
+        TooltipLabel.TextTransparency = 1
+        TooltipLabel.Visible = true
+        if TooltipTween then
+            pcall(function() TooltipTween:Cancel() end)
+            TooltipTween = nil
+        end
+        TooltipTween = TweenService:Create(TooltipLabel, Library.TweenInfo, {
+            BackgroundTransparency = 0,
+            TextTransparency = 0,
+        })
+        TooltipTween:Play()
+    end
+
+    local function HideTooltipAnimated()
+        if not TooltipLabel then return end
+        if TooltipTween then
+            pcall(function() TooltipTween:Cancel() end)
+            TooltipTween = nil
+        end
+        local t = TweenService:Create(TooltipLabel, Library.TweenInfo, {
+            BackgroundTransparency = 1,
+            TextTransparency = 1,
+        })
+        t:Play()
+        t.Completed:Connect(function()
+            TooltipLabel.Visible = false
+        end)
+    end
+
     local function DoHover()
         if
             CurrentHoverInstance == HoverInstance
@@ -1960,7 +1994,7 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
         CurrentHoverInstance = HoverInstance
 
         TooltipLabel.Text = TooltipTable.Disabled and DisabledInfoStr or InfoStr
-        TooltipLabel.Visible = true
+        ShowTooltipAnimated()
 
         while
             Library.Toggled
@@ -1975,7 +2009,7 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
             RunService.RenderStepped:Wait()
         end
 
-        TooltipLabel.Visible = false
+        HideTooltipAnimated()
         CurrentHoverInstance = nil
     end
 
@@ -1995,7 +2029,7 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
             return
         end
 
-        TooltipLabel.Visible = false
+        HideTooltipAnimated()
         CurrentHoverInstance = nil
     end))
 
@@ -2009,7 +2043,7 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
 
         if CurrentHoverInstance == HoverInstance then
             if TooltipLabel then
-                TooltipLabel.Visible = false
+                HideTooltipAnimated()
             end
 
             CurrentHoverInstance = nil
@@ -2104,8 +2138,19 @@ end
         TabInfoTitle.Text = Title
         TabInfoDesc.Text = Description or ""
         UpdateTabInfoSize()
+        -- prepare for animated show
+        TabInfoHolder.BackgroundTransparency = 1
+        TabInfoTitle.TextTransparency = 1
+        TabInfoDesc.TextTransparency = 1
         TabInfoHolder.Visible = true
         TabInfoActive = true
+        if TabInfoTween and type(TabInfoTween) == "table" and TabInfoTween.PlaybackState == Enum.PlaybackState.Playing then
+            pcall(function() TabInfoTween:Cancel() end)
+        end
+        TabInfoTween = TweenService:Create(TabInfoHolder, Library.TweenInfo, { BackgroundTransparency = 0 })
+        TabInfoTween:Play()
+        TweenService:Create(TabInfoTitle, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        TweenService:Create(TabInfoDesc, Library.TweenInfo, { TextTransparency = 0 }):Play()
 
         if TabInfoRender and TabInfoRender.Connected then
             TabInfoRender:Disconnect()
@@ -2123,18 +2168,28 @@ end
         local centerX = math.floor(absPos.X + (absSize.X / 2))
         local topY = math.floor(absPos.Y) - 6
         local px = math.floor(centerX - (TabInfoHolder.AbsoluteSize.X / 2))
-        local py = topY - TabInfoHolder.AbsoluteSize.Y
+        local py = math.floor(absPos.Y) - 5 - TabInfoHolder.AbsoluteSize.Y -- 5px gap above tab
         TabInfoHolder.Position = UDim2.fromOffset(px, py)
     end)
     end
 
     function Library:HideTabInfo()
-        TabInfoActive = false
+    TabInfoActive = false
+    if TabInfoRender and TabInfoRender.Connected then
+        TabInfoRender:Disconnect()
+        TabInfoRender = nil
+    end
+    -- animate hide
+    if TabInfoTween and type(TabInfoTween) == "table" then
+        pcall(function() TabInfoTween:Cancel() end)
+    end
+    local t = TweenService:Create(TabInfoHolder, Library.TweenInfo, { BackgroundTransparency = 1 })
+    TweenService:Create(TabInfoTitle, Library.TweenInfo, { TextTransparency = 1 }):Play()
+    TweenService:Create(TabInfoDesc, Library.TweenInfo, { TextTransparency = 1 }):Play()
+    t:Play()
+    t.Completed:Connect(function()
         TabInfoHolder.Visible = false
-        if TabInfoRender and TabInfoRender.Connected then
-            TabInfoRender:Disconnect()
-            TabInfoRender = nil
-        end
+    end)
     end
 
 function Library:OnUnload(Callback)
