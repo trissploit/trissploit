@@ -178,6 +178,7 @@ local Library = {
     ForceCheckbox = false,
     ShowToggleFrameInKeybinds = true,
     NotifyOnError = false,
+    EnableGradients = false,
 
     CantDragForced = false,
 
@@ -1030,6 +1031,17 @@ function Library:UpdateColorsUsingRegistry()
                 Instance[Property] = ColorIdx()
             end
         end
+
+        -- Update gradients if enabled
+        if Library.EnableGradients then
+            local gradient = Instance:FindFirstChildOfClass("UIGradient")
+            if gradient and Properties.BackgroundColor3 == "AccentColor" then
+                gradient.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
+                    ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.2))
+                })
+            end
+        end
     end
 end
 
@@ -1351,6 +1363,11 @@ end
 function Library:GetDarkerColor(Color: Color3): Color3
     local H, S, V = Color:ToHSV()
     return Color3.fromHSV(H, S, V / 2)
+end
+
+function Library:SetGradients(Enabled: boolean)
+    Library.EnableGradients = Enabled
+    Library:UpdateColorsUsingRegistry()
 end
 
 function Library:GetKeyString(KeyCode: Enum.KeyCode)
@@ -3911,6 +3928,25 @@ do
             }):Play()
 
             Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
+
+            -- Add gradient if enabled
+            if Library.EnableGradients then
+                local existingGradient = Checkbox:FindFirstChildOfClass("UIGradient")
+                if Toggle.Value then
+                    if not existingGradient then
+                        existingGradient = New("UIGradient", {
+                            Color = ColorSequence.new({
+                                ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
+                                ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.2))
+                            }),
+                            Parent = Checkbox,
+                        })
+                    end
+                    existingGradient.Enabled = true
+                elseif existingGradient then
+                    existingGradient.Enabled = false
+                end
+            end
         end
 
         function Toggle:OnChanged(Func)
@@ -4492,6 +4528,26 @@ do
 
             Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentColor
             Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentColor"
+
+            -- Add gradient if enabled
+            if Library.EnableGradients and not Slider.Disabled then
+                local existingGradient = Fill:FindFirstChildOfClass("UIGradient")
+                if not existingGradient then
+                    existingGradient = New("UIGradient", {
+                        Color = ColorSequence.new({
+                            ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
+                            ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.2))
+                        }),
+                        Parent = Fill,
+                    })
+                end
+                existingGradient.Enabled = true
+            else
+                local existingGradient = Fill:FindFirstChildOfClass("UIGradient")
+                if existingGradient then
+                    existingGradient.Enabled = false
+                end
+            end
         end
 
         function Slider:Display()
