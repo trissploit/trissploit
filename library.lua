@@ -1967,22 +1967,10 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
             and Library:MouseIsOverFrame(HoverInstance, Mouse)
             and not (CurrentMenu and Library:MouseIsOverFrame(CurrentMenu.Menu, Mouse))
         do
-            -- Position tooltip centered directly above the hover instance (tab button)
-            local absPos = HoverInstance.AbsolutePosition
-            local absSize = HoverInstance.AbsoluteSize
-            local tipSize = TooltipLabel.AbsoluteSize
-
-            local x = math.floor(absPos.X + (absSize.X / 2) - (tipSize.X / 2))
-            local y = math.floor(absPos.Y - tipSize.Y - 6)
-
-            if x < 4 then
-                x = 4
-            end
-            if y < 4 then
-                y = 4
-            end
-
-            TooltipLabel.Position = UDim2.fromOffset(x, y)
+            TooltipLabel.Position = UDim2.fromOffset(
+                Mouse.X + (Library.ShowCustomCursor and 8 or 14),
+                Mouse.Y + (Library.ShowCustomCursor and 8 or 12)
+            )
 
             RunService.RenderStepped:Wait()
         end
@@ -7517,11 +7505,67 @@ function Library:CreateWindow(WindowInfo)
 
         Library.Tabs[Name] = Tab
 
-        -- Add tooltip to tab button
-        if Description and Description ~= "" then
-            Library:AddTooltip(Name .. "\n" .. Description, nil, TabButton)
-        else
-            Library:AddTooltip(Name, nil, TabButton)
+        -- Tab-specific tooltip positioned directly above the tab button
+        do
+            local TabTooltip = New("TextLabel", {
+                BackgroundColor3 = "BackgroundColor",
+                BorderColor3 = "OutlineColor",
+                BorderSizePixel = 1,
+                TextSize = 14,
+                TextWrapped = true,
+                Visible = false,
+                ZIndex = 20,
+                Parent = ScreenGui,
+            })
+
+            local function UpdateTooltipSize()
+                local X, Y = Library:GetTextBounds(
+                    TabTooltip.Text,
+                    TabTooltip.FontFace,
+                    TabTooltip.TextSize,
+                    workspace.CurrentCamera.ViewportSize.X - 4
+                )
+
+                TabTooltip.Size = UDim2.fromOffset((X + 8) * Library.DPIScale, (Y + 4) * Library.DPIScale)
+                Library:UpdateDPI(TabTooltip, {
+                    Size = UDim2.fromOffset(X, Y),
+                    DPIOffset = {
+                        Size = { 8, 4 },
+                    },
+                })
+            end
+
+            local function ShowTooltip()
+                TabTooltip.Text = (Description and Description ~= "") and (Name .. "\n" .. Description) or Name
+                UpdateTooltipSize()
+
+                local tooltipW = TabTooltip.AbsoluteSize.X
+                local tooltipH = TabTooltip.AbsoluteSize.Y
+                local x = math.floor(TabButton.AbsolutePosition.X + TabButton.AbsoluteSize.X / 2 - tooltipW / 2)
+                local y = math.floor(TabButton.AbsolutePosition.Y - tooltipH - 6)
+
+                if x < 4 then
+                    x = 4
+                end
+                if y < 4 then
+                    y = 4
+                end
+
+                TabTooltip.Position = UDim2.fromOffset(x, y)
+                TabTooltip.Visible = true
+            end
+
+            local function HideTooltip()
+                TabTooltip.Visible = false
+            end
+
+            TabButton.MouseEnter:Connect(ShowTooltip)
+            TabButton.MouseLeave:Connect(HideTooltip)
+            TabButton:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+                if TabTooltip.Visible then
+                    ShowTooltip()
+                end
+            end)
         end
 
         return Tab
