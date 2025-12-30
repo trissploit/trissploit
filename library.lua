@@ -7505,6 +7505,13 @@ function Library:CreateWindow(WindowInfo)
 
         Library.Tabs[Name] = Tab
 
+        -- Add tooltip to tab button
+        if Description and Description ~= "" then
+            Library:AddTooltip(Name .. "\n" .. Description, nil, TabButton)
+        else
+            Library:AddTooltip(Name, nil, TabButton)
+        end
+
         return Tab
     end
 
