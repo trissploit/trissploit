@@ -2066,6 +2066,13 @@ end
         PaddingBottom = UDim.new(0, 4),
         Parent = TabInfoHolder,
     })
+    New("UIListLayout", {
+        FillDirection = Enum.FillDirection.Vertical,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+        Padding = UDim.new(0, 2),
+        Parent = TabInfoHolder,
+    })
 
     local TabInfoRender = nil
     local TabInfoActive = false
@@ -2086,12 +2093,10 @@ end
 
         -- Title occupies full content width; center text inside via TextXAlignment
         TabInfoTitle.Size = UDim2.fromOffset(contentWidth, titleH)
-        TabInfoTitle.Position = UDim2.fromOffset(6, 4)
-        TabInfoDesc.Position = UDim2.fromOffset(6, 4 + titleH)
         TabInfoDesc.Size = UDim2.fromOffset(contentWidth, descH)
 
         Library:UpdateDPI(TabInfoTitle, { Size = UDim2.fromOffset(contentWidth, titleH) })
-        Library:UpdateDPI(TabInfoDesc, { Size = UDim2.fromOffset(contentWidth, descH), Position = UDim2.fromOffset(6, 4 + titleH) })
+        Library:UpdateDPI(TabInfoDesc, { Size = UDim2.fromOffset(contentWidth, descH) })
     end
 
     function Library:ShowTabInfo(HoverInstance: GuiObject, Title: string, Description: string)
