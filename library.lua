@@ -178,7 +178,8 @@ local Library = {
     ForceCheckbox = false,
     ShowToggleFrameInKeybinds = true,
     NotifyOnError = false,
-    EnableGradients = false,
+    -- Gradients enabled by default and configurable via ThemeManager
+    EnableGradients = true,
     GradientColor1 = nil,
     GradientColor2 = nil,
     GradientRotation = 0,
@@ -1029,7 +1030,13 @@ function Library:UpdateColorsUsingRegistry()
     for Instance, Properties in pairs(Library.Registry) do
         for Property, ColorIdx in pairs(Properties) do
             if typeof(ColorIdx) == "string" then
-                Instance[Property] = Library.Scheme[ColorIdx]
+                -- If gradients are enabled and this is an accent-colored background, override with the
+                -- gradient start color so the UIGradient visually replaces the solid accent color.
+                if ColorIdx == "AccentColor" and Library.EnableGradients then
+                    Instance[Property] = Library.GradientColor1 or Library.Scheme.AccentColor
+                else
+                    Instance[Property] = Library.Scheme[ColorIdx]
+                end
             elseif typeof(ColorIdx) == "function" then
                 Instance[Property] = ColorIdx()
             end
@@ -1372,7 +1379,8 @@ function Library:GetDarkerColor(Color: Color3): Color3
 end
 
 function Library:SetGradients(Enabled: boolean)
-    Library.EnableGradients = Enabled
+    -- Always enable gradients when this is called; ignore false param to ensure gradients system remains active
+    Library.EnableGradients = true
     Library:UpdateColorsUsingRegistry()
     Library:UpdateGradients()
 end
