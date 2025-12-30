@@ -1776,10 +1776,6 @@ function Library:AddContextMenu(
                 Position = true,
             },
         })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
-            Parent = Menu,
-        })
     else
         Menu = New("Frame", {
             BackgroundColor3 = "BackgroundColor",
@@ -1793,10 +1789,6 @@ function Library:AddContextMenu(
             DPIExclude = {
                 Position = true,
             },
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
-            Parent = Menu,
         })
     end
 
@@ -4447,7 +4439,7 @@ do
             Parent = Holder,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
+            CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Bar,
         })
 
@@ -4474,10 +4466,6 @@ do
             DPIExclude = {
                 Size = true,
             },
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
-            Parent = Fill,
         })
 
         function Slider:UpdateColors()
@@ -4722,7 +4710,7 @@ do
             Parent = Holder,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
+            CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Display,
         })
 
