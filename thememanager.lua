@@ -40,7 +40,7 @@ end
 
 local ThemeManager = {}
 do
-    local ThemeFields = { "FontColor", "MainColor", "AccentColor", "AccentGradientStart", "AccentGradientEnd", "BackgroundColor", "OutlineColor" }
+    local ThemeFields = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor", "AccentGradientStart", "AccentGradientEnd" }
     ThemeManager.Folder = "ObsidianLibSettings"
     -- if not isfolder(ThemeManager.Folder) then makefolder(ThemeManager.Folder) end
 
@@ -49,75 +49,75 @@ do
     ThemeManager.BuiltInThemes = {
         ["Default"] = {
             1,
-            { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", AccentGradientStart = "7d55ff", AccentGradientEnd = "5a3bb8", BackgroundColor = "0f0f0f", OutlineColor = "282828" },
+            { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", BackgroundColor = "0f0f0f", OutlineColor = "282828", AccentGradientStart = "9b7aff", AccentGradientEnd = "5a32cc" },
         },
         ["BBot"] = {
             2,
-            { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "7e48a3", AccentGradientStart = "7e48a3", AccentGradientEnd = "5a346e", BackgroundColor = "232323", OutlineColor = "141414" },
+            { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "7e48a3", BackgroundColor = "232323", OutlineColor = "141414", AccentGradientStart = "9e68c3", AccentGradientEnd = "5e2883" },
         },
         ["Fatality"] = {
             3,
-            { FontColor = "ffffff", MainColor = "1e1842", AccentColor = "c50754", AccentGradientStart = "c50754", AccentGradientEnd = "8a0439", BackgroundColor = "191335", OutlineColor = "3c355d" },
+            { FontColor = "ffffff", MainColor = "1e1842", AccentColor = "c50754", BackgroundColor = "191335", OutlineColor = "3c355d", AccentGradientStart = "e52774", AccentGradientEnd = "a50034" },
         },
         ["Jester"] = {
             4,
-            { FontColor = "ffffff", MainColor = "242424", AccentColor = "db4467", AccentGradientStart = "db4467", AccentGradientEnd = "a0324c", BackgroundColor = "1c1c1c", OutlineColor = "373737" },
+            { FontColor = "ffffff", MainColor = "242424", AccentColor = "db4467", BackgroundColor = "1c1c1c", OutlineColor = "373737", AccentGradientStart = "fb6487", AccentGradientEnd = "bb2447" },
         },
         ["Mint"] = {
             5,
-            { FontColor = "ffffff", MainColor = "242424", AccentColor = "3db488", AccentGradientStart = "3db488", AccentGradientEnd = "2d8261", BackgroundColor = "1c1c1c", OutlineColor = "373737" },
+            { FontColor = "ffffff", MainColor = "242424", AccentColor = "3db488", BackgroundColor = "1c1c1c", OutlineColor = "373737", AccentGradientStart = "5dd4a8", AccentGradientEnd = "1d9468" },
         },
         ["Tokyo Night"] = {
             6,
-            { FontColor = "ffffff", MainColor = "191925", AccentColor = "6759b3", AccentGradientStart = "6759b3", AccentGradientEnd = "4c4382", BackgroundColor = "16161f", OutlineColor = "323232" },
+            { FontColor = "ffffff", MainColor = "191925", AccentColor = "6759b3", BackgroundColor = "16161f", OutlineColor = "323232", AccentGradientStart = "8779d3", AccentGradientEnd = "473993" },
         },
         ["Ubuntu"] = {
             7,
-            { FontColor = "ffffff", MainColor = "3e3e3e", AccentColor = "e2581e", AccentGradientStart = "e2581e", AccentGradientEnd = "a84115", BackgroundColor = "323232", OutlineColor = "191919" },
+            { FontColor = "ffffff", MainColor = "3e3e3e", AccentColor = "e2581e", BackgroundColor = "323232", OutlineColor = "191919", AccentGradientStart = "ff783e", AccentGradientEnd = "c23800" },
         },
         ["Quartz"] = {
             8,
-            { FontColor = "ffffff", MainColor = "232330", AccentColor = "426e87", AccentGradientStart = "426e87", AccentGradientEnd = "314f61", BackgroundColor = "1d1b26", OutlineColor = "27232f" },
+            { FontColor = "ffffff", MainColor = "232330", AccentColor = "426e87", BackgroundColor = "1d1b26", OutlineColor = "27232f", AccentGradientStart = "628ea7", AccentGradientEnd = "224e67" },
         },
         ["Nord"] = {
             9,
-            { FontColor = "eceff4", MainColor = "3b4252", AccentColor = "88c0d0", AccentGradientStart = "88c0d0", AccentGradientEnd = "63949e", BackgroundColor = "2e3440", OutlineColor = "4c566a" },
+            { FontColor = "eceff4", MainColor = "3b4252", AccentColor = "88c0d0", BackgroundColor = "2e3440", OutlineColor = "4c566a", AccentGradientStart = "a8e0f0", AccentGradientEnd = "68a0b0" },
         },
         ["Dracula"] = {
             10,
-            { FontColor = "f8f8f2", MainColor = "44475a", AccentColor = "ff79c6", AccentGradientStart = "ff79c6", AccentGradientEnd = "bf5f94", BackgroundColor = "282a36", OutlineColor = "6272a4" },
+            { FontColor = "f8f8f2", MainColor = "44475a", AccentColor = "ff79c6", BackgroundColor = "282a36", OutlineColor = "6272a4", AccentGradientStart = "ff99e6", AccentGradientEnd = "df59a6" },
         },
         ["Monokai"] = {
             11,
-            { FontColor = "f8f8f2", MainColor = "272822", AccentColor = "f92672", AccentGradientStart = "f92672", AccentGradientEnd = "bf1e55", BackgroundColor = "1e1f1c", OutlineColor = "49483e" },
+            { FontColor = "f8f8f2", MainColor = "272822", AccentColor = "f92672", BackgroundColor = "1e1f1c", OutlineColor = "49483e", AccentGradientStart = "ff4692", AccentGradientEnd = "d90652" },
         },
         ["Gruvbox"] = {
             12,
-            { FontColor = "ebdbb2", MainColor = "3c3836", AccentColor = "fb4934", AccentGradientStart = "fb4934", AccentGradientEnd = "bf3628", BackgroundColor = "282828", OutlineColor = "504945" },
+            { FontColor = "ebdbb2", MainColor = "3c3836", AccentColor = "fb4934", BackgroundColor = "282828", OutlineColor = "504945", AccentGradientStart = "ff6954", AccentGradientEnd = "db2914" },
         },
         ["Solarized"] = {
             13,
-            { FontColor = "839496", MainColor = "073642", AccentColor = "cb4b16", AccentGradientStart = "cb4b16", AccentGradientEnd = "93350f", BackgroundColor = "002b36", OutlineColor = "586e75" },
+            { FontColor = "839496", MainColor = "073642", AccentColor = "cb4b16", BackgroundColor = "002b36", OutlineColor = "586e75", AccentGradientStart = "eb6b36", AccentGradientEnd = "ab2b00" },
         },
         ["Catppuccin"] = {
             14,
-            { FontColor = "d9e0ee", MainColor = "302d41", AccentColor = "f5c2e7", AccentGradientStart = "f5c2e7", AccentGradientEnd = "b88bb4", BackgroundColor = "1e1e2e", OutlineColor = "575268" },
+            { FontColor = "d9e0ee", MainColor = "302d41", AccentColor = "f5c2e7", BackgroundColor = "1e1e2e", OutlineColor = "575268", AccentGradientStart = "ffe2ff", AccentGradientEnd = "d5a2c7" },
         },
         ["One Dark"] = {
             15,
-            { FontColor = "abb2bf", MainColor = "282c34", AccentColor = "c678dd", AccentGradientStart = "c678dd", AccentGradientEnd = "915ba3", BackgroundColor = "21252b", OutlineColor = "5c6370" },
+            { FontColor = "abb2bf", MainColor = "282c34", AccentColor = "c678dd", BackgroundColor = "21252b", OutlineColor = "5c6370", AccentGradientStart = "e698fd", AccentGradientEnd = "a658bd" },
         },
         ["Cyberpunk"] = {
             16,
-            { FontColor = "f9f9f9", MainColor = "262335", AccentColor = "00ff9f", AccentGradientStart = "00ff9f", AccentGradientEnd = "00bf75", BackgroundColor = "1a1a2e", OutlineColor = "413c5e" },
+            { FontColor = "f9f9f9", MainColor = "262335", AccentColor = "00ff9f", BackgroundColor = "1a1a2e", OutlineColor = "413c5e", AccentGradientStart = "40ffbf", AccentGradientEnd = "00df7f" },
         },
         ["Oceanic Next"] = {
             17,
-            { FontColor = "d8dee9", MainColor = "1b2b34", AccentColor = "6699cc", AccentGradientStart = "6699cc", AccentGradientEnd = "4c7399", BackgroundColor = "16232a", OutlineColor = "343d46" },
+            { FontColor = "d8dee9", MainColor = "1b2b34", AccentColor = "6699cc", BackgroundColor = "16232a", OutlineColor = "343d46", AccentGradientStart = "86b9ec", AccentGradientEnd = "4679ac" },
         },
         ["Material"] = {
             18,
-            { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", AccentGradientStart = "82aaff", AccentGradientEnd = "6180cc", BackgroundColor = "151515", OutlineColor = "424242" },
+            { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", BackgroundColor = "151515", OutlineColor = "424242", AccentGradientStart = "a2caff", AccentGradientEnd = "628adf" },
         }
     }
 
@@ -183,12 +183,6 @@ do
 
                 if self.Library.Options[idx] then
                     self.Library.Options[idx]:SetValue(val)
-                end
-            elseif idx == "AccentGradientStart" or idx == "AccentGradientEnd" then
-                self.Library.Scheme[idx] = Color3.fromHex(val)
-
-                if self.Library.Options[idx] then
-                    self.Library.Options[idx]:SetValueRGB(Color3.fromHex(val))
                 end
             else
                 self.Library.Scheme[idx] = Color3.fromHex(val)
