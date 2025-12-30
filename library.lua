@@ -1919,6 +1919,7 @@ local TooltipLabel = New("TextLabel", {
     ZIndex = 20,
     Parent = ScreenGui,
 })
+local TooltipFadeTween = nil
 TooltipLabel:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
     if Library.Unloaded then
         return
@@ -1960,61 +1961,44 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
         CurrentHoverInstance = HoverInstance
 
         TooltipLabel.Text = TooltipTable.Disabled and DisabledInfoStr or InfoStr
-
-        -- compute text bounds and set size (DPI-aware)
-        local X, Y = Library:GetTextBounds(TooltipLabel.Text, TooltipLabel.FontFace, TooltipLabel.TextSize, workspace.CurrentCamera.ViewportSize.X)
-        TooltipLabel.Size = UDim2.fromOffset((X + 8) * Library.DPIScale, (Y + 4) * Library.DPIScale)
-        Library:UpdateDPI(TooltipLabel, {
-            Size = UDim2.fromOffset(X, Y),
-            DPIOffset = {
-                Size = { 8, 4 },
-            },
-        })
-
-        -- start hidden and fade in
-        TooltipLabel.BackgroundTransparency = 1
         TooltipLabel.TextTransparency = 1
+        TooltipLabel.BackgroundTransparency = 1
         TooltipLabel.Visible = true
-
-        local showTween = TweenService:Create(TooltipLabel, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            BackgroundTransparency = 0,
+        if TooltipFadeTween and TooltipFadeTween.PlaybackState == Enum.PlaybackState.Playing then
+            TooltipFadeTween:Cancel()
+        end
+        TooltipFadeTween = TweenService:Create(TooltipLabel, Library.TweenInfo, {
             TextTransparency = 0,
+            BackgroundTransparency = 0,
         })
-        local hideTween = TweenService:Create(TooltipLabel, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            BackgroundTransparency = 1,
-            TextTransparency = 1,
-        })
-
-        showTween:Play()
+        TooltipFadeTween:Play()
 
         while
             Library.Toggled
             and Library:MouseIsOverFrame(HoverInstance, Mouse)
             and not (CurrentMenu and Library:MouseIsOverFrame(CurrentMenu.Menu, Mouse))
         do
-            -- If hovering a tab/button-like GuiObject, position tooltip centered above it with 10px gap
-            if typeof(HoverInstance) == "Instance" and HoverInstance:IsA("GuiObject") then
-                local hoverPos = HoverInstance.AbsolutePosition
-                local hoverSize = HoverInstance.AbsoluteSize
-                local tooltipW = (X + 8) * Library.DPIScale
-                local tooltipH = (Y + 4) * Library.DPIScale
-                local px = hoverPos.X + (hoverSize.X / 2) - (tooltipW / 2)
-                local py = hoverPos.Y - tooltipH - 10
-                TooltipLabel.Position = UDim2.fromOffset(px, py)
-            else
-                TooltipLabel.Position = UDim2.fromOffset(
-                    Mouse.X + (Library.ShowCustomCursor and 8 or 14),
-                    Mouse.Y + (Library.ShowCustomCursor and 8 or 12)
-                )
-            end
+            TooltipLabel.Position = UDim2.fromOffset(
+                Mouse.X + (Library.ShowCustomCursor and 8 or 14),
+                Mouse.Y + (Library.ShowCustomCursor and 8 or 12)
+            )
 
             RunService.RenderStepped:Wait()
         end
 
-        -- fade out then hide
-        hideTween:Play()
-        hideTween.Completed:Wait()
-        TooltipLabel.Visible = false
+        if TooltipFadeTween and TooltipFadeTween.PlaybackState == Enum.PlaybackState.Playing then
+            TooltipFadeTween:Cancel()
+        end
+        TooltipFadeTween = TweenService:Create(TooltipLabel, Library.TweenInfo, {
+            TextTransparency = 1,
+            BackgroundTransparency = 1,
+        })
+        TooltipFadeTween.Completed:Connect(function()
+            if CurrentHoverInstance ~= HoverInstance then
+                TooltipLabel.Visible = false
+            end
+        end)
+        TooltipFadeTween:Play()
         CurrentHoverInstance = nil
     end
 
@@ -2058,6 +2042,157 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
     table.insert(Tooltips, TooltipLabel)
     return TooltipTable
 end
+
+    --// Tab Info Popup (separate from regular tooltips) --
+    local TabInfoHolder = New("Frame", {
+        BackgroundColor3 = "BackgroundColor",
+        BorderColor3 = "OutlineColor",
+        BorderSizePixel = 1,
+        Visible = false,
+        ZIndex = 21,
+        Parent = ScreenGui,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(0, Library.CornerRadius),
+        Parent = TabInfoHolder,
+    })
+    local TabInfoStroke = New("UIStroke", {
+        Color = "Dark",
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+        Parent = TabInfoHolder,
+    })
+
+    local TabInfoTitle = New("TextLabel", {
+        BackgroundTransparency = 1,
+        TextSize = 14,
+        TextTransparency = 0,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextWrapped = false,
+        Parent = TabInfoHolder,
+    })
+
+    local TabInfoDesc = New("TextLabel", {
+        BackgroundTransparency = 1,
+        TextSize = 12,
+        TextTransparency = 0.4,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        TextWrapped = true,
+        Parent = TabInfoHolder,
+    })
+
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 6),
+        PaddingTop = UDim.new(0, 4),
+        PaddingBottom = UDim.new(0, 4),
+        Parent = TabInfoHolder,
+    })
+    New("UIListLayout", {
+        FillDirection = Enum.FillDirection.Vertical,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+        Padding = UDim.new(0, 2),
+        Parent = TabInfoHolder,
+    })
+
+    local TabInfoRender = nil
+    local TabInfoActive = false
+    local TabInfoFadeTween = nil
+
+    local function UpdateTabInfoSize()
+        if not TabInfoHolder then return end
+        local maxWidth = math.floor(workspace.CurrentCamera.ViewportSize.X * 0.4)
+        local pad = 12 -- left+right padding (6+6)
+        local titleW, titleH = Library:GetTextBounds(TabInfoTitle.Text, TabInfoTitle.FontFace, TabInfoTitle.TextSize, maxWidth - pad)
+        local descW, descH = Library:GetTextBounds(TabInfoDesc.Text, TabInfoDesc.FontFace, TabInfoDesc.TextSize, maxWidth - pad)
+        local contentWidth = math.max(titleW, descW)
+        local width = contentWidth + pad
+        local height = titleH + descH + 8 -- small vertical spacing
+
+        -- Set absolute size scaled by DPI for immediate layout, and register DPI targets
+        TabInfoHolder.Size = UDim2.fromOffset(math.ceil(width * Library.DPIScale), math.ceil(height * Library.DPIScale))
+        Library:UpdateDPI(TabInfoHolder, { Size = UDim2.fromOffset(width, height) })
+
+        -- Title occupies full content width; center text inside via TextXAlignment
+        TabInfoTitle.Size = UDim2.fromOffset(contentWidth, titleH)
+        TabInfoDesc.Size = UDim2.fromOffset(contentWidth, descH)
+
+        Library:UpdateDPI(TabInfoTitle, { Size = UDim2.fromOffset(contentWidth, titleH) })
+        Library:UpdateDPI(TabInfoDesc, { Size = UDim2.fromOffset(contentWidth, descH) })
+    end
+
+    function Library:ShowTabInfo(HoverInstance: GuiObject, Title: string, Description: string)
+        if not HoverInstance or typeof(Title) ~= "string" then return end
+        TabInfoTitle.Text = Title
+        TabInfoDesc.Text = Description or ""
+        UpdateTabInfoSize()
+        TabInfoHolder.Visible = true
+        TabInfoActive = true
+
+        -- prepare fade-in
+        TabInfoHolder.BackgroundTransparency = 1
+        TabInfoTitle.TextTransparency = 1
+        TabInfoDesc.TextTransparency = 1
+        if TabInfoStroke then TabInfoStroke.Transparency = 1 end
+
+        if TabInfoFadeTween and TabInfoFadeTween.PlaybackState == Enum.PlaybackState.Playing then
+            TabInfoFadeTween:Cancel()
+        end
+
+        TabInfoFadeTween = TweenService:Create(TabInfoHolder, Library.TweenInfo, {
+            BackgroundTransparency = 0,
+        })
+        TabInfoFadeTween:Play()
+        TweenService:Create(TabInfoTitle, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        TweenService:Create(TabInfoDesc, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        if TabInfoStroke then TweenService:Create(TabInfoStroke, Library.TweenInfo, { Transparency = 0 }):Play() end
+
+        if TabInfoRender and TabInfoRender.Connected then
+            TabInfoRender:Disconnect()
+            TabInfoRender = nil
+        end
+
+    TabInfoRender = RunService.RenderStepped:Connect(function()
+        if not TabInfoActive or not HoverInstance or not HoverInstance.Parent or not HoverInstance.AbsolutePosition then
+            Library:HideTabInfo()
+            return
+        end
+
+        local absPos = HoverInstance.AbsolutePosition
+        local absSize = HoverInstance.AbsoluteSize
+        local gap = 6 -- match tabbar/main UI gap
+        local centerX = math.floor(absPos.X + (absSize.X / 2))
+        local topY = math.floor(absPos.Y) - gap
+        local px = math.floor(centerX - (TabInfoHolder.AbsoluteSize.X / 2))
+        local py = topY - TabInfoHolder.AbsoluteSize.Y
+        TabInfoHolder.Position = UDim2.fromOffset(px, py)
+    end)
+    end
+
+    function Library:HideTabInfo()
+        TabInfoActive = false
+        if TabInfoRender and TabInfoRender.Connected then
+            TabInfoRender:Disconnect()
+            TabInfoRender = nil
+        end
+
+        if TabInfoFadeTween and TabInfoFadeTween.PlaybackState == Enum.PlaybackState.Playing then
+            TabInfoFadeTween:Cancel()
+        end
+
+        local fadeOut = TweenService:Create(TabInfoHolder, Library.TweenInfo, {
+            BackgroundTransparency = 1,
+        })
+        fadeOut.Completed:Connect(function()
+            TabInfoHolder.Visible = false
+        end)
+        fadeOut:Play()
+        TweenService:Create(TabInfoTitle, Library.TweenInfo, { TextTransparency = 1 }):Play()
+        TweenService:Create(TabInfoDesc, Library.TweenInfo, { TextTransparency = 1 }):Play()
+        if TabInfoStroke then TweenService:Create(TabInfoStroke, Library.TweenInfo, { Transparency = 1 }):Play() end
+    end
 
 function Library:OnUnload(Callback)
     table.insert(Library.UnloadSignals, Callback)
@@ -6861,6 +6996,20 @@ function Library:CreateWindow(WindowInfo)
             end
 
             UpdateTabWidth()
+
+            TabButton.MouseEnter:Connect(function()
+                Library:ShowTabInfo(TabButton, Name, Description)
+            end)
+            TabButton.MouseLeave:Connect(function()
+                Library:HideTabInfo()
+            end)
+
+            TabButton.MouseEnter:Connect(function()
+                Library:ShowTabInfo(TabButton, Name, Description)
+            end)
+            TabButton.MouseLeave:Connect(function()
+                Library:HideTabInfo()
+            end)
 
             --// Tab Container \\--
             TabContainer = New("Frame", {
