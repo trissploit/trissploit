@@ -1038,7 +1038,7 @@ function Library:UpdateColorsUsingRegistry()
             if gradient and Properties.BackgroundColor3 == "AccentColor" then
                 gradient.Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
-                    ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.2))
+                    ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
                 })
             end
         end
@@ -3937,7 +3937,7 @@ do
                         existingGradient = New("UIGradient", {
                             Color = ColorSequence.new({
                                 ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
-                                ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.2))
+                                ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
                             }),
                             Parent = Checkbox,
                         })
@@ -4536,7 +4536,7 @@ do
                     existingGradient = New("UIGradient", {
                         Color = ColorSequence.new({
                             ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
-                            ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.2))
+                            ColorSequenceKeypoint.new(1, Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4))
                         }),
                         Parent = Fill,
                     })
