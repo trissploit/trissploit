@@ -381,6 +381,9 @@ do
         groupbox:AddDivider()
         groupbox:AddToggle("Watermark", { Text = "Watermark", Default = self.Library.Watermark or false, Callback = function(v)
             self.Library.Watermark = v
+            if getgenv then
+                getgenv().watermark = v
+            end
         end })
         groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Fields", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
             local fields = { Name = false, FPS = false, Ping = false, Executor = false }
