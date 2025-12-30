@@ -1840,7 +1840,11 @@ do
             ZIndex = 999,
             Parent = ScreenGui,
         })
-        New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
+        local wmCorner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
+        -- Apply current DPI-scaled corner radius and register for DPI updates
+        wmCorner.CornerRadius = ApplyDPIScale(UDim.new(0, Library.CornerRadius))
+        Library.DPIRegistry[wmCorner] = Library.DPIRegistry[wmCorner] or {}
+        Library.DPIRegistry[wmCorner]["CornerRadius"] = UDim.new(0, Library.CornerRadius)
         local WMStroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, Parent = WM.Holder })
 
         WM.Label = New("TextLabel", {
@@ -2171,7 +2175,10 @@ local TooltipLabel = New("TextLabel", {
     ZIndex = 20,
     Parent = ScreenGui,
 })
-New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = TooltipLabel })
+local tooltipCorner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = TooltipLabel })
+tooltipCorner.CornerRadius = ApplyDPIScale(UDim.new(0, Library.CornerRadius))
+Library.DPIRegistry[tooltipCorner] = Library.DPIRegistry[tooltipCorner] or {}
+Library.DPIRegistry[tooltipCorner]["CornerRadius"] = UDim.new(0, Library.CornerRadius)
 TooltipLabel:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
     if Library.Unloaded then
         return
@@ -2306,10 +2313,13 @@ end
         ZIndex = 21,
         Parent = ScreenGui,
     })
-    New("UICorner", {
+    local tabInfoCorner = New("UICorner", {
         CornerRadius = UDim.new(0, Library.CornerRadius),
         Parent = TabInfoHolder,
     })
+    tabInfoCorner.CornerRadius = ApplyDPIScale(UDim.new(0, Library.CornerRadius))
+    Library.DPIRegistry[tabInfoCorner] = Library.DPIRegistry[tabInfoCorner] or {}
+    Library.DPIRegistry[tabInfoCorner]["CornerRadius"] = UDim.new(0, Library.CornerRadius)
     New("UIStroke", {
         Color = "Dark",
         ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
