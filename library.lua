@@ -216,6 +216,7 @@ local Library = {
 
     Registry = {},
     DPIRegistry = {},
+    _ManagedUICorners = {},
     
     ImageManager = CustomImageManager,
 }
@@ -1292,6 +1293,16 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         pcall(function()
             Instance.ZIndex = Properties.Parent.ZIndex
         end)
+    end
+
+    -- Track UICorner instances created through New so we can update their CornerRadius
+    if ClassName == "UICorner" then
+        Library._ManagedUICorners = Library._ManagedUICorners or {}
+        table.insert(Library._ManagedUICorners, Instance)
+        -- initialize to current library corner radius if not explicitly provided
+        if not Properties["CornerRadius"] then
+            Instance.CornerRadius = UDim.new(0, Library.CornerRadius)
+        end
     end
 
     return Instance
@@ -6630,6 +6641,16 @@ function Library:CreateWindow(WindowInfo)
     end
     if TabInfoCorner then
         TabInfoCorner.CornerRadius = UDim.new(0, Library.CornerRadius)
+    end
+    -- Update any other UICorners created through New
+    if Library._ManagedUICorners then
+        for _, c in ipairs(Library._ManagedUICorners) do
+            if c and c.Parent and c:IsA("UICorner") then
+                pcall(function()
+                    c.CornerRadius = UDim.new(0, Library.CornerRadius)
+                end)
+            end
+        end
     end
     
     Library:SetNotifySide(WindowInfo.NotifySide)
