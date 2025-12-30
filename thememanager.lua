@@ -380,16 +380,10 @@ do
         -- Watermark controls
         groupbox:AddDivider()
         groupbox:AddToggle("Watermark", { Text = "Watermark", Default = self.Library.Watermark or false, Callback = function(v)
-            if self.Library and typeof(self.Library.ToggleWatermark) == "function" then
-                pcall(function()
-                    self.Library:ToggleWatermark(v)
-                end)
-            end
-            if self.Library then
-                self.Library.Watermark = v
-            end
+            self.Library:ToggleWatermark(v)
+            self.Library.Watermark = v
             if getgenv then
-                pcall(function() getgenv().watermark = v end)
+                getgenv().watermark = v
             end
         end })
         groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Fields", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
