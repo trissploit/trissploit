@@ -1385,6 +1385,20 @@ function Library:SetGradients(Enabled: boolean)
     Library:UpdateGradients()
 end
 
+function Library:SetGradientColors(Color1: Color3?, Color2: Color3?, Rotation: number?)
+    if Color1 ~= nil then
+        Library.GradientColor1 = Color1
+    end
+    if Color2 ~= nil then
+        Library.GradientColor2 = Color2
+    end
+    if Rotation ~= nil then
+        Library.GradientRotation = Rotation
+    end
+
+    Library:UpdateGradients()
+end
+
 function Library:UpdateGradients()
     -- Update all existing gradients with new colors/rotation
     local color1 = Library.GradientColor1 or Library.Scheme.AccentColor
