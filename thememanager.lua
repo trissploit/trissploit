@@ -177,7 +177,7 @@ do
 
         local scheme = data[2]
         for idx, val in pairs(customThemeData or scheme) do
-            if idx == "VideoLink" then
+            if idx == "VideoLink" or idx == "EnableGradients" then
                 continue
             elseif idx == "FontFace" then
                 self.Library:SetFont(Enum.Font[val])
@@ -185,20 +185,22 @@ do
                 if self.Library.Options[idx] then
                     self.Library.Options[idx]:SetValue(val)
                 end
-            elseif idx == "EnableGradients" then
-                self.Library.EnableGradients = val
-                if self.Library.Options[idx] then
-                    self.Library.Options[idx]:SetValue(val)
-                end
             elseif idx == "GradientRotation" then
-                self.Library.GradientRotation = tonumber(val) or 0
+                local rotation = tonumber(val) or 0
+                self.Library.GradientRotation = math.clamp(rotation, 0, 360)
                 if self.Library.Options[idx] then
-                    self.Library.Options[idx]:SetValue(tonumber(val) or 0)
+                    self.Library.Options[idx]:SetValue(math.clamp(rotation, 0, 360))
                 end
             elseif idx == "GradientColor1" or idx == "GradientColor2" then
-                self.Library[idx] = Color3.fromHex(val)
-                if self.Library.Options[idx] then
-                    self.Library.Options[idx]:SetValueRGB(Color3.fromHex(val))
+                local success, color = pcall(Color3.fromHex, Color3, val)
+                if success and typeof(color) == "Color3" then
+                    self.Library[idx] = color
+                    if self.Library.Options[idx] then
+                        self.Library.Options[idx]:SetValueRGB(color)
+                    end
+                else
+                    -- Fallback to accent color if parsing fails
+                    self.Library[idx] = self.Library.Scheme.AccentColor
                 end
             else
                 self.Library.Scheme[idx] = Color3.fromHex(val)
@@ -209,6 +211,8 @@ do
             end
         end
 
+        -- Always enable gradients
+        self.Library.EnableGradients = true
         self:ThemeUpdate()
     end
 
@@ -219,15 +223,32 @@ do
             end
         end
 
-        -- Update gradient settings
-        if self.Library.Options and self.Library.Options.EnableGradients then
-            self.Library.EnableGradients = self.Library.Options.EnableGradients.Value
-        end
+        -- Update gradient settings with validation
         for i, field in GradientFields do
             if self.Library.Options and self.Library.Options[field] then
-                self.Library[field] = self.Library.Options[field].Value
+                local value = self.Library.Options[field].Value
+                -- Validate gradient colors
+                if field == "GradientColor1" or field == "GradientColor2" then
+                    if typeof(value) == "Color3" then
+                        self.Library[field] = value
+                    else
+                        -- Fallback to default if invalid
+                        self.Library[field] = self.Library.Scheme.AccentColor
+                    end
+                elseif field == "GradientRotation" then
+                    if typeof(value) == "number" then
+                        self.Library[field] = math.clamp(value, 0, 360)
+                    else
+                        self.Library[field] = 0
+                    end
+                else
+                    self.Library[field] = value
+                end
             end
         end
+
+        -- Always enable gradients
+        self.Library.EnableGradients = true
 
         self.Library:UpdateColorsUsingRegistry()
         if self.Library.UpdateGradients then
@@ -335,16 +356,16 @@ do
         end
         theme["FontFace"] = self.Library.Options["FontFace"].Value
         
-        -- Save gradient settings
-        if self.Library.Options["EnableGradients"] then
-            theme["EnableGradients"] = self.Library.Options["EnableGradients"].Value
-        end
+        -- Save gradient settings (always enabled)
         for _, field in GradientFields do
             if self.Library.Options[field] then
                 if field == "GradientRotation" then
-                    theme[field] = self.Library.Options[field].Value
+                    theme[field] = math.clamp(self.Library.Options[field].Value, 0, 360)
                 else
-                    theme[field] = self.Library.Options[field].Value:ToHex()
+                    local color = self.Library.Options[field].Value
+                    if typeof(color) == "Color3" then
+                        theme[field] = color:ToHex()
+                    end
                 end
             end
         end
@@ -415,9 +436,8 @@ do
         })
 
         groupbox:AddDivider()
-        groupbox:AddToggle("EnableGradients", { Text = "Enable Gradients", Default = false })
-        groupbox:AddLabel("Gradient color 1"):AddColorPicker("GradientColor1", { Default = self.Library.GradientColor1 or self.Library.Scheme.AccentColor })
-        groupbox:AddLabel("Gradient color 2"):AddColorPicker("GradientColor2", { Default = self.Library.GradientColor2 or self.Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4) })
+        groupbox:AddLabel("Gradient color 1 (start)"):AddColorPicker("GradientColor1", { Default = self.Library.GradientColor1 or self.Library.Scheme.AccentColor })
+        groupbox:AddLabel("Gradient color 2 (end)"):AddColorPicker("GradientColor2", { Default = self.Library.GradientColor2 or self.Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4) })
         groupbox:AddSlider("GradientRotation", { Text = "Gradient Rotation", Default = self.Library.GradientRotation or 0, Min = 0, Max = 360, Rounding = 0, Suffix = "°" })
 
         local ThemesArray = {}
@@ -536,33 +556,32 @@ do
             self.Library:UpdateColorsUsingRegistry()
         end)
         
-        -- Gradient option listeners
-        self.Library.Options.EnableGradients:OnChanged(function(Value)
-            self.Library.EnableGradients = Value
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
-            end
-        end)
+        -- Gradient option listeners with validation
         self.Library.Options.GradientColor1:OnChanged(function(Value)
-            self.Library.GradientColor1 = Value
-            -- Update both registry colors and gradients to apply new color
-            self.Library:UpdateColorsUsingRegistry()
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
+            if typeof(Value) == "Color3" then
+                self.Library.GradientColor1 = Value
+                self.Library.EnableGradients = true
+                if self.Library.UpdateGradients then
+                    self.Library:UpdateGradients()
+                end
             end
         end)
         self.Library.Options.GradientColor2:OnChanged(function(Value)
-            self.Library.GradientColor2 = Value
-            -- Update both registry colors and gradients to apply new color
-            self.Library:UpdateColorsUsingRegistry()
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
+            if typeof(Value) == "Color3" then
+                self.Library.GradientColor2 = Value
+                self.Library.EnableGradients = true
+                if self.Library.UpdateGradients then
+                    self.Library:UpdateGradients()
+                end
             end
         end)
         self.Library.Options.GradientRotation:OnChanged(function(Value)
-            self.Library.GradientRotation = Value
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
+            if typeof(Value) == "number" then
+                self.Library.GradientRotation = math.clamp(Value, 0, 360)
+                self.Library.EnableGradients = true
+                if self.Library.UpdateGradients then
+                    self.Library:UpdateGradients()
+                end
             end
         end)
     end
