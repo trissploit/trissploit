@@ -538,27 +538,43 @@ do
         
         -- Gradient option listeners
         self.Library.Options.EnableGradients:OnChanged(function(Value)
-            self.Library.EnableGradients = Value
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
+            if self.Library.SetGradients then
+                self.Library:SetGradients(Value)
+            else
+                self.Library.EnableGradients = Value
+                if self.Library.UpdateGradients then
+                    self.Library:UpdateGradients()
+                end
             end
         end)
         self.Library.Options.GradientColor1:OnChanged(function(Value)
-            self.Library.GradientColor1 = Value
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
+            if self.Library.SetGradientColors then
+                self.Library:SetGradientColors(Value, self.Library.GradientColor2, self.Library.GradientRotation)
+            else
+                self.Library.GradientColor1 = Value
+                if self.Library.UpdateGradients then
+                    self.Library:UpdateGradients()
+                end
             end
         end)
         self.Library.Options.GradientColor2:OnChanged(function(Value)
-            self.Library.GradientColor2 = Value
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
+            if self.Library.SetGradientColors then
+                self.Library:SetGradientColors(self.Library.GradientColor1, Value, self.Library.GradientRotation)
+            else
+                self.Library.GradientColor2 = Value
+                if self.Library.UpdateGradients then
+                    self.Library:UpdateGradients()
+                end
             end
         end)
         self.Library.Options.GradientRotation:OnChanged(function(Value)
-            self.Library.GradientRotation = Value
-            if self.Library.UpdateGradients then
-                self.Library:UpdateGradients()
+            if self.Library.SetGradientColors then
+                self.Library:SetGradientColors(self.Library.GradientColor1, self.Library.GradientColor2, Value)
+            else
+                self.Library.GradientRotation = Value
+                if self.Library.UpdateGradients then
+                    self.Library:UpdateGradients()
+                end
             end
         end)
     end
