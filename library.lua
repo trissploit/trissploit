@@ -1908,17 +1908,8 @@ do
                 table.insert(parts, tostring(ping) .. "ms")
             end
             if Library.WatermarkFields.Executor then
-                local exec = "Unknown"
-                local ok, g = pcall(function() return getgenv and (getgenv().executor or getgenv().Executor) end)
-                if ok and g then
-                    exec = tostring(g)
-                else
-                    local ok2, s = pcall(function() return shared and (shared.executor or shared.Executor) end)
-                    if ok2 and s then
-                        exec = tostring(s)
-                    end
-                end
-                table.insert(parts, exec)
+                local exec_name = (getexecutor or getexecutorname or getidentityexecutor or identifyexecutor or function() return 'Unknown' end)()
+                table.insert(parts, tostring(exec_name))
             end
 
             WM.Label.Text = table.concat(parts, " | ")
