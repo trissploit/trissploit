@@ -4770,6 +4770,8 @@ do
             Disabled = Info.Disabled,
             Visible = Info.Visible,
 
+            Buttons = {},
+
             Type = "Dropdown",
         }
 
@@ -4945,16 +4947,14 @@ do
             return Dropdown.Value and 1 or 0
         end
 
-        local Buttons = {}
-        Dropdown.Buttons = Buttons
         function Dropdown:BuildDropdownList()
             local Values = Dropdown.Values
             local DisabledValues = Dropdown.DisabledValues
 
-            for Button, _ in pairs(Buttons) do
+            for Button, _ in pairs(Dropdown.Buttons) do
                 Button:Destroy()
             end
-            table.clear(Buttons)
+            table.clear(Dropdown.Buttons)
 
             local Count = 0
             for _, Value in pairs(Values) do
@@ -5046,7 +5046,7 @@ do
                 Table:UpdateButton()
                 Dropdown:Display()
 
-                Buttons[Button] = Table
+                Dropdown.Buttons[Button] = Table
             end
 
             Dropdown:RecalculateListSize(Count)
