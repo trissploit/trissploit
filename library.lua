@@ -2043,7 +2043,10 @@ end
         BackgroundTransparency = 1,
         TextSize = 14,
         TextTransparency = 0,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        Position = UDim2.fromOffset(6, 6),
+        Size = UDim2.fromOffset(0, 0),
         Parent = TabInfoHolder,
     })
 
@@ -2051,7 +2054,11 @@ end
         BackgroundTransparency = 1,
         TextSize = 12,
         TextTransparency = 0.4,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        TextWrapped = true,
+        Position = UDim2.fromOffset(6, 0),
+        Size = UDim2.fromOffset(0, 0),
         Parent = TabInfoHolder,
     })
 
@@ -2061,15 +2068,23 @@ end
     local function UpdateTabInfoSize()
         if not TabInfoHolder then return end
         local maxWidth = math.floor(workspace.CurrentCamera.ViewportSize.X * 0.4)
-        local titleW, titleH = Library:GetTextBounds(TabInfoTitle.Text, TabInfoTitle.FontFace, TabInfoTitle.TextSize, maxWidth)
-        local descW, descH = Library:GetTextBounds(TabInfoDesc.Text, TabInfoDesc.FontFace, TabInfoDesc.TextSize, maxWidth)
+        local titleW, titleH = Library:GetTextBounds(TabInfoTitle.Text, Library.Scheme.Font, TabInfoTitle.TextSize, maxWidth)
+        local descW, descH = Library:GetTextBounds(TabInfoDesc.Text, Library.Scheme.Font, TabInfoDesc.TextSize, maxWidth)
         local width = math.max(titleW, descW)
-        local height = titleH + descH + 8
-        TabInfoHolder.Size = UDim2.fromOffset((width + 12) * Library.DPIScale, (height + 8) * Library.DPIScale)
-        Library:UpdateDPI(TabInfoHolder, { Size = UDim2.fromOffset(width + 12, height + 8) })
-        TabInfoTitle.Size = UDim2.fromOffset(width, titleH)
-        TabInfoDesc.Position = UDim2.fromOffset(0, titleH)
-        TabInfoDesc.Size = UDim2.fromOffset(width, descH)
+        local paddingX = 12
+        local paddingY = 8
+        local height = titleH + descH + paddingY
+
+        TabInfoHolder.Size = UDim2.fromOffset((width + paddingX) * Library.DPIScale, (height + paddingY) * Library.DPIScale)
+        Library:UpdateDPI(TabInfoHolder, { Size = UDim2.fromOffset(width + paddingX, height + paddingY) })
+
+        TabInfoTitle.Position = UDim2.fromOffset(6 * Library.DPIScale, 6 * Library.DPIScale)
+        TabInfoTitle.Size = UDim2.fromOffset(width * Library.DPIScale, titleH * Library.DPIScale)
+        Library:UpdateDPI(TabInfoTitle, { Size = UDim2.fromOffset(width, titleH), DPIOffset = { Size = {6, 4} } })
+
+        TabInfoDesc.Position = UDim2.fromOffset(6 * Library.DPIScale, (6 + titleH) * Library.DPIScale)
+        TabInfoDesc.Size = UDim2.fromOffset(width * Library.DPIScale, descH * Library.DPIScale)
+        Library:UpdateDPI(TabInfoDesc, { Size = UDim2.fromOffset(width, descH), DPIOffset = { Size = {6, 4} } })
     end
 
     function Library:ShowTabInfo(HoverInstance: GuiObject, Title: string, Description: string)
