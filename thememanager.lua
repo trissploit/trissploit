@@ -365,6 +365,12 @@ do
             :AddLabel("Outline color")
             :AddColorPicker("OutlineColor", { Default = self.Library.Scheme.OutlineColor })
         groupbox:AddLabel("Font color"):AddColorPicker("FontColor", { Default = self.Library.Scheme.FontColor })
+        groupbox
+            :AddLabel("Gradient start")
+            :AddColorPicker("AccentGradientStart", { Default = self.Library.Scheme.AccentGradientStart })
+        groupbox
+            :AddLabel("Gradient end")
+            :AddColorPicker("AccentGradientEnd", { Default = self.Library.Scheme.AccentGradientEnd })
         groupbox:AddDropdown("FontFace", {
             Text = "Font Face",
             Default = "Code",
