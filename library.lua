@@ -2136,27 +2136,24 @@ end
         TabInfoFadeTweens = {}
         
         TabInfoTitle.Text = Title
-        TabInfoDesc.Text = Description or ""
+        -- hide the description for tab tooltips; only show the title
+        TabInfoDesc.Visible = false
         UpdateTabInfoSize()
-        
+    
         -- Set initial transparency for fade in
         TabInfoHolder.BackgroundTransparency = 1
         TabInfoTitle.TextTransparency = 1
-        TabInfoDesc.TextTransparency = 1
         TabInfoHolder.Visible = true
         TabInfoActive = true
-        
-        -- Fade in animation
+    
+        -- Fade in animation (title and holder only)
         table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoHolder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0,
         }))
         table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoTitle, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             TextTransparency = 0,
         }))
-        table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoDesc, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            TextTransparency = 0.4,
-        }))
-        
+    
         for _, tween in pairs(TabInfoFadeTweens) do
             tween:Play()
         end
@@ -2192,7 +2189,7 @@ end
             TabInfoRender = nil
         end
         
-        -- Clear old tweens and create new fade-out tweens
+        -- Clear old tweens and create new fade-out tweens (title and holder only)
         TabInfoFadeTweens = {}
         
         -- Fade out animation
@@ -2201,9 +2198,6 @@ end
         })
         table.insert(TabInfoFadeTweens, fadeTween)
         table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoTitle, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            TextTransparency = 1,
-        }))
-        table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoDesc, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             TextTransparency = 1,
         }))
         
