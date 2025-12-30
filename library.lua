@@ -1777,7 +1777,7 @@ function Library:AddContextMenu(
             },
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
+            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
             Parent = Menu,
         })
     else
@@ -1795,7 +1795,7 @@ function Library:AddContextMenu(
             },
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
+            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
             Parent = Menu,
         })
     end
@@ -4447,7 +4447,7 @@ do
             Parent = Holder,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
+            CornerRadius = UDim.new(0, Library.CornerRadius or 4),
             Parent = Bar,
         })
 
