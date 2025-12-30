@@ -169,6 +169,12 @@ local Library = {
     Unloaded = false,
     Watermark = false,
     CurrentWindowTitle = "",
+    WatermarkFields = {
+        Name = true,
+        FPS = true,
+        Ping = true,
+        Executor = false,
+    },
 
     Labels = Labels,
     Buttons = Buttons,
@@ -1835,7 +1841,7 @@ do
             Parent = ScreenGui,
         })
         New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
-        New("UIStroke", { Color = "OutlineColor", Thickness = 1, Parent = WM.Holder })
+        local WMStroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, Parent = WM.Holder })
 
         WM.Label = New("TextLabel", {
             BackgroundTransparency = 1,
@@ -1852,6 +1858,7 @@ do
 
         Library.Registry[WM.Holder] = { BackgroundColor3 = "BackgroundColor", BorderColor3 = "OutlineColor" }
         Library.Registry[WM.Label] = { TextColor3 = "FontColor", FontFace = "Font" }
+        Library.Registry[WMStroke] = { Color = "OutlineColor" }
 
         -- make watermark draggable
         Library:MakeDraggable(WM.Holder, WM.Holder, true)
@@ -1888,10 +1895,36 @@ do
             end
 
             local ping = getPingMs()
-            WM.Label.Text = string.format("%s | %d FPS | %dms", WM.Name or "", fps, ping)
 
-            -- adjust size automatically
-            local X, Y = Library:GetTextBounds(WM.Label.Text, WM.Label.FontFace, WM.Label.TextSize)
+            -- build text from selected fields
+            local parts = {}
+            if Library.WatermarkFields.Name and WM.Name and WM.Name ~= "" then
+                table.insert(parts, WM.Name)
+            end
+            if Library.WatermarkFields.FPS then
+                table.insert(parts, tostring(fps) .. " FPS")
+            end
+            if Library.WatermarkFields.Ping then
+                table.insert(parts, tostring(ping) .. "ms")
+            end
+            if Library.WatermarkFields.Executor then
+                local exec = "Unknown"
+                local ok, g = pcall(function() return getgenv and (getgenv().executor or getgenv().Executor) end)
+                if ok and g then
+                    exec = tostring(g)
+                else
+                    local ok2, s = pcall(function() return shared and (shared.executor or shared.Executor) end)
+                    if ok2 and s then
+                        exec = tostring(s)
+                    end
+                end
+                table.insert(parts, exec)
+            end
+
+            WM.Label.Text = table.concat(parts, " | ")
+
+            -- adjust size automatically using library font to ensure correct measurement
+            local X, Y = Library:GetTextBounds(WM.Label.Text, Library.Scheme.Font, WM.Label.TextSize)
             WM.Holder.Size = UDim2.fromOffset((X + 16) * Library.DPIScale, (Y + 8) * Library.DPIScale)
             Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(X + 16, Y + 8) })
         end)
@@ -1914,6 +1947,17 @@ do
             return
         end
         WM.Name = Name or ""
+    end
+
+    function Library:SetWatermarkFields(Fields)
+        if typeof(Fields) ~= "table" then
+            return
+        end
+        for k, v in pairs(Fields) do
+            if Library.WatermarkFields[k] ~= nil then
+                Library.WatermarkFields[k] = v and true or false
+            end
+        end
     end
 
     function Library:DestroyWatermark()
