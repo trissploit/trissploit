@@ -545,6 +545,63 @@ local function GetLighterColor(Color)
     return Color3.fromHSV(H, math.max(0, S - 0.1), math.min(1, V + 0.1))
 end
 
+function Library:GetAccentGradientSequence()
+    local s = self.Scheme.AccentGradientStart
+    local e = self.Scheme.AccentGradientEnd
+
+    if typeof(s) ~= "Color3" then
+        if typeof(s) == "string" and s ~= "" then
+            local ok, c = pcall(function() return Color3.fromHex(s) end)
+            if ok and typeof(c) == "Color3" then
+                s = c
+            else
+                s = self.Scheme.AccentColor
+            end
+        else
+            s = self.Scheme.AccentColor
+        end
+    end
+
+    if typeof(e) ~= "Color3" then
+        if typeof(e) == "string" and e ~= "" then
+            local ok, c = pcall(function() return Color3.fromHex(e) end)
+            if ok and typeof(c) == "Color3" then
+                e = c
+            else
+                e = self.Scheme.AccentColor
+            end
+        else
+            e = self.Scheme.AccentColor
+        end
+    end
+
+    return ColorSequence.new({
+        ColorSequenceKeypoint.new(0, s),
+        ColorSequenceKeypoint.new(1, e),
+    })
+end
+
+function Library:GetAccentSolidSequence()
+    local c = self.Scheme.AccentColor
+    if typeof(c) ~= "Color3" then
+        if typeof(c) == "string" and c ~= "" then
+            local ok, cc = pcall(function() return Color3.fromHex(c) end)
+            if ok and typeof(cc) == "Color3" then
+                c = cc
+            else
+                c = Color3.fromRGB(255, 255, 255)
+            end
+        else
+            c = Color3.fromRGB(255, 255, 255)
+        end
+    end
+
+    return ColorSequence.new({
+        ColorSequenceKeypoint.new(0, c),
+        ColorSequenceKeypoint.new(1, c),
+    })
+end
+
 function Library:UpdateKeybindFrame()
     if not Library.KeybindFrame then
         return
@@ -3356,7 +3413,7 @@ do
                 Parent = Holder,
             })
             local LeftGrad = New("UIGradient", {
-                Color = ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor),
+                Color = Library:GetAccentSolidSequence(),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
                     NumberSequenceKeypoint.new(1, 0),
@@ -3365,7 +3422,7 @@ do
             })
             Library.Registry[LeftGrad] = {
                 Color = function()
-                    return ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor)
+                    return Library:GetAccentSolidSequence()
                 end,
             }
 
@@ -3378,7 +3435,7 @@ do
                 Parent = Holder,
             })
             local RightGrad = New("UIGradient", {
-                Color = ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor),
+                Color = Library:GetAccentSolidSequence(),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 0),
                     NumberSequenceKeypoint.new(1, 1),
@@ -3387,7 +3444,7 @@ do
             })
             Library.Registry[RightGrad] = {
                 Color = function()
-                    return ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor)
+                    return Library:GetAccentSolidSequence()
                 end,
             }
         else
@@ -3400,7 +3457,7 @@ do
                 Parent = Holder,
             })
             local LineGrad = New("UIGradient", {
-                Color = ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor),
+                Color = Library:GetAccentSolidSequence(),
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
                     NumberSequenceKeypoint.new(0.5, 0),
@@ -3410,7 +3467,7 @@ do
             })
             Library.Registry[LineGrad] = {
                 Color = function()
-                    return ColorSequence.new(Library.Scheme.AccentColor, Library.Scheme.AccentColor)
+                    return Library:GetAccentSolidSequence()
                 end,
             }
         end
@@ -3925,14 +3982,14 @@ do
         end)
 
         local CheckboxGradient = New("UIGradient", {
-            Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
+            Color = Library:GetAccentGradientSequence(),
             Rotation = 60,
             Enabled = false,
             Parent = Checkbox,
         })
         Library.Registry[CheckboxGradient] = {
             Color = function()
-                return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                return Library:GetAccentGradientSequence()
             end,
         }
 
@@ -3973,7 +4030,7 @@ do
             }):Play()
 
             -- Enable gradient only when checked, restore accent gradient colors
-            CheckboxGradient.Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+            CheckboxGradient.Color = Library:GetAccentGradientSequence()
             CheckboxGradient.Enabled = Toggle.Value
 
             -- Fill the checkbox with gradient start color when checked, main color when unchecked
@@ -4566,13 +4623,13 @@ do
             Parent = Fill,
         })
         local FillGradient = New("UIGradient", {
-            Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
+            Color = Library:GetAccentGradientSequence(),
             Rotation = 90,
             Parent = Fill,
         })
         Library.Registry[FillGradient] = {
             Color = function()
-                return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                return Library:GetAccentGradientSequence()
             end,
         }
 
@@ -5005,14 +5062,14 @@ do
                     Parent = MenuTable.Menu,
                 })
                 local ButtonGradient = New("UIGradient", {
-                    Color = ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd),
+                    Color = Library:GetAccentGradientSequence(),
                     Rotation = 90,
                     Enabled = false,
                     Parent = Button,
                 })
                 Library.Registry[ButtonGradient] = {
                     Color = function()
-                        return ColorSequence.new(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                        return Library:GetAccentGradientSequence()
                     end,
                 }
                 New("UIPadding", {
