@@ -1840,11 +1840,7 @@ do
             ZIndex = 999,
             Parent = ScreenGui,
         })
-        local wmCorner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
-        -- Apply current DPI-scaled corner radius and register for DPI updates
-        wmCorner.CornerRadius = ApplyDPIScale(UDim.new(0, Library.CornerRadius))
-        Library.DPIRegistry[wmCorner] = Library.DPIRegistry[wmCorner] or {}
-        Library.DPIRegistry[wmCorner]["CornerRadius"] = UDim.new(0, Library.CornerRadius)
+        WM.Corner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
         local WMStroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, Parent = WM.Holder })
 
         WM.Label = New("TextLabel", {
@@ -1988,6 +1984,10 @@ do
             if want ~= last then
                 if not WM.Holder then
                     Library:CreateWatermark(Library.CurrentWindowTitle or "")
+                    -- Update watermark corner to match current Library.CornerRadius
+                    if WM.Corner then
+                        WM.Corner.CornerRadius = UDim.new(0, Library.CornerRadius)
+                    end
                 end
                 Library:ToggleWatermark(want)
                 -- sync both fields so either one works
@@ -2175,10 +2175,7 @@ local TooltipLabel = New("TextLabel", {
     ZIndex = 20,
     Parent = ScreenGui,
 })
-local tooltipCorner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = TooltipLabel })
-tooltipCorner.CornerRadius = ApplyDPIScale(UDim.new(0, Library.CornerRadius))
-Library.DPIRegistry[tooltipCorner] = Library.DPIRegistry[tooltipCorner] or {}
-Library.DPIRegistry[tooltipCorner]["CornerRadius"] = UDim.new(0, Library.CornerRadius)
+local TooltipCorner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = TooltipLabel })
 TooltipLabel:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
     if Library.Unloaded then
         return
@@ -2313,13 +2310,10 @@ end
         ZIndex = 21,
         Parent = ScreenGui,
     })
-    local tabInfoCorner = New("UICorner", {
+    local TabInfoCorner = New("UICorner", {
         CornerRadius = UDim.new(0, Library.CornerRadius),
         Parent = TabInfoHolder,
     })
-    tabInfoCorner.CornerRadius = ApplyDPIScale(UDim.new(0, Library.CornerRadius))
-    Library.DPIRegistry[tabInfoCorner] = Library.DPIRegistry[tabInfoCorner] or {}
-    Library.DPIRegistry[tabInfoCorner]["CornerRadius"] = UDim.new(0, Library.CornerRadius)
     New("UIStroke", {
         Color = "Dark",
         ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
@@ -6629,6 +6623,15 @@ function Library:CreateWindow(WindowInfo)
     end
 
     Library.CornerRadius = WindowInfo.CornerRadius
+    
+    -- Update tooltip/watermark/tab info corners
+    if TooltipCorner then
+        TooltipCorner.CornerRadius = UDim.new(0, Library.CornerRadius)
+    end
+    if TabInfoCorner then
+        TabInfoCorner.CornerRadius = UDim.new(0, Library.CornerRadius)
+    end
+    
     Library:SetNotifySide(WindowInfo.NotifySide)
     Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
     Library.Scheme.Font = WindowInfo.Font
