@@ -1050,17 +1050,19 @@ function Library:UpdateGradients()
             Library.GradientRegistry[Gradient] = nil
             continue
         end
-
+        
         local color1 = Config.Color1 or Library.GradientColor1
         local color2 = Config.Color2 or Library.GradientColor2
         local rotation = Config.Rotation or Library.GradientRotation
-
-        if Library.EnableGradients and Gradient.Enabled then
-            Gradient.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, color1),
-                ColorSequenceKeypoint.new(1, color2),
-            })
-        end
+        
+        if typeof(color1) == "function" then color1 = color1() end
+        if typeof(color2) == "function" then color2 = color2() end
+        if typeof(rotation) == "function" then rotation = rotation() end
+        
+        Gradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, color1),
+            ColorSequenceKeypoint.new(1, color2),
+        })
         Gradient.Rotation = rotation
     end
 end
@@ -3630,7 +3632,7 @@ do
             })
 
             local Stroke = New("UIStroke", {
-                Color = Button.Disabled and "AccentColor" or "OutlineColor",
+                Color = "OutlineColor",
                 Transparency = Button.Disabled and 0.5 or 0,
                 Parent = Base,
             })
@@ -3642,7 +3644,6 @@ do
                     ColorSequenceKeypoint.new(1, Library.GradientColor2),
                 }),
                 Rotation = 60,
-                Enabled = not Button.Disabled,
                 Parent = Base,
             })
             Library:AddToGradientRegistry(ButtonGradient, { Rotation = 60 })
@@ -3737,23 +3738,25 @@ do
 
                 StopTween(SubButton.Tween)
 
-                SubButton.Base.BackgroundColor3 = SubButton.Disabled and Library.Scheme.BackgroundColor
-                    or Library.Scheme.MainColor
-                SubButton.Base.TextTransparency = SubButton.Disabled and 0.8 or 0.4
-                SubButton.Stroke.Transparency = SubButton.Disabled and 0.5 or 0
-                
-                -- Disabled state: accent color outline, hide gradient
                 if SubButton.Disabled then
-                    SubButton.Stroke.Color = Library.Scheme.AccentColor
+                    -- Disabled: show accent outline, hide gradient
                     SubButton.Gradient.Enabled = false
+                    SubButton.Stroke.Transparency = 0
+                    SubButton.Stroke.Color = Library.Scheme.AccentColor
                 else
-                    SubButton.Stroke.Color = Library.Scheme.OutlineColor
+                    -- Enabled: show gradient, normal stroke
                     SubButton.Gradient.Enabled = true
                     SubButton.Gradient.Color = ColorSequence.new({
                         ColorSequenceKeypoint.new(0, Library.GradientColor1),
                         ColorSequenceKeypoint.new(1, Library.GradientColor2),
                     })
+                    SubButton.Stroke.Transparency = 0
+                    SubButton.Stroke.Color = Library.Scheme.OutlineColor
                 end
+
+                SubButton.Base.BackgroundColor3 = SubButton.Disabled and Library.Scheme.BackgroundColor
+                    or Library.Scheme.MainColor
+                SubButton.Base.TextTransparency = SubButton.Disabled and 0.8 or 0.4
 
                 Library.Registry[SubButton.Base].BackgroundColor3 = SubButton.Disabled and "BackgroundColor"
                     or "MainColor"
@@ -3811,23 +3814,25 @@ do
 
             StopTween(Button.Tween)
 
-            Button.Base.BackgroundColor3 = Button.Disabled and Library.Scheme.BackgroundColor
-                or Library.Scheme.MainColor
-            Button.Base.TextTransparency = Button.Disabled and 0.8 or 0.4
-            Button.Stroke.Transparency = Button.Disabled and 0.5 or 0
-            
-            -- Disabled state: accent color outline, hide gradient
             if Button.Disabled then
-                Button.Stroke.Color = Library.Scheme.AccentColor
+                -- Disabled: show accent outline, hide gradient
                 Button.Gradient.Enabled = false
+                Button.Stroke.Transparency = 0
+                Button.Stroke.Color = Library.Scheme.AccentColor
             else
-                Button.Stroke.Color = Library.Scheme.OutlineColor
+                -- Enabled: show gradient, normal stroke
                 Button.Gradient.Enabled = true
                 Button.Gradient.Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0, Library.GradientColor1),
                     ColorSequenceKeypoint.new(1, Library.GradientColor2),
                 })
+                Button.Stroke.Transparency = 0
+                Button.Stroke.Color = Library.Scheme.OutlineColor
             end
+
+            Button.Base.BackgroundColor3 = Button.Disabled and Library.Scheme.BackgroundColor
+                or Library.Scheme.MainColor
+            Button.Base.TextTransparency = Button.Disabled and 0.8 or 0.4
 
             Library.Registry[Button.Base].BackgroundColor3 = Button.Disabled and "BackgroundColor" or "MainColor"
         end
@@ -3981,10 +3986,9 @@ do
                 return
             end
 
-            CheckboxStroke.Transparency = Toggle.Disabled and 0 or 0
-
             if Toggle.Disabled then
                 -- Disabled state: fixed dark gradient, accent color stroke
+                CheckboxStroke.Transparency = 0
                 CheckboxStroke.Color = Library.Scheme.AccentColor
                 Label.TextTransparency = 0.8
                 Checkbox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
@@ -3996,27 +4000,28 @@ do
                 Library.Registry[Checkbox].BackgroundColor3 = "BackgroundColor"
                 return
             end
-            
+
+            CheckboxStroke.Transparency = 0
             CheckboxStroke.Color = Library.Scheme.OutlineColor
+            Library.Registry[CheckboxStroke].Color = "OutlineColor"
 
             TweenService:Create(Label, Library.TweenInfo, {
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
 
-            -- Fill the checkbox with gradient when checked, main color when unchecked
+            -- Enable gradient when checked, disable when unchecked
+            CheckboxGradient.Enabled = Toggle.Value
             if Toggle.Value then
-                CheckboxGradient.Enabled = true
                 CheckboxGradient.Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0, Library.GradientColor1),
                     ColorSequenceKeypoint.new(1, Library.GradientColor2),
                 })
-                Checkbox.BackgroundColor3 = Library.Scheme.AccentColor
-            else
-                CheckboxGradient.Enabled = false
-                TweenService:Create(Checkbox, Library.TweenInfo, {
-                    BackgroundColor3 = Library.Scheme.MainColor,
-                }):Play()
             end
+
+            -- Fill the checkbox with accent color when checked, main color when unchecked
+            TweenService:Create(Checkbox, Library.TweenInfo, {
+                BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor,
+            }):Play()
 
             Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
         end
@@ -4874,15 +4879,14 @@ do
                 ColorSequenceKeypoint.new(1, Library.GradientColor2),
             }),
             Rotation = 60,
-            Enabled = not Dropdown.Disabled,
             Parent = Display,
         })
         Library:AddToGradientRegistry(DropdownGradient, { Rotation = 60 })
 
         -- Add stroke for disabled state
         local DropdownStroke = New("UIStroke", {
-            Color = Dropdown.Disabled and "AccentColor" or "OutlineColor",
-            Transparency = 0,
+            Color = "OutlineColor",
+            Transparency = 1,
             Parent = Display,
         })
 
@@ -4967,18 +4971,20 @@ do
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
             Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
             ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
-            
-            -- Disabled state: accent color stroke, hide gradient
+
             if Dropdown.Disabled then
-                DropdownStroke.Color = Library.Scheme.AccentColor
+                -- Disabled: show accent outline, hide gradient
                 DropdownGradient.Enabled = false
+                DropdownStroke.Transparency = 0
+                DropdownStroke.Color = Library.Scheme.AccentColor
             else
-                DropdownStroke.Color = Library.Scheme.OutlineColor
+                -- Enabled: show gradient, hide stroke
                 DropdownGradient.Enabled = true
                 DropdownGradient.Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0, Library.GradientColor1),
                     ColorSequenceKeypoint.new(1, Library.GradientColor2),
                 })
+                DropdownStroke.Transparency = 1
             end
         end
 
