@@ -1,6 +1,69 @@
 local cloneref = (cloneref or clonereference or function(instance: any)
     return instance
 end)
+
+--// Tab Info Popup (separate from regular tooltips) \--
+local TabInfoHolder = New("Frame", {
+    BackgroundColor3 = "BackgroundColor",
+    BorderColor3 = "OutlineColor",
+    BorderSizePixel = 1,
+    Visible = false,
+    ZIndex = 30,
+    Parent = ScreenGui,
+})
+New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = TabInfoHolder })
+local TabInfoTitle = New("TextLabel", {
+    BackgroundTransparency = 1,
+    TextSize = 16,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+    TextColor3 = "FontColor",
+    Parent = TabInfoHolder,
+})
+local TabInfoDesc = New("TextLabel", {
+    BackgroundTransparency = 1,
+    TextSize = 14,
+    TextWrapped = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+    TextColor3 = "FontColor",
+    Parent = TabInfoHolder,
+})
+New("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), Parent = TabInfoHolder })
+
+function Library:ShowTabInfo(Button, Title, Description)
+    if not Button or not Title then return end
+    TabInfoTitle.Text = tostring(Title)
+    TabInfoDesc.Text = tostring(Description or "")
+
+    local maxWidth = math.min(400, workspace.CurrentCamera.ViewportSize.X - 32)
+    local titleW, titleH = Library:GetTextBounds(TabInfoTitle.Text, TabInfoTitle.FontFace, TabInfoTitle.TextSize, maxWidth)
+    local descW, descH = Library:GetTextBounds(TabInfoDesc.Text, TabInfoDesc.FontFace, TabInfoDesc.TextSize, maxWidth)
+    local contentW = math.max(titleW, descW)
+    local contentH = titleH + descH + 6
+
+    TabInfoHolder.Size = UDim2.fromOffset((contentW + 12) * Library.DPIScale, (contentH + 12) * Library.DPIScale)
+    TabInfoTitle.Size = UDim2.fromOffset(contentW, titleH)
+    TabInfoDesc.Position = UDim2.fromOffset(0, titleH + 4)
+    TabInfoDesc.Size = UDim2.fromOffset(contentW, descH)
+
+    local btnPos = Button.AbsolutePosition
+    local btnSize = Button.AbsoluteSize
+    local popupW = TabInfoHolder.AbsoluteSize.X
+    local popupH = TabInfoHolder.AbsoluteSize.Y
+    local x = math.floor(btnPos.X + (btnSize.X / 2) - (popupW / 2))
+    local y = math.floor(btnPos.Y - popupH - 6)
+
+    x = math.max(6, math.min(x, workspace.CurrentCamera.ViewportSize.X - popupW - 6))
+    if y < 6 then y = btnPos.Y + btnSize.Y + 6 end
+
+    TabInfoHolder.Position = UDim2.fromOffset(x, y)
+    TabInfoHolder.Visible = true
+end
+
+function Library:HideTabInfo()
+    TabInfoHolder.Visible = false
+end
 local CoreGui: CoreGui = cloneref(game:GetService("CoreGui"))
 local Players: Players = cloneref(game:GetService("Players"))
 local RunService: RunService = cloneref(game:GetService("RunService"))
@@ -6823,6 +6886,14 @@ function Library:CreateWindow(WindowInfo)
 
             UpdateTabWidth()
 
+            -- show tab info popup on hover for key tabs
+            TabButton.MouseEnter:Connect(function()
+                Library:ShowTabInfo(TabButton, Name, Description)
+            end)
+            TabButton.MouseLeave:Connect(function()
+                Library:HideTabInfo()
+            end)
+
             --// Tab Container \\--
             TabContainer = New("Frame", {
                 BackgroundTransparency = 1,
@@ -7501,72 +7572,15 @@ function Library:CreateWindow(WindowInfo)
         TabButton.MouseLeave:Connect(function()
             Tab:Hover(false)
         end)
+        TabButton.MouseEnter:Connect(function()
+            Library:ShowTabInfo(TabButton, Name, Description)
+        end)
+        TabButton.MouseLeave:Connect(function()
+            Library:HideTabInfo()
+        end)
         TabButton.MouseButton1Click:Connect(Tab.Show)
 
         Library.Tabs[Name] = Tab
-
-        -- Tab-specific tooltip positioned directly above the tab button
-        do
-            local TabTooltip = New("TextLabel", {
-                BackgroundColor3 = "BackgroundColor",
-                BorderColor3 = "OutlineColor",
-                BorderSizePixel = 1,
-                TextSize = 14,
-                TextWrapped = true,
-                Visible = false,
-                ZIndex = 20,
-                Parent = ScreenGui,
-            })
-
-            local function UpdateTooltipSize()
-                local X, Y = Library:GetTextBounds(
-                    TabTooltip.Text,
-                    TabTooltip.FontFace,
-                    TabTooltip.TextSize,
-                    workspace.CurrentCamera.ViewportSize.X - 4
-                )
-
-                TabTooltip.Size = UDim2.fromOffset((X + 8) * Library.DPIScale, (Y + 4) * Library.DPIScale)
-                Library:UpdateDPI(TabTooltip, {
-                    Size = UDim2.fromOffset(X, Y),
-                    DPIOffset = {
-                        Size = { 8, 4 },
-                    },
-                })
-            end
-
-            local function ShowTooltip()
-                TabTooltip.Text = (Description and Description ~= "") and (Name .. "\n" .. Description) or Name
-                UpdateTooltipSize()
-
-                local tooltipW = TabTooltip.AbsoluteSize.X
-                local tooltipH = TabTooltip.AbsoluteSize.Y
-                local x = math.floor(TabButton.AbsolutePosition.X + TabButton.AbsoluteSize.X / 2 - tooltipW / 2)
-                local y = math.floor(TabButton.AbsolutePosition.Y - tooltipH - 6)
-
-                if x < 4 then
-                    x = 4
-                end
-                if y < 4 then
-                    y = 4
-                end
-
-                TabTooltip.Position = UDim2.fromOffset(x, y)
-                TabTooltip.Visible = true
-            end
-
-            local function HideTooltip()
-                TabTooltip.Visible = false
-            end
-
-            TabButton.MouseEnter:Connect(ShowTooltip)
-            TabButton.MouseLeave:Connect(HideTooltip)
-            TabButton:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-                if TabTooltip.Visible then
-                    ShowTooltip()
-                end
-            end)
-        end
 
         return Tab
     end
