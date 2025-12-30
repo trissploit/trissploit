@@ -1,69 +1,6 @@
 local cloneref = (cloneref or clonereference or function(instance: any)
     return instance
 end)
-
---// Tab Info Popup (separate from regular tooltips) \--
-local TabInfoHolder = New("Frame", {
-    BackgroundColor3 = "BackgroundColor",
-    BorderColor3 = "OutlineColor",
-    BorderSizePixel = 1,
-    Visible = false,
-    ZIndex = 30,
-    Parent = ScreenGui,
-})
-New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = TabInfoHolder })
-local TabInfoTitle = New("TextLabel", {
-    BackgroundTransparency = 1,
-    TextSize = 16,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    TextYAlignment = Enum.TextYAlignment.Top,
-    TextColor3 = "FontColor",
-    Parent = TabInfoHolder,
-})
-local TabInfoDesc = New("TextLabel", {
-    BackgroundTransparency = 1,
-    TextSize = 14,
-    TextWrapped = true,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    TextYAlignment = Enum.TextYAlignment.Top,
-    TextColor3 = "FontColor",
-    Parent = TabInfoHolder,
-})
-New("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), Parent = TabInfoHolder })
-
-function Library:ShowTabInfo(Button, Title, Description)
-    if not Button or not Title then return end
-    TabInfoTitle.Text = tostring(Title)
-    TabInfoDesc.Text = tostring(Description or "")
-
-    local maxWidth = math.min(400, workspace.CurrentCamera.ViewportSize.X - 32)
-    local titleW, titleH = Library:GetTextBounds(TabInfoTitle.Text, TabInfoTitle.FontFace, TabInfoTitle.TextSize, maxWidth)
-    local descW, descH = Library:GetTextBounds(TabInfoDesc.Text, TabInfoDesc.FontFace, TabInfoDesc.TextSize, maxWidth)
-    local contentW = math.max(titleW, descW)
-    local contentH = titleH + descH + 6
-
-    TabInfoHolder.Size = UDim2.fromOffset((contentW + 12) * Library.DPIScale, (contentH + 12) * Library.DPIScale)
-    TabInfoTitle.Size = UDim2.fromOffset(contentW, titleH)
-    TabInfoDesc.Position = UDim2.fromOffset(0, titleH + 4)
-    TabInfoDesc.Size = UDim2.fromOffset(contentW, descH)
-
-    local btnPos = Button.AbsolutePosition
-    local btnSize = Button.AbsoluteSize
-    local popupW = TabInfoHolder.AbsoluteSize.X
-    local popupH = TabInfoHolder.AbsoluteSize.Y
-    local x = math.floor(btnPos.X + (btnSize.X / 2) - (popupW / 2))
-    local y = math.floor(btnPos.Y - popupH - 6)
-
-    x = math.max(6, math.min(x, workspace.CurrentCamera.ViewportSize.X - popupW - 6))
-    if y < 6 then y = btnPos.Y + btnSize.Y + 6 end
-
-    TabInfoHolder.Position = UDim2.fromOffset(x, y)
-    TabInfoHolder.Visible = true
-end
-
-function Library:HideTabInfo()
-    TabInfoHolder.Visible = false
-end
 local CoreGui: CoreGui = cloneref(game:GetService("CoreGui"))
 local Players: Players = cloneref(game:GetService("Players"))
 local RunService: RunService = cloneref(game:GetService("RunService"))
@@ -2082,6 +2019,96 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
     table.insert(Tooltips, TooltipLabel)
     return TooltipTable
 end
+
+    --// Tab Info Popup (separate from regular tooltips) --
+    local TabInfoHolder = New("Frame", {
+        BackgroundColor3 = "BackgroundColor",
+        BorderColor3 = "OutlineColor",
+        BorderSizePixel = 1,
+        Visible = false,
+        ZIndex = 21,
+        Parent = ScreenGui,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(0, Library.CornerRadius),
+        Parent = TabInfoHolder,
+    })
+    New("UIStroke", {
+        Color = "Dark",
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+        Parent = TabInfoHolder,
+    })
+
+    local TabInfoTitle = New("TextLabel", {
+        BackgroundTransparency = 1,
+        TextSize = 14,
+        TextTransparency = 0,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = TabInfoHolder,
+    })
+
+    local TabInfoDesc = New("TextLabel", {
+        BackgroundTransparency = 1,
+        TextSize = 12,
+        TextTransparency = 0.4,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = TabInfoHolder,
+    })
+
+    local TabInfoRender = nil
+    local TabInfoActive = false
+
+    local function UpdateTabInfoSize()
+        if not TabInfoHolder then return end
+        local maxWidth = math.floor(workspace.CurrentCamera.ViewportSize.X * 0.4)
+        local titleW, titleH = Library:GetTextBounds(TabInfoTitle.Text, TabInfoTitle.FontFace, TabInfoTitle.TextSize, maxWidth)
+        local descW, descH = Library:GetTextBounds(TabInfoDesc.Text, TabInfoDesc.FontFace, TabInfoDesc.TextSize, maxWidth)
+        local width = math.max(titleW, descW)
+        local height = titleH + descH + 8
+        TabInfoHolder.Size = UDim2.fromOffset((width + 12) * Library.DPIScale, (height + 8) * Library.DPIScale)
+        Library:UpdateDPI(TabInfoHolder, { Size = UDim2.fromOffset(width + 12, height + 8) })
+        TabInfoTitle.Size = UDim2.fromOffset(width, titleH)
+        TabInfoDesc.Position = UDim2.fromOffset(0, titleH)
+        TabInfoDesc.Size = UDim2.fromOffset(width, descH)
+    end
+
+    function Library:ShowTabInfo(HoverInstance: GuiObject, Title: string, Description: string)
+        if not HoverInstance or typeof(Title) ~= "string" then return end
+        TabInfoTitle.Text = Title
+        TabInfoDesc.Text = Description or ""
+        UpdateTabInfoSize()
+        TabInfoHolder.Visible = true
+        TabInfoActive = true
+
+        if TabInfoRender and TabInfoRender.Connected then
+            TabInfoRender:Disconnect()
+            TabInfoRender = nil
+        end
+
+    TabInfoRender = RunService.RenderStepped:Connect(function()
+        if not TabInfoActive or not HoverInstance or not HoverInstance.Parent or not HoverInstance.AbsolutePosition then
+            Library:HideTabInfo()
+            return
+        end
+
+        local absPos = HoverInstance.AbsolutePosition
+        local absSize = HoverInstance.AbsoluteSize
+        local centerX = math.floor(absPos.X + (absSize.X / 2))
+        local topY = math.floor(absPos.Y) - 6
+        local px = math.floor(centerX - (TabInfoHolder.AbsoluteSize.X / 2))
+        local py = topY - TabInfoHolder.AbsoluteSize.Y
+        TabInfoHolder.Position = UDim2.fromOffset(px, py)
+    end)
+    end
+
+    function Library:HideTabInfo()
+        TabInfoActive = false
+        TabInfoHolder.Visible = false
+        if TabInfoRender and TabInfoRender.Connected then
+            TabInfoRender:Disconnect()
+            TabInfoRender = nil
+        end
+    end
 
 function Library:OnUnload(Callback)
     table.insert(Library.UnloadSignals, Callback)
@@ -6886,7 +6913,13 @@ function Library:CreateWindow(WindowInfo)
 
             UpdateTabWidth()
 
-            -- show tab info popup on hover for key tabs
+            TabButton.MouseEnter:Connect(function()
+                Library:ShowTabInfo(TabButton, Name, Description)
+            end)
+            TabButton.MouseLeave:Connect(function()
+                Library:HideTabInfo()
+            end)
+
             TabButton.MouseEnter:Connect(function()
                 Library:ShowTabInfo(TabButton, Name, Description)
             end)
@@ -7571,12 +7604,6 @@ function Library:CreateWindow(WindowInfo)
         end)
         TabButton.MouseLeave:Connect(function()
             Tab:Hover(false)
-        end)
-        TabButton.MouseEnter:Connect(function()
-            Library:ShowTabInfo(TabButton, Name, Description)
-        end)
-        TabButton.MouseLeave:Connect(function()
-            Library:HideTabInfo()
         end)
         TabButton.MouseButton1Click:Connect(Tab.Show)
 
