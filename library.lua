@@ -4946,6 +4946,7 @@ do
         end
 
         local Buttons = {}
+        Dropdown.Buttons = Buttons
         function Dropdown:BuildDropdownList()
             local Values = Dropdown.Values
             local DisabledValues = Dropdown.DisabledValues
