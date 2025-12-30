@@ -40,8 +40,8 @@ end
 
 local ThemeManager = {}
 do
-    local ThemeFields = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
-    local GradientFields = { "GradientColor1", "GradientColor2", "GradientRotation" }
+    local ThemeFields = { "FontColor", "MainColor", "BackgroundColor", "OutlineColor" }
+    local GradientFields = { "GradientColor1", "GradientColor2" }
     ThemeManager.Folder = "ObsidianLibSettings"
     -- if not isfolder(ThemeManager.Folder) then makefolder(ThemeManager.Folder) end
 
@@ -177,19 +177,13 @@ do
 
         local scheme = data[2]
         for idx, val in pairs(customThemeData or scheme) do
-            if idx == "VideoLink" or idx == "EnableGradients" then
+            if idx == "VideoLink" or idx == "EnableGradients" or idx == "GradientRotation" then
                 continue
             elseif idx == "FontFace" then
                 self.Library:SetFont(Enum.Font[val])
 
                 if self.Library.Options[idx] then
                     self.Library.Options[idx]:SetValue(val)
-                end
-            elseif idx == "GradientRotation" then
-                local rotation = tonumber(val) or 0
-                self.Library.GradientRotation = math.clamp(rotation, 0, 360)
-                if self.Library.Options[idx] then
-                    self.Library.Options[idx]:SetValue(math.clamp(rotation, 0, 360))
                 end
             elseif idx == "GradientColor1" or idx == "GradientColor2" then
                 local success, color = pcall(Color3.fromHex, Color3, val)
@@ -199,8 +193,22 @@ do
                         self.Library.Options[idx]:SetValueRGB(color)
                     end
                 else
-                    -- Fallback to accent color if parsing fails
-                    self.Library[idx] = self.Library.Scheme.AccentColor
+                    -- Fallback to default gradient colors if parsing fails
+                    self.Library[idx] = idx == "GradientColor1" and Color3.fromRGB(125, 85, 255) or Color3.fromRGB(75, 50, 155)
+                end
+            elseif idx == "AccentColor" then
+                -- Convert legacy AccentColor to GradientColor1
+                local success, color = pcall(Color3.fromHex, Color3, val)
+                if success and typeof(color) == "Color3" then
+                    self.Library.GradientColor1 = color
+                    self.Library.GradientColor2 = color:Lerp(Color3.new(0, 0, 0), 0.4)
+                    self.Library.Scheme.AccentColor = color
+                    if self.Library.Options.GradientColor1 then
+                        self.Library.Options.GradientColor1:SetValueRGB(color)
+                    end
+                    if self.Library.Options.GradientColor2 then
+                        self.Library.Options.GradientColor2:SetValueRGB(color:Lerp(Color3.new(0, 0, 0), 0.4))
+                    end
                 end
             else
                 self.Library.Scheme[idx] = Color3.fromHex(val)
@@ -228,21 +236,15 @@ do
             if self.Library.Options and self.Library.Options[field] then
                 local value = self.Library.Options[field].Value
                 -- Validate gradient colors
-                if field == "GradientColor1" or field == "GradientColor2" then
-                    if typeof(value) == "Color3" then
-                        self.Library[field] = value
-                    else
-                        -- Fallback to default if invalid
-                        self.Library[field] = self.Library.Scheme.AccentColor
-                    end
-                elseif field == "GradientRotation" then
-                    if typeof(value) == "number" then
-                        self.Library[field] = math.clamp(value, 0, 360)
-                    else
-                        self.Library[field] = 0
+                if typeof(value) == "Color3" then
+                    self.Library[field] = value
+                    -- Also update AccentColor for compatibility
+                    if field == "GradientColor1" then
+                        self.Library.Scheme.AccentColor = value
                     end
                 else
-                    self.Library[field] = value
+                    -- Fallback to default if invalid
+                    self.Library[field] = field == "GradientColor1" and Color3.fromRGB(125, 85, 255) or Color3.fromRGB(75, 50, 155)
                 end
             end
         end
@@ -356,16 +358,12 @@ do
         end
         theme["FontFace"] = self.Library.Options["FontFace"].Value
         
-        -- Save gradient settings (always enabled)
+        -- Save gradient settings
         for _, field in GradientFields do
             if self.Library.Options[field] then
-                if field == "GradientRotation" then
-                    theme[field] = math.clamp(self.Library.Options[field].Value, 0, 360)
-                else
-                    local color = self.Library.Options[field].Value
-                    if typeof(color) == "Color3" then
-                        theme[field] = color:ToHex()
-                    end
+                local color = self.Library.Options[field].Value
+                if typeof(color) == "Color3" then
+                    theme[field] = color:ToHex()
                 end
             end
         end
@@ -424,7 +422,6 @@ do
             :AddLabel("Background color")
             :AddColorPicker("BackgroundColor", { Default = self.Library.Scheme.BackgroundColor })
         groupbox:AddLabel("Main color"):AddColorPicker("MainColor", { Default = self.Library.Scheme.MainColor })
-        groupbox:AddLabel("Accent color"):AddColorPicker("AccentColor", { Default = self.Library.Scheme.AccentColor })
         groupbox
             :AddLabel("Outline color")
             :AddColorPicker("OutlineColor", { Default = self.Library.Scheme.OutlineColor })
@@ -436,9 +433,8 @@ do
         })
 
         groupbox:AddDivider()
-        groupbox:AddLabel("Gradient color 1 (start)"):AddColorPicker("GradientColor1", { Default = self.Library.GradientColor1 or self.Library.Scheme.AccentColor })
-        groupbox:AddLabel("Gradient color 2 (end)"):AddColorPicker("GradientColor2", { Default = self.Library.GradientColor2 or self.Library.Scheme.AccentColor:Lerp(Color3.new(0, 0, 0), 0.4) })
-        groupbox:AddSlider("GradientRotation", { Text = "Gradient Rotation", Default = self.Library.GradientRotation or 0, Min = 0, Max = 360, Rounding = 0, Suffix = "°" })
+        groupbox:AddLabel("Gradient start color"):AddColorPicker("GradientColor1", { Default = self.Library.GradientColor1 or Color3.fromRGB(125, 85, 255) })
+        groupbox:AddLabel("Gradient end color"):AddColorPicker("GradientColor2", { Default = self.Library.GradientColor2 or Color3.fromRGB(75, 50, 155) })
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do
@@ -548,7 +544,6 @@ do
 
         self.Library.Options.BackgroundColor:OnChanged(UpdateTheme)
         self.Library.Options.MainColor:OnChanged(UpdateTheme)
-        self.Library.Options.AccentColor:OnChanged(UpdateTheme)
         self.Library.Options.OutlineColor:OnChanged(UpdateTheme)
         self.Library.Options.FontColor:OnChanged(UpdateTheme)
         self.Library.Options.FontFace:OnChanged(function(Value)
@@ -560,7 +555,6 @@ do
         self.Library.Options.GradientColor1:OnChanged(function(Value)
             if typeof(Value) == "Color3" then
                 self.Library.GradientColor1 = Value
-                self.Library.EnableGradients = true
                 if self.Library.UpdateGradients then
                     self.Library:UpdateGradients()
                 end
@@ -569,16 +563,6 @@ do
         self.Library.Options.GradientColor2:OnChanged(function(Value)
             if typeof(Value) == "Color3" then
                 self.Library.GradientColor2 = Value
-                self.Library.EnableGradients = true
-                if self.Library.UpdateGradients then
-                    self.Library:UpdateGradients()
-                end
-            end
-        end)
-        self.Library.Options.GradientRotation:OnChanged(function(Value)
-            if typeof(Value) == "number" then
-                self.Library.GradientRotation = math.clamp(Value, 0, 360)
-                self.Library.EnableGradients = true
                 if self.Library.UpdateGradients then
                     self.Library:UpdateGradients()
                 end
