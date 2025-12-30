@@ -2100,6 +2100,7 @@ end
 
     local TabInfoRender = nil
     local TabInfoActive = false
+    local TabInfoFadeTweens = {}
 
     local function UpdateTabInfoSize()
         if not TabInfoHolder then return end
@@ -2125,6 +2126,15 @@ end
 
     function Library:ShowTabInfo(HoverInstance: GuiObject, Title: string, Description: string)
         if not HoverInstance or typeof(Title) ~= "string" then return end
+        
+        -- Cancel any ongoing fade-out tweens
+        for _, tween in pairs(TabInfoFadeTweens) do
+            if tween and tween.PlaybackState == Enum.PlaybackState.Playing then
+                tween:Cancel()
+            end
+        end
+        TabInfoFadeTweens = {}
+        
         TabInfoTitle.Text = Title
         TabInfoDesc.Text = Description or ""
         UpdateTabInfoSize()
@@ -2137,15 +2147,19 @@ end
         TabInfoActive = true
         
         -- Fade in animation
-        TweenService:Create(TabInfoHolder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoHolder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 0,
-        }):Play()
-        TweenService:Create(TabInfoTitle, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        }))
+        table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoTitle, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             TextTransparency = 0,
-        }):Play()
-        TweenService:Create(TabInfoDesc, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        }))
+        table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoDesc, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             TextTransparency = 0.4,
-        }):Play()
+        }))
+        
+        for _, tween in pairs(TabInfoFadeTweens) do
+            tween:Play()
+        end
 
         if TabInfoRender and TabInfoRender.Connected then
             TabInfoRender:Disconnect()
@@ -2161,9 +2175,12 @@ end
         local absPos = HoverInstance.AbsolutePosition
         local absSize = HoverInstance.AbsoluteSize
         local centerX = math.floor(absPos.X + (absSize.X / 2))
-        local topY = math.floor(absPos.Y) - 6
+        
+        -- Position 6px above the TabBarWindow (parent of tab buttons)
+        local tabBarWindowY = HoverInstance.Parent and HoverInstance.Parent.AbsolutePosition.Y or absPos.Y
+        local py = math.floor(tabBarWindowY) - 6 - TabInfoHolder.AbsoluteSize.Y
         local px = math.floor(centerX - (TabInfoHolder.AbsoluteSize.X / 2))
-        local py = topY - TabInfoHolder.AbsoluteSize.Y
+        
         TabInfoHolder.Position = UDim2.fromOffset(px, py)
     end)
     end
@@ -2175,20 +2192,28 @@ end
             TabInfoRender = nil
         end
         
+        -- Clear old tweens and create new fade-out tweens
+        TabInfoFadeTweens = {}
+        
         -- Fade out animation
         local fadeTween = TweenService:Create(TabInfoHolder, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = 1,
         })
-        TweenService:Create(TabInfoTitle, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        table.insert(TabInfoFadeTweens, fadeTween)
+        table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoTitle, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             TextTransparency = 1,
-        }):Play()
-        TweenService:Create(TabInfoDesc, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        }))
+        table.insert(TabInfoFadeTweens, TweenService:Create(TabInfoDesc, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             TextTransparency = 1,
-        }):Play()
+        }))
+        
         fadeTween.Completed:Connect(function()
             TabInfoHolder.Visible = false
         end)
-        fadeTween:Play()
+        
+        for _, tween in pairs(TabInfoFadeTweens) do
+            tween:Play()
+        end
     end
 
 function Library:OnUnload(Callback)
