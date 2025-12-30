@@ -194,6 +194,8 @@ local Library = {
         BackgroundColor = Color3.fromRGB(15, 15, 15),
         MainColor = Color3.fromRGB(25, 25, 25),
         AccentColor = Color3.fromRGB(125, 85, 255),
+        AccentGradientStart = Color3.fromRGB(125, 85, 255),
+        AccentGradientEnd = Color3.fromRGB(90, 59, 184),
         OutlineColor = Color3.fromRGB(40, 40, 40),
         FontColor = Color3.new(1, 1, 1),
         Font = Font.fromEnum(Enum.Font.Code),
@@ -202,6 +204,37 @@ local Library = {
         Dark = Color3.new(0, 0, 0),
         White = Color3.new(1, 1, 1),
     },
+
+    -- Gradient functions
+    CreateVerticalGradient = function(startColor: Color3, endColor: Color3)
+        return {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, startColor),
+                ColorSequenceKeypoint.new(1, endColor),
+            }),
+            Rotation = 90, -- Vertical gradient
+        }
+    end,
+
+    CreateAngledGradient = function(startColor: Color3, endColor: Color3, angle: number)
+        return {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, startColor),
+                ColorSequenceKeypoint.new(1, endColor),
+            }),
+            Rotation = angle,
+        }
+    end,
+
+    CreateDisabledGradient = function()
+        return {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)), -- Black
+                ColorSequenceKeypoint.new(1, Color3.new(0.5, 0.5, 0.5)), -- Grey
+            }),
+            Rotation = 90,
+        }
+    end,
 
     Registry = {},
     DPIRegistry = {},
@@ -1029,6 +1062,13 @@ function Library:UpdateColorsUsingRegistry()
             elseif typeof(ColorIdx) == "function" then
                 Instance[Property] = ColorIdx()
             end
+        end
+    end
+
+    -- Update gradients for components that use them
+    for _, Option in pairs(Options) do
+        if Option.UpdateColors and typeof(Option.UpdateColors) == "function" then
+            Option:UpdateColors()
         end
     end
 end
@@ -3888,8 +3928,15 @@ do
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
-                Checkbox.BackgroundColor3 = Library.Scheme.BackgroundColor
-                Library.Registry[Checkbox].BackgroundColor3 = "BackgroundColor"
+                -- Use disabled gradient for disabled state
+                local gradient = Checkbox:FindFirstChild("UIGradient")
+                if not gradient then
+                    gradient = New("UIGradient", Library.CreateDisabledGradient())
+                else
+                    local disabledGradient = Library.CreateDisabledGradient()
+                    gradient.Color = disabledGradient.Color
+                    gradient.Rotation = disabledGradient.Rotation
+                end
                 return
             end
 
@@ -3897,12 +3944,48 @@ do
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
 
-            -- Fill the checkbox with accent color when checked, main color when unchecked
-            TweenService:Create(Checkbox, Library.TweenInfo, {
-                BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor,
-            }):Play()
+            -- Use gradient for checked state, solid color for unchecked
+            local gradient = Checkbox:FindFirstChild("UIGradient")
+            if Toggle.Value then
+                if not gradient then
+                    gradient = New("UIGradient", Library.CreateAngledGradient(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd, 60))
+                else
+                    local accentGradient = Library.CreateAngledGradient(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd, 60)
+                    gradient.Color = accentGradient.Color
+                    gradient.Rotation = accentGradient.Rotation
+                end
+            else
+                if gradient then
+                    gradient:Destroy()
+                end
+                TweenService:Create(Checkbox, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.MainColor,
+                }):Play()
+                Library.Registry[Checkbox].BackgroundColor3 = "MainColor"
+            end
+        end
 
-            Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
+        function Toggle:UpdateColors()
+            if Library.Unloaded then
+                return
+            end
+
+            Label.TextTransparency = Toggle.Disabled and 0.8 or 0
+            -- Update gradient if checkbox is checked
+            if Toggle.Value then
+                local gradient = Checkbox:FindFirstChild("UIGradient")
+                if gradient then
+                    if Toggle.Disabled then
+                        local disabledGradient = Library.CreateDisabledGradient()
+                        gradient.Color = disabledGradient.Color
+                        gradient.Rotation = disabledGradient.Rotation
+                    else
+                        local accentGradient = Library.CreateAngledGradient(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd, 60)
+                        gradient.Color = accentGradient.Color
+                        gradient.Rotation = accentGradient.Rotation
+                    end
+                end
+            end
         end
 
         function Toggle:OnChanged(Func)
@@ -4459,7 +4542,6 @@ do
         })
 
         local Fill = New("Frame", {
-            BackgroundColor3 = "AccentColor",
             Size = UDim2.fromScale(0.5, 1),
             Parent = Bar,
 
@@ -4467,6 +4549,7 @@ do
                 Size = true,
             },
         })
+        New("UIGradient", Library.CreateVerticalGradient(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd))
 
         function Slider:UpdateColors()
             if Library.Unloaded then
@@ -4478,8 +4561,19 @@ do
             end
             DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or 0
 
-            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentColor
-            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentColor"
+            -- Update gradient based on disabled state
+            local gradient = Fill:FindFirstChild("UIGradient")
+            if gradient then
+                if Slider.Disabled then
+                    local disabledGradient = Library.CreateDisabledGradient()
+                    gradient.Color = disabledGradient.Color
+                    gradient.Rotation = disabledGradient.Rotation
+                else
+                    local accentGradient = Library.CreateVerticalGradient(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                    gradient.Color = accentGradient.Color
+                    gradient.Rotation = accentGradient.Rotation
+                end
+            end
         end
 
         function Slider:Display()
@@ -4795,6 +4889,11 @@ do
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
             Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
             ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
+
+            -- Update gradients for all dropdown buttons
+            for _, ButtonTable in pairs(Dropdown.Buttons) do
+                ButtonTable:UpdateButton()
+            end
         end
 
         function Dropdown:Display()
@@ -4899,6 +4998,22 @@ do
 
                     Button.BackgroundTransparency = Selected and 0 or 1
                     Button.TextTransparency = IsDisabled and 0.8 or Selected and 0 or 0.5
+
+                    -- Update gradient for selected state
+                    local gradient = Button:FindFirstChild("UIGradient")
+                    if Selected then
+                        if not gradient then
+                            gradient = New("UIGradient", Library.CreateVerticalGradient(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd))
+                        else
+                            local accentGradient = Library.CreateVerticalGradient(Library.Scheme.AccentGradientStart, Library.Scheme.AccentGradientEnd)
+                            gradient.Color = accentGradient.Color
+                            gradient.Rotation = accentGradient.Rotation
+                        end
+                    else
+                        if gradient then
+                            gradient:Destroy()
+                        end
+                    end
                 end
 
                 if not IsDisabled then
