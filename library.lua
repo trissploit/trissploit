@@ -1846,7 +1846,10 @@ do
         })
 
         Library.Registry[WM.Holder] = { BackgroundColor3 = "BackgroundColor", BorderColor3 = "OutlineColor" }
-        Library.Registry[WM.Label] = { TextColor3 = "FontColor" }
+        Library.Registry[WM.Label] = { TextColor3 = "FontColor", FontFace = "Font" }
+
+        -- make watermark draggable
+        Library:MakeDraggable(WM.Holder, WM.Holder, true)
 
         local lastTime = tick()
         local frameCount = 0
@@ -6546,6 +6549,12 @@ function Library:CreateWindow(WindowInfo)
     Library:SetNotifySide(WindowInfo.NotifySide)
     Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
     Library.Scheme.Font = WindowInfo.Font
+    -- Update watermark name to the window title if watermark exists
+    if typeof(Library.SetWatermarkName) == "function" then
+        pcall(function()
+            Library:SetWatermarkName(WindowInfo.Title)
+        end)
+    end
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
     Library.GlobalSearch = WindowInfo.GlobalSearch
 
