@@ -380,6 +380,7 @@ do
         -- Watermark controls
         groupbox:AddDivider()
         groupbox:AddToggle("Watermark", { Text = "Watermark", Default = self.Library.Watermark or false, Callback = function(v)
+            self.Library:ToggleWatermark(v)
             self.Library.Watermark = v
             if getgenv then
                 getgenv().watermark = v
