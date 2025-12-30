@@ -1908,78 +1908,8 @@ do
                 table.insert(parts, tostring(ping) .. "ms")
             end
             if Library.WatermarkFields.Executor then
-                -- robust executor detection with caching
-                if not WM._detected_executor then
-                    local function tryCall(fn)
-                        if typeof(fn) ~= "function" then
-                            return nil
-                        end
-                        local ok, res = pcall(fn)
-                        if ok and res ~= nil and res ~= false then
-                            return res
-                        end
-                        return nil
-                    end
-
-                    local candidates = {
-                        "getexecutor",
-                        "getexecutorname",
-                        "getidentityexecutor",
-                        "identifyexecutor",
-                        "get_executor",
-                        "get_executor_name",
-                        "getExecutor",
-                        "getExecutorName",
-                        "IdentifyExecutor",
-                    }
-
-                    for _, name in ipairs(candidates) do
-                        local fn = rawget(_G, name) or _G[name]
-                        local res = tryCall(fn)
-                        if res then
-                            WM._detected_executor = tostring(res)
-                            break
-                        end
-                    end
-
-                    if not WM._detected_executor then
-                        local ok, g = pcall(function() return (getgenv and getgenv()) end)
-                        if ok and type(g) == "table" then
-                            for _, key in ipairs({ "executor", "executor_name", "Executor", "ExecutorName", "exploit", "exploit_name" }) do
-                                if g[key] then
-                                    WM._detected_executor = tostring(g[key])
-                                    break
-                                end
-                            end
-                        end
-                    end
-
-                    if not WM._detected_executor and typeof(shared) == "table" then
-                        for _, key in ipairs({ "executor", "executor_name", "Executor", "ExecutorName", "exploit", "exploit_name" }) do
-                            if shared[key] then
-                                WM._detected_executor = tostring(shared[key])
-                                break
-                            end
-                        end
-                    end
-
-                    -- last-resort checks for known environments
-                    if not WM._detected_executor then
-                        if rawget(_G, "syn") then
-                            WM._detected_executor = "Synapse"
-                        elseif rawget(_G, "KRNL") or rawget(_G, "KRNL_LOADED") then
-                            WM._detected_executor = "Krnl"
-                        elseif rawget(_G, "secure_load") then
-                            WM._detected_executor = "Secure"
-                        end
-                    end
-
-                    if not WM._detected_executor then
-                        WM._detected_executor = "Unknown"
-                    end
-                end
-
-                table.insert(parts, tostring(WM._detected_executor))
+                local exec_name = (getexecutor or getexecutorname or getidentityexecutor or identifyexecutor or function() return 'Unknown' end)()
+                table.insert(parts, exec_name)
             end
 
             WM.Label.Text = table.concat(parts, " | ")
