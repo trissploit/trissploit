@@ -1839,10 +1839,13 @@ do
 
         WM.Label = New("TextLabel", {
             BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
             Size = UDim2.fromScale(1, 1),
             Text = "",
             TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            TextYAlignment = Enum.TextYAlignment.Center,
             ZIndex = 1000,
             Parent = WM.Holder,
         })
@@ -1930,14 +1933,17 @@ do
         local last = nil
         while not Library.Unloaded do
             local ok, g = pcall(function() return getgenv and getgenv().watermark end)
-            local globalVal = (ok and g) and true or (ok and g == false and false) or nil
-            local libVal = Library.Watermark
+            local globalVal = (ok and g ~= nil) and g or nil
+            -- support both Library.Watermark and Library.watermark (case-insensitive usage)
+            local libValUpper = rawget(Library, "Watermark")
+            local libVallow = rawget(Library, "watermark")
+            local libVal = (libVallow ~= nil) and libVallow or libValUpper
 
             local want
             if globalVal ~= nil then
-                want = globalVal
+                want = globalVal and true or false
             else
-                want = libVal
+                want = (libVal ~= nil) and (libVal and true or false) or false
             end
 
             if want ~= last then
@@ -1945,7 +1951,9 @@ do
                     Library:CreateWatermark(Library.CurrentWindowTitle or "")
                 end
                 Library:ToggleWatermark(want)
+                -- sync both fields so either one works
                 Library.Watermark = want
+                Library.watermark = want
                 last = want
             end
 
