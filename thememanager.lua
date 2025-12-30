@@ -379,10 +379,24 @@ do
 
         -- Watermark controls
         groupbox:AddDivider()
-        groupbox:AddToggle("WatermarkEnabled", { Text = "Watermark", Default = self.Library.Watermark or false, Callback = function(v)
+        groupbox:AddToggle("Watermark", { Text = "Watermark", Default = self.Library.Watermark or false, Callback = function(v)
             self.Library.Watermark = v
         end })
-        groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Fields", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" } })
+        groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Fields", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
+            local fields = { Name = false, FPS = false, Ping = false, Executor = false }
+            if typeof(v) == "table" then
+                for key, val in pairs(v) do
+                    if typeof(key) == "string" then
+                        fields[key] = true
+                    elseif typeof(val) == "string" then
+                        fields[val] = true
+                    end
+                end
+            end
+            if typeof(self.Library.SetWatermarkFields) == "function" then
+                self.Library:SetWatermarkFields(fields)
+            end
+        end })
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do
@@ -501,26 +515,6 @@ do
         end
         if self.Library.Options.AccentGradientEnd then
             self.Library.Options.AccentGradientEnd:OnChanged(UpdateTheme)
-        end
-        if self.Library.Options.WatermarkEnabled then
-            self.Library.Options.WatermarkEnabled:OnChanged(function(v)
-                self.Library.Watermark = v
-            end)
-        end
-        if self.Library.Options.WatermarkFields then
-            self.Library.Options.WatermarkFields:OnChanged(function(v)
-                local fields = { Name = false, FPS = false, Ping = false, Executor = false }
-                if typeof(v) == "table" then
-                    for k, _ in pairs(v) do
-                        fields[k] = true
-                    end
-                end
-                self.Library:SetWatermarkFields(fields)
-            end)
-            -- set initial value from library
-            pcall(function()
-                self.Library.Options.WatermarkFields:SetValue({ "Name", "FPS", "Ping" })
-            end)
         end
         self.Library.Options.FontFace:OnChanged(function(Value)
             self.Library:SetFont(Enum.Font[Value])
