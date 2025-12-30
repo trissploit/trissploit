@@ -488,6 +488,13 @@ do
         self.Library.Options.AccentColor:OnChanged(UpdateTheme)
         self.Library.Options.OutlineColor:OnChanged(UpdateTheme)
         self.Library.Options.FontColor:OnChanged(UpdateTheme)
+        -- Update when gradient pickers change
+        if self.Library.Options.AccentGradientStart then
+            self.Library.Options.AccentGradientStart:OnChanged(UpdateTheme)
+        end
+        if self.Library.Options.AccentGradientEnd then
+            self.Library.Options.AccentGradientEnd:OnChanged(UpdateTheme)
+        end
         self.Library.Options.FontFace:OnChanged(function(Value)
             self.Library:SetFont(Enum.Font[Value])
             self.Library:UpdateColorsUsingRegistry()
