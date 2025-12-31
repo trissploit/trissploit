@@ -5051,6 +5051,8 @@ do
             Visible = Info.Visible,
 
             Type = "Dropdown",
+            
+            _ScrollConnection = nil,
         }
 
         local Holder = New("Frame", {
@@ -5124,76 +5126,6 @@ do
             Parent = Display,
         })
 
-        -- content clip and inner label for marquee scrolling when text is too long
-        local ContentClip = New("Frame", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromScale(0, 0),
-            Size = UDim2.new(1, -20, 1, 0),
-            Parent = Display,
-            ClipsDescendants = true,
-        })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 4),
-            Parent = ContentClip,
-        })
-
-        local InnerLabel = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(0, 0),
-            Position = UDim2.fromOffset(0, 0),
-            Text = "",
-            TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Center,
-            TextColor3 = "FontColor",
-            FontFace = "Font",
-            Parent = ContentClip,
-        })
-
-        local marquee = { conn = nil, offset = 0, speed = 40, textW = 0, availW = 0 }
-        local function stopMarquee()
-            if marquee.conn and marquee.conn.Connected then
-                marquee.conn:Disconnect()
-            end
-            marquee.conn = nil
-            marquee.offset = 0
-            InnerLabel.Position = UDim2.fromOffset(0, 0)
-        end
-        local function startMarquee()
-            if marquee.conn then
-                return
-            end
-            marquee.conn = Library:GiveSignal(RunService.RenderStepped:Connect(function(dt)
-                if Library.Unloaded then return end
-                marquee.offset = marquee.offset + marquee.speed * dt
-                if marquee.offset > (marquee.textW + 40) then
-                    marquee.offset = 0
-                end
-                InnerLabel.Position = UDim2.fromOffset(math.floor(-marquee.offset), 0)
-            end))
-        end
-        local function updateMarquee()
-            -- measure text width
-            local text = InnerLabel.Text or ""
-            local X, Y = Library:GetTextBounds(text, Library.Scheme.Font, InnerLabel.TextSize)
-            marquee.textW = math.ceil(X)
-            marquee.availW = math.max(0, ContentClip.AbsoluteSize.X)
-            InnerLabel.Size = UDim2.fromOffset(marquee.textW, ContentClip.AbsoluteSize.Y)
-
-            if marquee.textW > marquee.availW then
-                startMarquee()
-            else
-                stopMarquee()
-            end
-        end
-
-        -- update marquee when display size or text changes
-        ContentClip:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            pcall(updateMarquee)
-        end)
-
-
         local SearchBox
         if Info.Searchable then
             SearchBox = New("TextBox", {
@@ -5222,13 +5154,23 @@ do
             end,
             2,
             function(Active: boolean)
-                if InnerLabel then
-                    InnerLabel.TextTransparency = (Active and SearchBox) and 1 or 0
-                else
-                    Display.TextTransparency = (Active and SearchBox) and 1 or 0
-                end
+                Display.TextTransparency = (Active and SearchBox) and 1 or 0
                 ArrowImage.ImageTransparency = Active and 0 or 0.5
                 ArrowImage.Rotation = Active and 180 or 0
+                
+                -- Stop scrolling when menu is open
+                if Active and Dropdown._ScrollConnection then
+                    Dropdown._ScrollConnection:Disconnect()
+                    Dropdown._ScrollConnection = nil
+                    local scrollLabel = Display:FindFirstChild("ScrollingText")
+                    if scrollLabel then
+                        scrollLabel:Destroy()
+                    end
+                elseif not Active then
+                    -- Resume scrolling when menu closes
+                    Dropdown:Display()
+                end
+                
                 if SearchBox then
                     SearchBox.Text = ""
                     SearchBox.Visible = Active
@@ -5259,12 +5201,7 @@ do
             end
 
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
-            -- use inner label transparency when present
-            if InnerLabel then
-                InnerLabel.TextTransparency = Dropdown.Disabled and 0.8 or 0
-            else
-                Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
-            end
+            Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
             ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
         end
 
@@ -5292,8 +5229,95 @@ do
                 end
             end
 
-            InnerLabel.Text = (Str == "" and "---" or Str)
-            pcall(updateMarquee)
+            -- Stop any existing scroll
+            if Dropdown._ScrollConnection then
+                Dropdown._ScrollConnection:Disconnect()
+                Dropdown._ScrollConnection = nil
+            end
+
+            -- Check if text is too long
+            local maxWidth = Display.AbsoluteSize.X - 32 -- account for padding and arrow
+            local textWidth = Library:GetTextBounds(Str, Display.FontFace, Display.TextSize)
+            
+            if textWidth > maxWidth and Str ~= "" then
+                -- Text is too long, enable scrolling
+                Display.Text = Str
+                Display.TextXAlignment = Enum.TextXAlignment.Left
+                Display.ClipsDescendants = true
+                
+                local startTime = tick()
+                local scrollSpeed = 20 -- pixels per second
+                local pauseDuration = 1.5 -- pause at each end
+                
+                Dropdown._ScrollConnection = RunService.RenderStepped:Connect(function()
+                    if not Display or not Display.Parent then
+                        if Dropdown._ScrollConnection then
+                            Dropdown._ScrollConnection:Disconnect()
+                            Dropdown._ScrollConnection = nil
+                        end
+                        return
+                    end
+                    
+                    local elapsed = tick() - startTime
+                    local overflow = textWidth - maxWidth
+                    local cycleDuration = (overflow / scrollSpeed) * 2 + pauseDuration * 2
+                    local phase = (elapsed % cycleDuration) / cycleDuration
+                    
+                    local offset = 0
+                    if phase < 0.25 then
+                        -- paused at start
+                        offset = 0
+                    elseif phase < 0.5 then
+                        -- scrolling left
+                        local scrollPhase = (phase - 0.25) / 0.25
+                        offset = -overflow * scrollPhase
+                    elseif phase < 0.75 then
+                        -- paused at end
+                        offset = -overflow
+                    else
+                        -- scrolling right
+                        local scrollPhase = (phase - 0.75) / 0.25
+                        offset = -overflow * (1 - scrollPhase)
+                    end
+                    
+                    Display.TextXAlignment = Enum.TextXAlignment.Left
+                    -- Use a TextLabel child for smoother scrolling
+                    if not Display:FindFirstChild("ScrollingText") then
+                        local ScrollLabel = New("TextLabel", {
+                            Name = "ScrollingText",
+                            BackgroundTransparency = 1,
+                            Size = UDim2.fromScale(1, 1),
+                            Text = Str,
+                            TextSize = 14,
+                            TextXAlignment = Enum.TextXAlignment.Left,
+                            Parent = Display,
+                        })
+                        New("UIPadding", {
+                            PaddingLeft = UDim.new(0, 8),
+                            Parent = ScrollLabel,
+                        })
+                    end
+                    
+                    local scrollLabel = Display:FindFirstChild("ScrollingText")
+                    if scrollLabel then
+                        scrollLabel.Position = UDim2.fromOffset(offset, 0)
+                        scrollLabel.Text = Str
+                    end
+                end)
+            else
+                -- Text fits, no scrolling needed
+                if #Str > 25 then
+                    Str = Str:sub(1, 22) .. "..."
+                end
+                Display.Text = (Str == "" and "---" or Str)
+                Display.ClipsDescendants = false
+                
+                -- Remove scrolling label if it exists
+                local scrollLabel = Display:FindFirstChild("ScrollingText")
+                if scrollLabel then
+                    scrollLabel:Destroy()
+                end
+            end
         end
 
         function Dropdown:OnChanged(Func)
@@ -5503,6 +5527,13 @@ do
             Dropdown.Visible = Visible
 
             Holder.Visible = Dropdown.Visible
+            
+            -- Stop scrolling when hidden
+            if not Visible and Dropdown._ScrollConnection then
+                Dropdown._ScrollConnection:Disconnect()
+                Dropdown._ScrollConnection = nil
+            end
+            
             Groupbox:Resize()
         end
 
