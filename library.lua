@@ -5343,7 +5343,7 @@ do
                         scrollLabel = New("TextLabel", {
                             Name = "ScrollingText",
                             BackgroundTransparency = 1,
-                            Position = UDim2.fromOffset(paddingLeft, 0),
+                            Position = UDim2.fromOffset(0, 0),
                             Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y),
                             Text = Str,
                             TextSize = Display.TextSize,
@@ -5358,8 +5358,8 @@ do
                     scrollLabel.Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y)
                     scrollLabel.Text = Str
                     scrollLabel.FontFace = fontForMeasure
-                    -- Position includes left padding (paddingLeft px) plus animated offset
-                    scrollLabel.Position = UDim2.fromOffset(math.floor(paddingLeft + relOffset), 0)
+                    -- Position is relative to Display's inner content (UIPadding applies left padding), apply animated offset only
+                    scrollLabel.Position = UDim2.fromOffset(math.floor(relOffset), 0)
                 end)
             else
                 -- Text fits, no scrolling needed
