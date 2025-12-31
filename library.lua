@@ -5214,27 +5214,43 @@ do
             end,
             2,
             function(Active: boolean)
-                Display.TextTransparency = (Active and SearchBox) and 1 or 0
-                ArrowImage.ImageTransparency = Active and 0 or 0.5
-                ArrowImage.Rotation = Active and 180 or 0
-                
-                -- Stop scrolling when menu is open
-                if Active and Dropdown._ScrollConnection then
-                    Dropdown._ScrollConnection:Disconnect()
-                    Dropdown._ScrollConnection = nil
-                    local scrollLabel = Display:FindFirstChild("ScrollingText", true)
-                    if scrollLabel then
-                        scrollLabel:Destroy()
+                    Display.TextTransparency = (Active and SearchBox) and 1 or 0
+                    ArrowImage.ImageTransparency = Active and 0 or 0.5
+                    ArrowImage.Rotation = Active and 180 or 0
+
+                    -- When opening the menu, show the old-style "With <selection>" display
+                    if Active and not SearchBox then
+                        -- Stop scrolling and clear any scrolling label
+                        if Dropdown._ScrollConnection then
+                            Dropdown._ScrollConnection:Disconnect()
+                            Dropdown._ScrollConnection = nil
+                        end
+                        local scrollLabel = Display:FindFirstChild("ScrollingText", true)
+                        if scrollLabel then
+                            scrollLabel:Destroy()
+                        end
+
+                        local withText = FormatDisplayText()
+                        if withText == "" then
+                            withText = "---"
+                        else
+                            if #withText > 25 then
+                                withText = withText:sub(1, 22) .. "..."
+                            end
+                        end
+
+                        Display.Text = "With " .. withText
+                        Display.TextXAlignment = Enum.TextXAlignment.Left
+                        Display.ClipsDescendants = false
+                    elseif not Active then
+                        -- Resume scrolling when menu closes
+                        Dropdown:Display()
                     end
-                elseif not Active then
-                    -- Resume scrolling when menu closes
-                    Dropdown:Display()
-                end
-                
-                if SearchBox then
-                    SearchBox.Text = ""
-                    SearchBox.Visible = Active
-                end
+
+                    if SearchBox then
+                        SearchBox.Text = ""
+                        SearchBox.Visible = Active
+                    end
             end
         )
         Dropdown.Menu = MenuTable
