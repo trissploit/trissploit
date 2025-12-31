@@ -5122,6 +5122,7 @@ do
             Size = UDim2.new(1, 0, 0, 21),
             Text = "---",
             TextSize = 14,
+            FontFace = Library.Scheme.Font,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Holder,
         })
@@ -5308,7 +5309,7 @@ do
             local fontForMeasure = Display.FontFace or Library.Scheme.Font
             local textWidth = Library:GetTextBounds(Str, fontForMeasure, Display.TextSize)
             
-            if textWidth > maxWidth and Str ~= "" then
+            if Library.ScrollingDropdown and textWidth > maxWidth and Str ~= "" then
                 -- Text is too long, enable scrolling
                 Display.Text = ""
                 Display.TextXAlignment = Enum.TextXAlignment.Left
@@ -5370,11 +5371,32 @@ do
                     scrollLabel.Position = UDim2.fromOffset(math.floor(relOffset), 0)
                 end)
             else
-                -- Text fits, no scrolling needed
+                -- Text fits or scrolling disabled; ensure old (non-scrolling) mode shows ellipses and fits
                 local displayStr = Str
-                if #displayStr > 25 then
-                    displayStr = displayStr:sub(1, 22) .. "..."
+                local fontForMeasure = Display.FontFace or Library.Scheme.Font
+                if not Library.ScrollingDropdown and textWidth > maxWidth and displayStr ~= "" then
+                    local ell = "..."
+                    local low, high = 0, #displayStr
+                    local best = nil
+                    while low <= high do
+                        local mid = math.floor((low + high) / 2)
+                        local s = displayStr:sub(1, mid) .. ell
+                        local w = Library:GetTextBounds(s, fontForMeasure, Display.TextSize)
+                        if w <= maxWidth then
+                            best = s
+                            low = mid + 1
+                        else
+                            high = mid - 1
+                        end
+                    end
+
+                    displayStr = best or (displayStr:sub(1, 1) .. ell)
+                else
+                    if #displayStr > 25 then
+                        displayStr = displayStr:sub(1, 22) .. "..."
+                    end
                 end
+
                 Display.Text = (displayStr == "" and "---" or displayStr)
                 Display.ClipsDescendants = false
                 -- Remove scrolling label if it exists anywhere under Display
