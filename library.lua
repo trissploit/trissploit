@@ -5124,6 +5124,76 @@ do
             Parent = Display,
         })
 
+        -- content clip and inner label for marquee scrolling when text is too long
+        local ContentClip = New("Frame", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromScale(0, 0),
+            Size = UDim2.new(1, -20, 1, 0),
+            Parent = Display,
+            ClipsDescendants = true,
+        })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 4),
+            Parent = ContentClip,
+        })
+
+        local InnerLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromOffset(0, 0),
+            Position = UDim2.fromOffset(0, 0),
+            Text = "",
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            TextColor3 = "FontColor",
+            FontFace = "Font",
+            Parent = ContentClip,
+        })
+
+        local marquee = { conn = nil, offset = 0, speed = 40, textW = 0, availW = 0 }
+        local function stopMarquee()
+            if marquee.conn and marquee.conn.Connected then
+                marquee.conn:Disconnect()
+            end
+            marquee.conn = nil
+            marquee.offset = 0
+            InnerLabel.Position = UDim2.fromOffset(0, 0)
+        end
+        local function startMarquee()
+            if marquee.conn then
+                return
+            end
+            marquee.conn = Library:GiveSignal(RunService.RenderStepped:Connect(function(dt)
+                if Library.Unloaded then return end
+                marquee.offset = marquee.offset + marquee.speed * dt
+                if marquee.offset > (marquee.textW + 40) then
+                    marquee.offset = 0
+                end
+                InnerLabel.Position = UDim2.fromOffset(math.floor(-marquee.offset), 0)
+            end))
+        end
+        local function updateMarquee()
+            -- measure text width
+            local text = InnerLabel.Text or ""
+            local X, Y = Library:GetTextBounds(text, Library.Scheme.Font, InnerLabel.TextSize)
+            marquee.textW = math.ceil(X)
+            marquee.availW = math.max(0, ContentClip.AbsoluteSize.X)
+            InnerLabel.Size = UDim2.fromOffset(marquee.textW, ContentClip.AbsoluteSize.Y)
+
+            if marquee.textW > marquee.availW then
+                startMarquee()
+            else
+                stopMarquee()
+            end
+        end
+
+        -- update marquee when display size or text changes
+        ContentClip:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            pcall(updateMarquee)
+        end)
+
+
         local SearchBox
         if Info.Searchable then
             SearchBox = New("TextBox", {
@@ -5152,7 +5222,11 @@ do
             end,
             2,
             function(Active: boolean)
-                Display.TextTransparency = (Active and SearchBox) and 1 or 0
+                if InnerLabel then
+                    InnerLabel.TextTransparency = (Active and SearchBox) and 1 or 0
+                else
+                    Display.TextTransparency = (Active and SearchBox) and 1 or 0
+                end
                 ArrowImage.ImageTransparency = Active and 0 or 0.5
                 ArrowImage.Rotation = Active and 180 or 0
                 if SearchBox then
@@ -5185,7 +5259,12 @@ do
             end
 
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
-            Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
+            -- use inner label transparency when present
+            if InnerLabel then
+                InnerLabel.TextTransparency = Dropdown.Disabled and 0.8 or 0
+            else
+                Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
+            end
             ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
         end
 
@@ -5213,11 +5292,8 @@ do
                 end
             end
 
-            if #Str > 25 then
-                Str = Str:sub(1, 22) .. "..."
-            end
-
-            Display.Text = (Str == "" and "---" or Str)
+            InnerLabel.Text = (Str == "" and "---" or Str)
+            pcall(updateMarquee)
         end
 
         function Dropdown:OnChanged(Func)
