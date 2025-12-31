@@ -5265,29 +5265,30 @@ do
             ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
         end
 
+        local function FormatDisplayText()
+            local s = ""
+            if Info.Multi then
+                for _, Value in pairs(Dropdown.Values) do
+                    if Dropdown.Value[Value] then
+                        s = s .. (Info.FormatDisplayValue and tostring(Info.FormatDisplayValue(Value)) or tostring(Value)) .. ", "
+                    end
+                end
+                s = s:sub(1, #s - 2)
+            else
+                s = Dropdown.Value and tostring(Dropdown.Value) or ""
+                if s ~= "" and Info.FormatDisplayValue then
+                    s = tostring(Info.FormatDisplayValue(s))
+                end
+            end
+            return s
+        end
+
         function Dropdown:Display()
             if Library.Unloaded then
                 return
             end
 
-            local Str = ""
-
-            if Info.Multi then
-                for _, Value in pairs(Dropdown.Values) do
-                    if Dropdown.Value[Value] then
-                        Str = Str
-                            .. (Info.FormatDisplayValue and tostring(Info.FormatDisplayValue(Value)) or tostring(Value))
-                            .. ", "
-                    end
-                end
-
-                Str = Str:sub(1, #Str - 2)
-            else
-                Str = Dropdown.Value and tostring(Dropdown.Value) or ""
-                if Str ~= "" and Info.FormatDisplayValue then
-                    Str = tostring(Info.FormatDisplayValue(Str))
-                end
-            end
+            local Str = FormatDisplayText()
 
             -- Stop any existing scroll
             if Dropdown._ScrollConnection then
@@ -5366,13 +5367,13 @@ do
                 end)
             else
                 -- Text fits, no scrolling needed
-                if #Str > 25 then
-                    Str = Str:sub(1, 22) .. "..."
+                local displayStr = Str
+                if #displayStr > 25 then
+                    displayStr = displayStr:sub(1, 22) .. "..."
                 end
-                Display.Text = (Str == "" and "---" or Str)
+                Display.Text = (displayStr == "" and "---" or displayStr)
                 Display.ClipsDescendants = false
-                
-                -- Remove scrolling label if it exists
+                -- Remove scrolling label if it exists anywhere under Display
                 local scrollLabel = Display:FindFirstChild("ScrollingText", true)
                 if scrollLabel then
                     scrollLabel:Destroy()
