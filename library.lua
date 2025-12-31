@@ -196,6 +196,7 @@ local Library = {
     MinSize = Vector2.new(480, 360),
     DPIScale = 1,
     CornerRadius = 4,
+    ScrollingDropdown = true,
 
     IsLightTheme = false,
     Scheme = {
@@ -5166,25 +5167,28 @@ do
         })
         -- Ensure arrow is drawn above scrolling text
         ArrowImage.ZIndex = Display.ZIndex + 2
-        -- Create a left-aligned clipping frame to contain scrolling text so it never reaches the arrow
-        local ScrollMask = New("Frame", {
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            Position = UDim2.fromOffset(0, 0),
-            Size = UDim2.fromOffset(math.max(0, Display.AbsoluteSize.X - 24), Display.AbsoluteSize.Y),
-            ZIndex = Display.ZIndex,
-            Name = "ScrollMask",
-            Parent = Display,
-            ClipsDescendants = true,
-        })
-        -- Keep ScrollMask sized to leave room for the arrow + some padding
-        Display:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if ScrollMask and ScrollMask.Parent then
-                local arrowW = (ArrowImage and ArrowImage.AbsoluteSize and ArrowImage.AbsoluteSize.X) or 16
-                local pad = 8
-                ScrollMask.Size = UDim2.fromOffset(math.max(0, Display.AbsoluteSize.X - (arrowW + pad)), Display.AbsoluteSize.Y)
-            end
-        end)
+        -- Optionally create a left-aligned clipping frame to contain scrolling text so it never reaches the arrow
+        local ScrollMask = nil
+        if Library.ScrollingDropdown then
+            ScrollMask = New("Frame", {
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                Position = UDim2.fromOffset(0, 0),
+                Size = UDim2.fromOffset(math.max(0, Display.AbsoluteSize.X - 24), Display.AbsoluteSize.Y),
+                ZIndex = Display.ZIndex,
+                Name = "ScrollMask",
+                Parent = Display,
+                ClipsDescendants = true,
+            })
+            -- Keep ScrollMask sized to leave room for the arrow + some padding
+            Display:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                if ScrollMask and ScrollMask.Parent then
+                    local arrowW = (ArrowImage and ArrowImage.AbsoluteSize and ArrowImage.AbsoluteSize.X) or 16
+                    local pad = 8
+                    ScrollMask.Size = UDim2.fromOffset(math.max(0, Display.AbsoluteSize.X - (arrowW + pad)), Display.AbsoluteSize.Y)
+                end
+            end)
+        end
 
         local SearchBox
         if Info.Searchable then
@@ -5214,43 +5218,27 @@ do
             end,
             2,
             function(Active: boolean)
-                    Display.TextTransparency = (Active and SearchBox) and 1 or 0
-                    ArrowImage.ImageTransparency = Active and 0 or 0.5
-                    ArrowImage.Rotation = Active and 180 or 0
-
-                    -- When opening the menu, show the old-style "With <selection>" display
-                    if Active and not SearchBox then
-                        -- Stop scrolling and clear any scrolling label
-                        if Dropdown._ScrollConnection then
-                            Dropdown._ScrollConnection:Disconnect()
-                            Dropdown._ScrollConnection = nil
-                        end
-                        local scrollLabel = Display:FindFirstChild("ScrollingText", true)
-                        if scrollLabel then
-                            scrollLabel:Destroy()
-                        end
-
-                        local withText = FormatDisplayText()
-                        if withText == "" then
-                            withText = "---"
-                        else
-                            if #withText > 25 then
-                                withText = withText:sub(1, 22) .. "..."
-                            end
-                        end
-
-                        Display.Text = "With " .. withText
-                        Display.TextXAlignment = Enum.TextXAlignment.Left
-                        Display.ClipsDescendants = false
-                    elseif not Active then
-                        -- Resume scrolling when menu closes
-                        Dropdown:Display()
+                Display.TextTransparency = (Active and SearchBox) and 1 or 0
+                ArrowImage.ImageTransparency = Active and 0 or 0.5
+                ArrowImage.Rotation = Active and 180 or 0
+                
+                -- Stop scrolling when menu is open
+                if Active and Dropdown._ScrollConnection then
+                    Dropdown._ScrollConnection:Disconnect()
+                    Dropdown._ScrollConnection = nil
+                    local scrollLabel = Display:FindFirstChild("ScrollingText", true)
+                    if scrollLabel then
+                        scrollLabel:Destroy()
                     end
-
-                    if SearchBox then
-                        SearchBox.Text = ""
-                        SearchBox.Visible = Active
-                    end
+                elseif not Active then
+                    -- Resume scrolling when menu closes
+                    Dropdown:Display()
+                end
+                
+                if SearchBox then
+                    SearchBox.Text = ""
+                    SearchBox.Visible = Active
+                end
             end
         )
         Dropdown.Menu = MenuTable
