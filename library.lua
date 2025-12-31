@@ -101,90 +101,90 @@ do
 
         local AssetID = string.format("rbxassetid://%s", AssetData.RobloxId)
 
-        if getcustomasset then
-            local Success, NewID = pcall(getcustomasset, AssetData.Path)
+            if textWidth > maxWidth and Str ~= "" then
+                -- Text is too long, enable scrolling inside a clipped inner container
+                Display.Text = ""
+                Display.TextXAlignment = Enum.TextXAlignment.Left
 
-            if Success and NewID then
-                AssetID = NewID
-            end
-        end
+                -- Create or update inner clip container that defines visible text area (exactly up to arrow)
+                local innerName = "ScrollingClip"
+                local innerClip = Display:FindFirstChild(innerName)
+                if not innerClip then
+                    innerClip = New("Frame", {
+                        Name = innerName,
+                        BackgroundTransparency = 1,
+                        Position = UDim2.fromOffset(paddingLeft, 0),
+                        Size = UDim2.fromOffset(maxWidth, Display.AbsoluteSize.Y),
+                        ClipsDescendants = true,
+                        ZIndex = Display.ZIndex,
+                        Parent = Display,
+                    })
+                else
+                    innerClip.Position = UDim2.fromOffset(paddingLeft, 0)
+                    innerClip.Size = UDim2.fromOffset(maxWidth, Display.AbsoluteSize.Y)
+                end
 
-        AssetData.Id = AssetID
-        return AssetID
-    end
+                local startTime = tick()
+                local scrollSpeed = 20 -- pixels per second
+                local pauseDuration = 0.5 -- pause at each end
 
-    function CustomImageManager.DownloadAsset(AssetName: string, ForceRedownload: boolean?)
-        if not getcustomasset or not writefile or not isfile then
-            return false, "missing functions"
-        end
+                -- Ensure any previous scroll connection is cleaned
+                if Dropdown._ScrollConnection then
+                    Dropdown._ScrollConnection:Disconnect()
+                    Dropdown._ScrollConnection = nil
+                end
 
-        local AssetData = CustomImageManagerAssets[AssetName]
+                Dropdown._ScrollConnection = RunService.RenderStepped:Connect(function()
+                    if not Display or not Display.Parent or not innerClip or not innerClip.Parent then
+                        if Dropdown._ScrollConnection then
+                            Dropdown._ScrollConnection:Disconnect()
+                            Dropdown._ScrollConnection = nil
+                        end
+                        return
+                    end
 
-        RecursiveCreatePath(AssetData.Path, true)
+                    local elapsed = tick() - startTime
+                    local overflow = textWidth - maxWidth
+                    local cycleDuration = (overflow / scrollSpeed) * 2 + pauseDuration * 2
+                    local phase = (elapsed % cycleDuration) / cycleDuration
 
-        if ForceRedownload ~= true and isfile(AssetData.Path) then
-            return true, nil
-        end
+                    local relOffset = 0
+                    if phase < 0.25 then
+                        relOffset = 0
+                    elseif phase < 0.5 then
+                        local scrollPhase = (phase - 0.25) / 0.25
+                        relOffset = -overflow * scrollPhase
+                    elseif phase < 0.75 then
+                        relOffset = -overflow
+                    else
+                        local scrollPhase = (phase - 0.75) / 0.25
+                        relOffset = -overflow * (1 - scrollPhase)
+                    end
 
-        local success, errorMessage = pcall(function()
-            writefile(AssetData.Path, game:HttpGet(AssetData.URL))
-        end)
+                    -- Create or update scrollLabel inside innerClip
+                    local scrollLabel = innerClip:FindFirstChild("ScrollingText")
+                    if not scrollLabel then
+                        scrollLabel = New("TextLabel", {
+                            Name = "ScrollingText",
+                            BackgroundTransparency = 1,
+                            Position = UDim2.fromOffset(0, 0),
+                            Size = UDim2.fromOffset(math.ceil(textWidth), innerClip.AbsoluteSize.Y),
+                            Text = Str,
+                            TextSize = Display.TextSize,
+                            TextXAlignment = Enum.TextXAlignment.Left,
+                            TextYAlignment = Enum.TextYAlignment.Center,
+                            FontFace = fontForMeasure,
+                            ZIndex = innerClip.ZIndex,
+                            Parent = innerClip,
+                        })
+                    end
 
-        return success, errorMessage
-    end
-
-    for AssetName, _ in CustomImageManagerAssets do
-        CustomImageManager.DownloadAsset(AssetName)
-    end
-end
-
-local Library = {
-    LocalPlayer = LocalPlayer,
-    DevicePlatform = nil,
-    IsMobile = false,
-    IsRobloxFocused = true,
-
-    ScreenGui = nil,
-
-    SearchText = "",
-    Searching = false,
-    GlobalSearch = false,
-    LastSearchTab = nil,
-
-    ActiveTab = nil,
-    Tabs = {},
-    DependencyBoxes = {},
-
-    KeybindFrame = nil,
-    KeybindContainer = nil,
-    KeybindToggles = {},
-
-    Notifications = {},
-
-    ToggleKeybind = Enum.KeyCode.RightControl,
-    TweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-    NotifyTweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-
-    Toggled = false,
-    Unloaded = false,
-    Watermark = false,
-    CurrentWindowTitle = "",
-    WatermarkFields = {
-        Name = true,
-        FPS = true,
-        Ping = true,
-        Executor = false,
-    },
-
-    Labels = Labels,
-    Buttons = Buttons,
-    Toggles = Toggles,
-    Options = Options,
-
-    NotifySide = "Right",
-    ShowCustomCursor = true,
-    ForceCheckbox = false,
-    ShowToggleFrameInKeybinds = true,
+                    scrollLabel.Size = UDim2.fromOffset(math.ceil(textWidth), innerClip.AbsoluteSize.Y)
+                    scrollLabel.Text = Str
+                    scrollLabel.FontFace = fontForMeasure
+                    -- Position is relative to innerClip; apply animated offset
+                    scrollLabel.Position = UDim2.fromOffset(math.floor(relOffset), 0)
+                end)
     NotifyOnError = false,
 
     CantDragForced = false,
@@ -5153,7 +5153,35 @@ do
             Parent = Display,
         })
 
-        -- (dropdown arrow removed)
+        local ArrowImage = New("ImageLabel", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            Image = ArrowIcon and ArrowIcon.Url or "",
+            ImageColor3 = "FontColor",
+            ImageRectOffset = ArrowIcon and ArrowIcon.ImageRectOffset or Vector2.zero,
+            ImageRectSize = ArrowIcon and ArrowIcon.ImageRectSize or Vector2.zero,
+            ImageTransparency = 0.5,
+            Position = UDim2.fromScale(1, 0.5),
+            Size = UDim2.fromOffset(16, 16),
+            Parent = Display,
+        })
+        -- Ensure arrow is drawn above scrolling text (we'll create a mask under the arrow)
+        ArrowImage.ZIndex = Display.ZIndex + 2
+        -- Mask frame to hide scrolling text under the arrow area
+        local ArrowMask = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundColor3 = "MainColor",
+            BorderSizePixel = 0,
+            Position = UDim2.fromScale(1, 0.5),
+            Size = UDim2.fromOffset(24, Display.AbsoluteSize.Y),
+            ZIndex = Display.ZIndex + 1,
+            Parent = Display,
+        })
+        -- keep mask in sync with display size
+        Display:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            if ArrowMask and ArrowMask.Parent then
+                ArrowMask.Size = UDim2.fromOffset((ArrowImage and ArrowImage.AbsoluteSize.X or 16) + 8, Display.AbsoluteSize.Y)
+            end
+        end)
 
         local SearchBox
         if Info.Searchable then
@@ -5184,6 +5212,8 @@ do
             2,
             function(Active: boolean)
                 Display.TextTransparency = (Active and SearchBox) and 1 or 0
+                ArrowImage.ImageTransparency = Active and 0 or 0.5
+                ArrowImage.Rotation = Active and 180 or 0
                 
                 -- Stop scrolling when menu is open
                 if Active and Dropdown._ScrollConnection then
@@ -5229,6 +5259,7 @@ do
 
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
             Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
+            ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
         end
 
         function Dropdown:Display()
@@ -5262,9 +5293,10 @@ do
             end
 
             -- Check if text is too long. Reserve space for arrow and padding.
+            local arrowWidth = (ArrowImage and ArrowImage.AbsoluteSize and ArrowImage.AbsoluteSize.X) or 16
             local paddingLeft = 8
             local paddingRight = 8
-            local maxWidth = math.max(0, Display.AbsoluteSize.X - paddingLeft - paddingRight)
+            local maxWidth = math.max(0, Display.AbsoluteSize.X - arrowWidth - paddingLeft - paddingRight)
             local fontForMeasure = Display.FontFace or Library.Scheme.Font
             local textWidth = Library:GetTextBounds(Str, fontForMeasure, Display.TextSize)
             
