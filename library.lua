@@ -5377,7 +5377,6 @@ do
             table.clear(Buttons)
 
             local Count = 0
-            local firstSelectedOffset = nil
             for _, Value in pairs(Values) do
                 if SearchBox and not tostring(Value):lower():match(SearchBox.Text:lower()) then
                     continue
@@ -5463,21 +5462,10 @@ do
                 Table:UpdateButton()
                 Dropdown:Display()
 
-                -- if this option is selected, record its offset for scrolling into view
-                if Selected and not firstSelectedOffset then
-                    firstSelectedOffset = (Count - 1) * (21 * Library.DPIScale)
-                end
-
                 Buttons[Button] = Table
             end
 
             Dropdown:RecalculateListSize(Count)
-            -- if the menu is currently open, scroll to the first selected value so it is visible
-            pcall(function()
-                if firstSelectedOffset and MenuTable and MenuTable.Menu and MenuTable.Active then
-                    MenuTable.Menu.CanvasPosition = Vector2.new(0, math.max(0, firstSelectedOffset - 8))
-                end
-            end)
         end
 
         function Dropdown:SetValue(Value)
