@@ -5164,6 +5164,8 @@ do
             Size = UDim2.fromOffset(16, 16),
             Parent = Display,
         })
+        -- Ensure arrow is drawn above scrolling text
+        ArrowImage.ZIndex = Display.ZIndex + 2
 
         local SearchBox
         if Info.Searchable then
@@ -5274,8 +5276,11 @@ do
                 Dropdown._ScrollConnection = nil
             end
 
-            -- Check if text is too long
-            local maxWidth = Display.AbsoluteSize.X - 32 -- account for padding and arrow
+            -- Check if text is too long. Reserve space for arrow and padding.
+            local arrowWidth = (ArrowImage and ArrowImage.AbsoluteSize and ArrowImage.AbsoluteSize.X) or 16
+            local paddingLeft = 8
+            local paddingRight = 8
+            local maxWidth = math.max(0, Display.AbsoluteSize.X - arrowWidth - paddingLeft - paddingRight)
             local fontForMeasure = Display.FontFace or Library.Scheme.Font
             local textWidth = Library:GetTextBounds(Str, fontForMeasure, Display.TextSize)
             
@@ -5287,7 +5292,7 @@ do
 
                 local startTime = tick()
                 local scrollSpeed = 20 -- pixels per second
-                local pauseDuration = 1.5 -- pause at each end
+                local pauseDuration = 2 -- pause at each end (start delay)
 
                 Dropdown._ScrollConnection = RunService.RenderStepped:Connect(function()
                     if not Display or not Display.Parent then
@@ -5322,11 +5327,13 @@ do
                         scrollLabel = New("TextLabel", {
                             Name = "ScrollingText",
                             BackgroundTransparency = 1,
-                            Position = UDim2.fromOffset(8, 0),
+                            Position = UDim2.fromOffset(paddingLeft, 0),
                             Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y),
                             Text = Str,
                             TextSize = Display.TextSize,
                             TextXAlignment = Enum.TextXAlignment.Left,
+                            TextYAlignment = Enum.TextYAlignment.Center,
+                            FontFace = fontForMeasure,
                             ZIndex = Display.ZIndex + 1,
                             Parent = Display,
                         })
@@ -5334,8 +5341,9 @@ do
 
                     scrollLabel.Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y)
                     scrollLabel.Text = Str
-                    -- Position includes left padding (8px)
-                    scrollLabel.Position = UDim2.fromOffset(math.floor(8 + relOffset), 0)
+                    scrollLabel.FontFace = fontForMeasure
+                    -- Position includes left padding (paddingLeft px) plus animated offset
+                    scrollLabel.Position = UDim2.fromOffset(math.floor(paddingLeft + relOffset), 0)
                 end)
             else
                 -- Text fits, no scrolling needed
