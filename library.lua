@@ -5164,8 +5164,24 @@ do
             Size = UDim2.fromOffset(16, 16),
             Parent = Display,
         })
-        -- Ensure arrow is drawn above scrolling text
+        -- Ensure arrow is drawn above scrolling text (we'll create a mask under the arrow)
         ArrowImage.ZIndex = Display.ZIndex + 2
+        -- Mask frame to hide scrolling text under the arrow area
+        local ArrowMask = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundColor3 = "MainColor",
+            BorderSizePixel = 0,
+            Position = UDim2.fromScale(1, 0.5),
+            Size = UDim2.fromOffset(24, Display.AbsoluteSize.Y),
+            ZIndex = Display.ZIndex + 1,
+            Parent = Display,
+        })
+        -- keep mask in sync with display size
+        Display:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            if ArrowMask and ArrowMask.Parent then
+                ArrowMask.Size = UDim2.fromOffset((ArrowImage and ArrowImage.AbsoluteSize.X or 16) + 8, Display.AbsoluteSize.Y)
+            end
+        end)
 
         local SearchBox
         if Info.Searchable then
@@ -5292,7 +5308,7 @@ do
 
                 local startTime = tick()
                 local scrollSpeed = 20 -- pixels per second
-                local pauseDuration = 2 -- pause at each end (start delay)
+                local pauseDuration = 0.5 -- pause at each end (start delay)
 
                 Dropdown._ScrollConnection = RunService.RenderStepped:Connect(function()
                     if not Display or not Display.Parent then
@@ -5334,7 +5350,7 @@ do
                             TextXAlignment = Enum.TextXAlignment.Left,
                             TextYAlignment = Enum.TextYAlignment.Center,
                             FontFace = fontForMeasure,
-                            ZIndex = Display.ZIndex + 1,
+                            ZIndex = Display.ZIndex,
                             Parent = Display,
                         })
                     end
