@@ -1093,10 +1093,26 @@ end
 function Library:UpdateColorsUsingRegistry()
     for Instance, Properties in pairs(Library.Registry) do
         for Property, ColorIdx in pairs(Properties) do
+            local val = nil
             if typeof(ColorIdx) == "string" then
-                Instance[Property] = Library.Scheme[ColorIdx]
+                val = Library.Scheme[ColorIdx]
             elseif typeof(ColorIdx) == "function" then
-                Instance[Property] = ColorIdx()
+                val = ColorIdx()
+            end
+
+            if Property == "FontFace" and val ~= nil then
+                if typeof(val) == "string" then
+                    local ok, enumVal = pcall(function() return Enum.Font[val] end)
+                    if ok and enumVal then
+                        val = Font.fromEnum(enumVal)
+                    end
+                elseif typeof(val) == "EnumItem" then
+                    val = Font.fromEnum(val)
+                end
+            end
+
+            if val ~= nil then
+                Instance[Property] = val
             end
         end
     end
@@ -1254,7 +1270,18 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
         elseif k ~= "Text" and (Library.Scheme[v] or typeof(v) == "function") then
             -- me when Red in dropdowns break things (temp fix - or perm idk if deivid will do something about this)
             ThemeProperties[k] = v
-            Instance[k] = Library.Scheme[v] or v()
+            local assigned = Library.Scheme[v] or v()
+            if k == "FontFace" then
+                if typeof(assigned) == "string" then
+                    local ok, enumVal = pcall(function() return Enum.Font[assigned] end)
+                    if ok and enumVal then
+                        assigned = Font.fromEnum(enumVal)
+                    end
+                elseif typeof(assigned) == "EnumItem" then
+                    assigned = Font.fromEnum(assigned)
+                end
+            end
+            Instance[k] = assigned
             continue
         end
 
@@ -1265,6 +1292,18 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
             elseif k == "TextSize" then
                 DPIProperties[k] = v
                 v = ApplyTextScale(v)
+            end
+        end
+
+        -- Ensure FontFace properties get a proper Font object, not a string
+        if k == "FontFace" then
+            if typeof(v) == "string" then
+                local ok, enumVal = pcall(function() return Enum.Font[v] end)
+                if ok and enumVal then
+                    v = Font.fromEnum(enumVal)
+                end
+            elseif typeof(v) == "EnumItem" then
+                v = Font.fromEnum(v)
             end
         end
 
@@ -5237,7 +5276,8 @@ do
 
             -- Check if text is too long
             local maxWidth = Display.AbsoluteSize.X - 32 -- account for padding and arrow
-            local textWidth = Library:GetTextBounds(Str, Display.FontFace, Display.TextSize)
+            local fontForMeasure = Display.FontFace or Library.Scheme.Font
+            local textWidth = Library:GetTextBounds(Str, fontForMeasure, Display.TextSize)
             
             if textWidth > maxWidth and Str ~= "" then
                 -- Text is too long, enable scrolling
@@ -6446,6 +6486,11 @@ end
 function Library:SetFont(FontFace)
     if typeof(FontFace) == "EnumItem" then
         FontFace = Font.fromEnum(FontFace)
+    elseif typeof(FontFace) == "string" then
+        local ok, enumVal = pcall(function() return Enum.Font[FontFace] end)
+        if ok and enumVal then
+            FontFace = Font.fromEnum(enumVal)
+        end
     end
 
     Library.Scheme.Font = FontFace
