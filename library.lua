@@ -222,6 +222,57 @@ local Library = {
     ImageManager = CustomImageManager,
 }
 
+    -- Watch for changes to ScrollingDropdown and disable scrolling for existing dropdowns when toggled
+    do
+        local raw_newindex = rawset
+        local orig_mt = getmetatable(Library) or {}
+        orig_mt.__newindex = function(t, k, v)
+            raw_newindex(t, k, v)
+            if k == "ScrollingDropdown" then
+                -- iterate existing options and clean up any scrolling UI
+                for _, opt in pairs(Options) do
+                    if type(opt) == "table" and opt.Type == "Dropdown" then
+                        -- disconnect active scroll connection
+                        if opt._ScrollConnection then
+                            pcall(function()
+                                if opt._ScrollConnection.Connected then
+                                    opt._ScrollConnection:Disconnect()
+                                end
+                            end)
+                            opt._ScrollConnection = nil
+                        end
+
+                        -- destroy any scrolling labels or masks under the holder/display
+                        if opt.Holder and opt.Holder.Parent then
+                            pcall(function()
+                                for _, d in pairs(opt.Holder:GetDescendants()) do
+                                    if d and d.Name == "ScrollingText" then
+                                        d:Destroy()
+                                    elseif d and d.Name == "ScrollMask" then
+                                        d:Destroy()
+                                    end
+                                end
+                            end)
+                        end
+
+                        -- refresh display to show non-scrolling text
+                        pcall(function()
+                            if opt and type(opt) == "table" and type(opt.Display) ~= "nil" then
+                                if type(opt.Display) == "table" or type(opt.Display) == "userdata" or type(opt.Display) == "Instance" then
+                                    -- call the dropdown's Display method safely
+                                    pcall(function() opt:Display() end)
+                                else
+                                    pcall(function() if opt.Display then opt.Display = opt.Display end end)
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+        setmetatable(Library, orig_mt)
+    end
+
 if RunService:IsStudio() then
     if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
         Library.IsMobile = true
