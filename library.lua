@@ -5184,9 +5184,14 @@ do
             2,
             function(Active: boolean)
                 Display.TextTransparency = (Active and SearchBox) and 1 or 0
-                ArrowImage.ImageTransparency = Active and 0 or 0.5
-                ArrowImage.Rotation = Active and 180 or 0
-                
+
+                -- When opening, refresh buttons to show selected state
+                if Active then
+                    for _, btnTbl in pairs(Buttons) do
+                        pcall(function() btnTbl:UpdateButton() end)
+                    end
+                end
+
                 -- Stop scrolling when menu is open
                 if Active and Dropdown._ScrollConnection then
                     Dropdown._ScrollConnection:Disconnect()
@@ -5199,7 +5204,7 @@ do
                     -- Resume scrolling when menu closes
                     Dropdown:Display()
                 end
-                
+
                 if SearchBox then
                     SearchBox.Text = ""
                     SearchBox.Visible = Active
@@ -5231,7 +5236,6 @@ do
 
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
             Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
-            ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
         end
 
         function Dropdown:Display()
