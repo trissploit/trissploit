@@ -5153,35 +5153,7 @@ do
             Parent = Display,
         })
 
-        local ArrowImage = New("ImageLabel", {
-            AnchorPoint = Vector2.new(1, 0.5),
-            Image = ArrowIcon and ArrowIcon.Url or "",
-            ImageColor3 = "FontColor",
-            ImageRectOffset = ArrowIcon and ArrowIcon.ImageRectOffset or Vector2.zero,
-            ImageRectSize = ArrowIcon and ArrowIcon.ImageRectSize or Vector2.zero,
-            ImageTransparency = 0.5,
-            Position = UDim2.fromScale(1, 0.5),
-            Size = UDim2.fromOffset(16, 16),
-            Parent = Display,
-        })
-        -- Ensure arrow is drawn above scrolling text (we'll create a mask under the arrow)
-        ArrowImage.ZIndex = Display.ZIndex + 2
-        -- Mask frame to hide scrolling text under the arrow area
-        local ArrowMask = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0.5),
-            BackgroundColor3 = "MainColor",
-            BorderSizePixel = 0,
-            Position = UDim2.fromScale(1, 0.5),
-            Size = UDim2.fromOffset(24, Display.AbsoluteSize.Y),
-            ZIndex = Display.ZIndex + 1,
-            Parent = Display,
-        })
-        -- keep mask in sync with display size
-        Display:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if ArrowMask and ArrowMask.Parent then
-                ArrowMask.Size = UDim2.fromOffset((ArrowImage and ArrowImage.AbsoluteSize.X or 16) + 8, Display.AbsoluteSize.Y)
-            end
-        end)
+        -- (dropdown arrow removed)
 
         local SearchBox
         if Info.Searchable then
@@ -5293,10 +5265,9 @@ do
             end
 
             -- Check if text is too long. Reserve space for arrow and padding.
-            local arrowWidth = (ArrowImage and ArrowImage.AbsoluteSize and ArrowImage.AbsoluteSize.X) or 16
             local paddingLeft = 8
             local paddingRight = 8
-            local maxWidth = math.max(0, Display.AbsoluteSize.X - arrowWidth - paddingLeft - paddingRight)
+            local maxWidth = math.max(0, Display.AbsoluteSize.X - paddingLeft - paddingRight)
             local fontForMeasure = Display.FontFace or Library.Scheme.Font
             local textWidth = Library:GetTextBounds(Str, fontForMeasure, Display.TextSize)
             
@@ -5406,6 +5377,7 @@ do
             table.clear(Buttons)
 
             local Count = 0
+            local firstSelectedOffset = nil
             for _, Value in pairs(Values) do
                 if SearchBox and not tostring(Value):lower():match(SearchBox.Text:lower()) then
                     continue
@@ -5491,10 +5463,21 @@ do
                 Table:UpdateButton()
                 Dropdown:Display()
 
+                -- if this option is selected, record its offset for scrolling into view
+                if Selected and not firstSelectedOffset then
+                    firstSelectedOffset = (Count - 1) * (21 * Library.DPIScale)
+                end
+
                 Buttons[Button] = Table
             end
 
             Dropdown:RecalculateListSize(Count)
+            -- if the menu is currently open, scroll to the first selected value so it is visible
+            pcall(function()
+                if firstSelectedOffset and MenuTable and MenuTable.Menu and MenuTable.Active then
+                    MenuTable.Menu.CanvasPosition = Vector2.new(0, math.max(0, firstSelectedOffset - 8))
+                end
+            end)
         end
 
         function Dropdown:SetValue(Value)
