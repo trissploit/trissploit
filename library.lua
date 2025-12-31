@@ -456,7 +456,7 @@ local Templates = {
         Default = "None",
         DefaultModifiers = {},
         Mode = "Toggle",
-        Modes = { "Always", "Toggle", "Hold" },
+        Modes = { "Always", "Toggle", "Hold", "Click" },
         SyncToggleState = false,
 
         Callback = function() end,
@@ -2875,6 +2875,13 @@ do
                     return
                 end
 
+                if KeyPicker.Mode == "Click" then
+                    -- invoke callbacks but do not change toggle state
+                    Library:SafeCallback(KeyPicker.Callback, KeyPicker.Toggled)
+                    Library:SafeCallback(KeyPicker.Clicked, KeyPicker.Toggled)
+                    return
+                end
+
                 KeyPicker.Toggled = not KeyPicker.Toggled
                 KeyPicker:DoClick()
             end)
@@ -3226,6 +3233,12 @@ do
             elseif KeyPicker.Mode == "Press" then
                 if HoldingKey then
                     KeyPicker:DoClick()
+                end
+            elseif KeyPicker.Mode == "Click" then
+                if HoldingKey then
+                    -- call callbacks but do not change toggled state
+                    Library:SafeCallback(KeyPicker.Callback, KeyPicker.Toggled)
+                    Library:SafeCallback(KeyPicker.Clicked, KeyPicker.Toggled)
                 end
             end
 
