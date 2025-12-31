@@ -49,7 +49,7 @@ do
     ThemeManager.BuiltInThemes = {
         ["Default"] = {
             1,
-            { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", BackgroundColor = "0f0f0f", OutlineColor = "282828", AccentGradientStart = "9b7aff", AccentGradientEnd = "5a32cc" },
+            { FontColor = "ffffff", MainColor = "0e0e0e", AccentColor = "ffffff", BackgroundColor = "111111", OutlineColor = "2f2f2f", AccentGradientStart = "ffffff", AccentGradientEnd = "868686", FontFace = "Code" },
         },
         ["BBot"] = {
             2,
@@ -386,7 +386,7 @@ do
                 getgenv().watermark = v
             end
         end })
-        groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Fields", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
+        groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Settings", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
             local fields = { Name = false, FPS = false, Ping = false, Executor = false }
             if typeof(v) == "table" then
                 for key, val in pairs(v) do
