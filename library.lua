@@ -101,90 +101,90 @@ do
 
         local AssetID = string.format("rbxassetid://%s", AssetData.RobloxId)
 
-            if textWidth > maxWidth and Str ~= "" then
-                -- Text is too long, enable scrolling inside a clipped inner container
-                Display.Text = ""
-                Display.TextXAlignment = Enum.TextXAlignment.Left
+        if getcustomasset then
+            local Success, NewID = pcall(getcustomasset, AssetData.Path)
 
-                -- Create or update inner clip container that defines visible text area (exactly up to arrow)
-                local innerName = "ScrollingClip"
-                local innerClip = Display:FindFirstChild(innerName)
-                if not innerClip then
-                    innerClip = New("Frame", {
-                        Name = innerName,
-                        BackgroundTransparency = 1,
-                        Position = UDim2.fromOffset(paddingLeft, 0),
-                        Size = UDim2.fromOffset(maxWidth, Display.AbsoluteSize.Y),
-                        ClipsDescendants = true,
-                        ZIndex = Display.ZIndex,
-                        Parent = Display,
-                    })
-                else
-                    innerClip.Position = UDim2.fromOffset(paddingLeft, 0)
-                    innerClip.Size = UDim2.fromOffset(maxWidth, Display.AbsoluteSize.Y)
-                end
+            if Success and NewID then
+                AssetID = NewID
+            end
+        end
 
-                local startTime = tick()
-                local scrollSpeed = 20 -- pixels per second
-                local pauseDuration = 0.5 -- pause at each end
+        AssetData.Id = AssetID
+        return AssetID
+    end
 
-                -- Ensure any previous scroll connection is cleaned
-                if Dropdown._ScrollConnection then
-                    Dropdown._ScrollConnection:Disconnect()
-                    Dropdown._ScrollConnection = nil
-                end
+    function CustomImageManager.DownloadAsset(AssetName: string, ForceRedownload: boolean?)
+        if not getcustomasset or not writefile or not isfile then
+            return false, "missing functions"
+        end
 
-                Dropdown._ScrollConnection = RunService.RenderStepped:Connect(function()
-                    if not Display or not Display.Parent or not innerClip or not innerClip.Parent then
-                        if Dropdown._ScrollConnection then
-                            Dropdown._ScrollConnection:Disconnect()
-                            Dropdown._ScrollConnection = nil
-                        end
-                        return
-                    end
+        local AssetData = CustomImageManagerAssets[AssetName]
 
-                    local elapsed = tick() - startTime
-                    local overflow = textWidth - maxWidth
-                    local cycleDuration = (overflow / scrollSpeed) * 2 + pauseDuration * 2
-                    local phase = (elapsed % cycleDuration) / cycleDuration
+        RecursiveCreatePath(AssetData.Path, true)
 
-                    local relOffset = 0
-                    if phase < 0.25 then
-                        relOffset = 0
-                    elseif phase < 0.5 then
-                        local scrollPhase = (phase - 0.25) / 0.25
-                        relOffset = -overflow * scrollPhase
-                    elseif phase < 0.75 then
-                        relOffset = -overflow
-                    else
-                        local scrollPhase = (phase - 0.75) / 0.25
-                        relOffset = -overflow * (1 - scrollPhase)
-                    end
+        if ForceRedownload ~= true and isfile(AssetData.Path) then
+            return true, nil
+        end
 
-                    -- Create or update scrollLabel inside innerClip
-                    local scrollLabel = innerClip:FindFirstChild("ScrollingText")
-                    if not scrollLabel then
-                        scrollLabel = New("TextLabel", {
-                            Name = "ScrollingText",
-                            BackgroundTransparency = 1,
-                            Position = UDim2.fromOffset(0, 0),
-                            Size = UDim2.fromOffset(math.ceil(textWidth), innerClip.AbsoluteSize.Y),
-                            Text = Str,
-                            TextSize = Display.TextSize,
-                            TextXAlignment = Enum.TextXAlignment.Left,
-                            TextYAlignment = Enum.TextYAlignment.Center,
-                            FontFace = fontForMeasure,
-                            ZIndex = innerClip.ZIndex,
-                            Parent = innerClip,
-                        })
-                    end
+        local success, errorMessage = pcall(function()
+            writefile(AssetData.Path, game:HttpGet(AssetData.URL))
+        end)
 
-                    scrollLabel.Size = UDim2.fromOffset(math.ceil(textWidth), innerClip.AbsoluteSize.Y)
-                    scrollLabel.Text = Str
-                    scrollLabel.FontFace = fontForMeasure
-                    -- Position is relative to innerClip; apply animated offset
-                    scrollLabel.Position = UDim2.fromOffset(math.floor(relOffset), 0)
-                end)
+        return success, errorMessage
+    end
+
+    for AssetName, _ in CustomImageManagerAssets do
+        CustomImageManager.DownloadAsset(AssetName)
+    end
+end
+
+local Library = {
+    LocalPlayer = LocalPlayer,
+    DevicePlatform = nil,
+    IsMobile = false,
+    IsRobloxFocused = true,
+
+    ScreenGui = nil,
+
+    SearchText = "",
+    Searching = false,
+    GlobalSearch = false,
+    LastSearchTab = nil,
+
+    ActiveTab = nil,
+    Tabs = {},
+    DependencyBoxes = {},
+
+    KeybindFrame = nil,
+    KeybindContainer = nil,
+    KeybindToggles = {},
+
+    Notifications = {},
+
+    ToggleKeybind = Enum.KeyCode.RightControl,
+    TweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    NotifyTweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+
+    Toggled = false,
+    Unloaded = false,
+    Watermark = false,
+    CurrentWindowTitle = "",
+    WatermarkFields = {
+        Name = true,
+        FPS = true,
+        Ping = true,
+        Executor = false,
+    },
+
+    Labels = Labels,
+    Buttons = Buttons,
+    Toggles = Toggles,
+    Options = Options,
+
+    NotifySide = "Right",
+    ShowCustomCursor = true,
+    ForceCheckbox = false,
+    ShowToggleFrameInKeybinds = true,
     NotifyOnError = false,
 
     CantDragForced = false,
@@ -5164,22 +5164,24 @@ do
             Size = UDim2.fromOffset(16, 16),
             Parent = Display,
         })
-        -- Ensure arrow is drawn above scrolling text (we'll create a mask under the arrow)
+        -- Ensure arrow is drawn above scrolling text
         ArrowImage.ZIndex = Display.ZIndex + 2
-        -- Mask frame to hide scrolling text under the arrow area
-        local ArrowMask = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0.5),
-            BackgroundColor3 = "MainColor",
+        -- Create a left-aligned clipping frame to contain scrolling text so it never reaches the arrow
+        local ScrollMask = New("Frame", {
+            BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Position = UDim2.fromScale(1, 0.5),
-            Size = UDim2.fromOffset(24, Display.AbsoluteSize.Y),
-            ZIndex = Display.ZIndex + 1,
+            Position = UDim2.fromOffset(0, 0),
+            Size = UDim2.fromOffset(math.max(0, Display.AbsoluteSize.X - 24), Display.AbsoluteSize.Y),
+            ZIndex = Display.ZIndex,
             Parent = Display,
+            ClipsDescendants = true,
         })
-        -- keep mask in sync with display size
+        -- Keep ScrollMask sized to leave room for the arrow + some padding
         Display:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if ArrowMask and ArrowMask.Parent then
-                ArrowMask.Size = UDim2.fromOffset((ArrowImage and ArrowImage.AbsoluteSize.X or 16) + 8, Display.AbsoluteSize.Y)
+            if ScrollMask and ScrollMask.Parent then
+                local arrowW = (ArrowImage and ArrowImage.AbsoluteSize and ArrowImage.AbsoluteSize.X) or 16
+                local pad = 8
+                ScrollMask.Size = UDim2.fromOffset(math.max(0, Display.AbsoluteSize.X - (arrowW + pad)), Display.AbsoluteSize.Y)
             end
         end)
 
@@ -5337,8 +5339,8 @@ do
                         relOffset = -overflow * (1 - scrollPhase)
                     end
 
-                    -- Use a TextLabel child for smoother scrolling; size it to the full text width
-                    local scrollLabel = Display:FindFirstChild("ScrollingText")
+                    -- Use a TextLabel child inside the ScrollMask for smoother scrolling; size it to the full text width
+                    local scrollLabel = ScrollMask:FindFirstChild("ScrollingText")
                     if not scrollLabel then
                         scrollLabel = New("TextLabel", {
                             Name = "ScrollingText",
@@ -5350,15 +5352,15 @@ do
                             TextXAlignment = Enum.TextXAlignment.Left,
                             TextYAlignment = Enum.TextYAlignment.Center,
                             FontFace = fontForMeasure,
-                            ZIndex = Display.ZIndex,
-                            Parent = Display,
+                            ZIndex = ScrollMask.ZIndex + 1,
+                            Parent = ScrollMask,
                         })
                     end
 
                     scrollLabel.Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y)
                     scrollLabel.Text = Str
                     scrollLabel.FontFace = fontForMeasure
-                    -- Position is relative to Display's inner content (UIPadding applies left padding), apply animated offset only
+                    -- Position is relative to ScrollMask; apply animated offset only
                     scrollLabel.Position = UDim2.fromOffset(math.floor(relOffset), 0)
                 end)
             else
