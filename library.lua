@@ -5173,6 +5173,7 @@ do
             Position = UDim2.fromOffset(0, 0),
             Size = UDim2.fromOffset(math.max(0, Display.AbsoluteSize.X - 24), Display.AbsoluteSize.Y),
             ZIndex = Display.ZIndex,
+            Name = "ScrollMask",
             Parent = Display,
             ClipsDescendants = true,
         })
@@ -5482,6 +5483,20 @@ do
                         end
 
                         Table:UpdateButton()
+
+                        -- Cleanup any existing scrolling text before updating display
+                        if Dropdown._ScrollConnection then
+                            Dropdown._ScrollConnection:Disconnect()
+                            Dropdown._ScrollConnection = nil
+                        end
+                        local scrollMaskLocal = Display:FindFirstChild("ScrollMask")
+                        if scrollMaskLocal then
+                            local scrollLabelLocal = scrollMaskLocal:FindFirstChild("ScrollingText")
+                            if scrollLabelLocal then
+                                scrollLabelLocal:Destroy()
+                            end
+                        end
+
                         Dropdown:Display()
 
                         Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
@@ -5517,6 +5532,19 @@ do
                     Dropdown.Value = Value
                 elseif not Value then
                     Dropdown.Value = nil
+                end
+            end
+
+            -- Cleanup scrolling artifacts when value changes (or is cleared)
+            if Dropdown._ScrollConnection then
+                Dropdown._ScrollConnection:Disconnect()
+                Dropdown._ScrollConnection = nil
+            end
+            local scrollMask = Display:FindFirstChild("ScrollMask")
+            if scrollMask then
+                local scrollLabel = scrollMask:FindFirstChild("ScrollingText")
+                if scrollLabel then
+                    scrollLabel:Destroy()
                 end
             end
 
