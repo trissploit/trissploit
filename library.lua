@@ -5222,7 +5222,7 @@ do
                 if Active and Dropdown._ScrollConnection then
                     Dropdown._ScrollConnection:Disconnect()
                     Dropdown._ScrollConnection = nil
-                    local scrollLabel = Display:FindFirstChild("ScrollingText")
+                    local scrollLabel = Display:FindFirstChild("ScrollingText", true)
                     if scrollLabel then
                         scrollLabel:Destroy()
                     end
@@ -5373,7 +5373,7 @@ do
                 Display.ClipsDescendants = false
                 
                 -- Remove scrolling label if it exists
-                local scrollLabel = Display:FindFirstChild("ScrollingText")
+                local scrollLabel = Display:FindFirstChild("ScrollingText", true)
                 if scrollLabel then
                     scrollLabel:Destroy()
                 end
@@ -5489,12 +5489,9 @@ do
                             Dropdown._ScrollConnection:Disconnect()
                             Dropdown._ScrollConnection = nil
                         end
-                        local scrollMaskLocal = Display:FindFirstChild("ScrollMask")
-                        if scrollMaskLocal then
-                            local scrollLabelLocal = scrollMaskLocal:FindFirstChild("ScrollingText")
-                            if scrollLabelLocal then
-                                scrollLabelLocal:Destroy()
-                            end
+                        local scrollLabelAnyLocal = Display:FindFirstChild("ScrollingText", true)
+                        if scrollLabelAnyLocal then
+                            scrollLabelAnyLocal:Destroy()
                         end
 
                         Dropdown:Display()
@@ -5540,12 +5537,9 @@ do
                 Dropdown._ScrollConnection:Disconnect()
                 Dropdown._ScrollConnection = nil
             end
-            local scrollMask = Display:FindFirstChild("ScrollMask")
-            if scrollMask then
-                local scrollLabel = scrollMask:FindFirstChild("ScrollingText")
-                if scrollLabel then
-                    scrollLabel:Destroy()
-                end
+            local scrollLabelAny = Display:FindFirstChild("ScrollingText", true)
+            if scrollLabelAny then
+                scrollLabelAny:Destroy()
             end
 
             Dropdown:Display()
