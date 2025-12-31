@@ -5281,14 +5281,14 @@ do
             
             if textWidth > maxWidth and Str ~= "" then
                 -- Text is too long, enable scrolling
-                Display.Text = Str
+                Display.Text = ""
                 Display.TextXAlignment = Enum.TextXAlignment.Left
                 Display.ClipsDescendants = true
-                
+
                 local startTime = tick()
                 local scrollSpeed = 20 -- pixels per second
                 local pauseDuration = 1.5 -- pause at each end
-                
+
                 Dropdown._ScrollConnection = RunService.RenderStepped:Connect(function()
                     if not Display or not Display.Parent then
                         if Dropdown._ScrollConnection then
@@ -5297,52 +5297,45 @@ do
                         end
                         return
                     end
-                    
+
                     local elapsed = tick() - startTime
                     local overflow = textWidth - maxWidth
                     local cycleDuration = (overflow / scrollSpeed) * 2 + pauseDuration * 2
                     local phase = (elapsed % cycleDuration) / cycleDuration
-                    
-                    local offset = 0
+
+                    local relOffset = 0
                     if phase < 0.25 then
-                        -- paused at start
-                        offset = 0
+                        relOffset = 0
                     elseif phase < 0.5 then
-                        -- scrolling left
                         local scrollPhase = (phase - 0.25) / 0.25
-                        offset = -overflow * scrollPhase
+                        relOffset = -overflow * scrollPhase
                     elseif phase < 0.75 then
-                        -- paused at end
-                        offset = -overflow
+                        relOffset = -overflow
                     else
-                        -- scrolling right
                         local scrollPhase = (phase - 0.75) / 0.25
-                        offset = -overflow * (1 - scrollPhase)
+                        relOffset = -overflow * (1 - scrollPhase)
                     end
-                    
-                    Display.TextXAlignment = Enum.TextXAlignment.Left
-                    -- Use a TextLabel child for smoother scrolling
-                    if not Display:FindFirstChild("ScrollingText") then
-                        local ScrollLabel = New("TextLabel", {
+
+                    -- Use a TextLabel child for smoother scrolling; size it to the full text width
+                    local scrollLabel = Display:FindFirstChild("ScrollingText")
+                    if not scrollLabel then
+                        scrollLabel = New("TextLabel", {
                             Name = "ScrollingText",
                             BackgroundTransparency = 1,
-                            Size = UDim2.fromScale(1, 1),
+                            Position = UDim2.fromOffset(8, 0),
+                            Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y),
                             Text = Str,
-                            TextSize = 14,
+                            TextSize = Display.TextSize,
                             TextXAlignment = Enum.TextXAlignment.Left,
+                            ZIndex = Display.ZIndex + 1,
                             Parent = Display,
                         })
-                        New("UIPadding", {
-                            PaddingLeft = UDim.new(0, 8),
-                            Parent = ScrollLabel,
-                        })
                     end
-                    
-                    local scrollLabel = Display:FindFirstChild("ScrollingText")
-                    if scrollLabel then
-                        scrollLabel.Position = UDim2.fromOffset(offset, 0)
-                        scrollLabel.Text = Str
-                    end
+
+                    scrollLabel.Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y)
+                    scrollLabel.Text = Str
+                    -- Position includes left padding (8px)
+                    scrollLabel.Position = UDim2.fromOffset(math.floor(8 + relOffset), 0)
                 end)
             else
                 -- Text fits, no scrolling needed
