@@ -1,5 +1,17 @@
--- TrisESP API - Core ESP rendering engine
--- This file contains all ESP logic and can be loaded separately
+--[[
+    TrisESP - Pure API ESP System
+    
+    No UI - Controlled entirely via getgenv().TrisESP
+    
+    Load via: loadstring(game:HttpGet("YOUR_URL_HERE"))()
+    
+    Quick Start:
+        getgenv().TrisESP.Settings.Enabled = true
+        getgenv().TrisESP.Settings.Boxes = true
+        getgenv().TrisESP.TrackObjectsByName("Diamond")
+    
+    See bottom of file for full API documentation.
+--]]
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -8,10 +20,9 @@ local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
+local renderConn
 
--- ESP state
 local ESPObjects = {}
-local ObjectESPConfigs = {}
 local RainbowHue = 0
 
 local ESPSettings = {
@@ -20,37 +31,40 @@ local ESPSettings = {
     TextSize = 14,
     
     -- Filtering settings
-    FilterMode = "All",
-    WhitelistedPlayers = {},
-    BlacklistedPlayers = {},
-    WhitelistedEntities = {},
+    FilterMode = "All", -- "All", "Whitelist", "Blacklist"
+    WhitelistedPlayers = {}, -- Player names to show when FilterMode = "Whitelist"
+    BlacklistedPlayers = {}, -- Player names to hide when FilterMode = "Blacklist"
+    -- Extended whitelist/blacklist that can store Instances (folders, models) or tables
+    WhitelistedEntities = {}, -- keys can be Instances or nested tables
     BlacklistedEntities = {},
     
-    -- Team ESP settings (auto-hides teammates when enabled)
-    TeamCheckEnabled = true,
-    TeamDetectionMode = "Auto",
-    CustomTeamFolder = nil,
-    CustomTeamFunction = nil,
+    -- Team ESP settings
+    -- When TeamCheckEnabled = true, teammates are automatically hidden (no separate toggle)
+    TeamCheckEnabled = false, -- When enabled, auto-hides teammates
+    TeamDetectionMode = "Auto", -- "Auto", "RobloxTeams", "Folder", "Custom"
+    CustomTeamFolder = nil, -- Folder instance for folder-based teams
+    CustomTeamFunction = nil, -- Custom function(player1, player2) -> boolean (same team?)
     
-    -- Modular text entries
+    -- Modular text entries (easy to add more)
     TextEntries = {
         Name = { Enabled = true, Order = 1 },
         Health = { Enabled = true, Order = 2 },
         Distance = { Enabled = true, Order = 3 },
+        -- Add more here: Weapon = { Enabled = false, Order = 4 }, etc.
     },
     
     -- Equipped tool display
     EquippedEnabled = false,
-    EquippedMode = "Text",
-    EquippedPosition = "Inline",
-    EquippedImage = "",
+    EquippedMode = "Text", -- "Text" or "Image"
+    EquippedPosition = "Inline", -- "Inline" or "Bottom"
+    EquippedImage = "", -- image data or asset id for image mode
     
     -- Legacy compatibility
     ShowName = true,
     ShowHealthText = true,
     ShowDistance = true,
     
-    -- Rainbow settings
+    -- Rainbow settings (per element)
     RainbowSpeed = 1,
     
     -- Box settings
@@ -101,6 +115,9 @@ local ESPSettings = {
     NameColor = Color3.fromRGB(255, 255, 255)
 }
 
+-- Object ESP configurations (for non-players)
+local ObjectESPConfigs = {}
+
 local AllowedParts = {
     Head = true, HumanoidRootPart = true,
     Torso = true, ["Left Arm"] = true, ["Right Arm"] = true, ["Left Leg"] = true, ["Right Leg"] = true,
@@ -110,9 +127,6 @@ local AllowedParts = {
     LeftUpperLeg = true, LeftLowerLeg = true, LeftFoot = true,
     RightUpperLeg = true, RightLowerLeg = true, RightFoot = true
 }
-
-local GRADIENT_SEGMENTS = 600
-local BOX_LINE_SEGMENTS = 100
 
 -- Utility functions
 local function getRainbowColor(offset)
@@ -142,16 +156,19 @@ local function isSameTeam(player1, player2)
     
     local mode = ESPSettings.TeamDetectionMode
     
+    -- Custom function takes priority
     if mode == "Custom" and ESPSettings.CustomTeamFunction then
         return ESPSettings.CustomTeamFunction(player1, player2)
     end
     
+    -- Folder-based teams
     if mode == "Folder" and ESPSettings.CustomTeamFolder then
         local folder = ESPSettings.CustomTeamFolder
         if folder and folder:IsA("Folder") then
             local char1 = player1.Character
             local char2 = player2.Character
             if char1 and char2 then
+                -- Check if both characters are in the same child folder
                 for _, teamFolder in ipairs(folder:GetChildren()) do
                     if teamFolder:IsA("Folder") then
                         local has1 = teamFolder:IsAncestorOf(char1)
@@ -164,6 +181,7 @@ local function isSameTeam(player1, player2)
         return false
     end
     
+    -- Roblox built-in Teams or Auto mode
     if mode == "RobloxTeams" or mode == "Auto" then
         if player1.Team and player2.Team then
             return player1.Team == player2.Team
@@ -176,17 +194,24 @@ end
 local function shouldShowPlayer(player)
     if not player or player == LocalPlayer then return false end
     
-    -- Team check - automatically hide teammates when enabled
-    if ESPSettings.TeamCheckEnabled and isSameTeam(player, LocalPlayer) then
-        return false
+    -- Team check - when enabled, automatically hide teammates
+    if ESPSettings.TeamCheckEnabled then
+        if isSameTeam(player, LocalPlayer) then
+            return false -- Hide teammates
+        end
     end
     
     local function matchesEntityList(list)
+        -- list contains keys that may be strings or Instances
         if not list then return false end
+        -- name match
         if list[player.Name] then return true end
+        -- instance matches (folders/models/players)
         for ent, _ in pairs(list) do
             if typeof(ent) == "Instance" then
+                -- direct player instance
                 if ent:IsA("Player") and ent == player then return true end
+                -- character/model/folder containment: check if player's character is descendant
                 if player.Character and ent:IsAncestorOf(player.Character) then return true end
             end
         end
@@ -195,15 +220,17 @@ local function shouldShowPlayer(player)
 
     local filterMode = ESPSettings.FilterMode
     if filterMode == "Whitelist" then
+        -- whitelist must explicitly match by name or instance/folder
         if matchesEntityList(ESPSettings.WhitelistedPlayers) then return true end
         if matchesEntityList(ESPSettings.WhitelistedEntities) then return true end
         return false
     elseif filterMode == "Blacklist" then
+        -- blacklist hides any match
         if matchesEntityList(ESPSettings.BlacklistedPlayers) then return false end
         if matchesEntityList(ESPSettings.BlacklistedEntities) then return false end
         return true
     end
-    return true
+    return true -- "All" mode
 end
 
 local function getScreenRectForCharacter(char)
@@ -230,6 +257,8 @@ local function getScreenRectForCharacter(char)
                     minY = math.min(minY, sp.Y)
                     maxY = math.max(maxY, sp.Y)
                 end
+
+                
             end
         end
     end
@@ -237,6 +266,7 @@ local function getScreenRectForCharacter(char)
     local w = math.max(1, math.floor(maxX - minX))
     local h = math.max(1, math.floor(maxY - minY))
     
+    -- Only filter out extreme edge cases, not valid close-up boxes
     if w < 2 or h < 2 then return end
     if w > vw * 0.95 or h > vh * 0.95 then return end
     
@@ -260,6 +290,7 @@ local function getFallbackRect(char)
     local h = math.max(2, bottomY - topY)
     local w = math.max(2, math.floor(h * 0.6))
     
+    -- Only filter out if taking up almost entire screen
     if w > vw * 0.95 or h > vh * 0.95 then return end
     
     local x = math.floor(hrpPos.X - w / 2)
@@ -286,12 +317,20 @@ local function getObjectRect(obj)
     return { x = sp.X - size/2, y = sp.Y - size/2, w = size, h = size, cx = sp.X, cy = sp.Y, distance = distance, worldPos = pos }
 end
 
+-- NOTE: Drawing library does NOT support native gradients. Segments are the ONLY way.
+-- Using more segments creates smoother appearance.
+-- Use many tiny gradient segments to approximate a smooth blended gradient.
+-- More segments reduce banding; we allocate a high maximum and only use as many as
+-- the box height (1px per segment) to produce a near-continuous vertical blend.
+local GRADIENT_SEGMENTS = 2000
+local BOX_LINE_SEGMENTS = 100
+
 local function createESPObject()
     local espObj = {
         Name = Drawing.new("Text"),
         Tracer = Drawing.new("Line"),
-        BoxLines = {},
-        BoxOutlineLines = {},
+        BoxLines = {},  -- 4 sides with gradient segments
+        BoxOutlineLines = {},  -- outline for each side
         BoxFill = Drawing.new("Square"),
         GradientSegments = {},
         Corners = {
@@ -302,12 +341,13 @@ local function createESPObject()
         },
         HealthBar = Drawing.new("Square"),
         HealthBarOutline = Drawing.new("Square"),
-        HealthBarGradient = {},
+        HealthBarGradient = {},  -- For rainbow gradient on health bar
         Highlight = nil,
         Player = nil,
         IsObject = false
     }
     
+    -- Create health bar gradient segments (for rainbow)
     local HEALTH_GRADIENT_SEGS = 500
     for i = 1, HEALTH_GRADIENT_SEGS do
         local seg = Drawing.new("Square")
@@ -316,6 +356,7 @@ local function createESPObject()
         espObj.HealthBarGradient[i] = seg
     end
     
+    -- Create box line segments for rainbow gradient on box edges
     for side = 1, 4 do
         espObj.BoxLines[side] = {}
         espObj.BoxOutlineLines[side] = {}
@@ -323,44 +364,46 @@ local function createESPObject()
             local line = Drawing.new("Line")
             line.Thickness = 1
             line.Visible = false
-            espObj.BoxLines[side][seg] = line
+                    espObj.BoxLines[side][seg] = line
             
-            local outLine = Drawing.new("Line")
-            outLine.Thickness = ESPSettings.Thickness or 3
-            outLine.Color = ESPSettings.BoxOutlineColor or Color3.new(0, 0, 0)
-            outLine.Visible = false
-            espObj.BoxOutlineLines[side][seg] = outLine
+                    local outLine = Drawing.new("Line")
+                    outLine.Thickness = ESPSettings.Thickness or 3
+                    outLine.Color = ESPSettings.BoxOutlineColor or Color3.new(0, 0, 0)
+                    outLine.Visible = false
+                    espObj.BoxOutlineLines[side][seg] = outLine
         end
     end
     
+    -- Create gradient segments for fill
     for i = 1, GRADIENT_SEGMENTS do
         espObj.GradientSegments[i] = Drawing.new("Square")
         espObj.GradientSegments[i].Filled = true
         espObj.GradientSegments[i].Visible = false
     end
     
-    espObj.EquippedText = Drawing.new("Text")
-    espObj.EquippedText.Center = true
-    espObj.EquippedText.Outline = true
-    espObj.EquippedText.OutlineColor = Color3.new(0,0,0)
-    espObj.EquippedText.Size = ESPSettings.TextSize
-    espObj.EquippedText.Font = 3
-    espObj.EquippedText.Visible = false
-
-    local okImg, img = pcall(function() return Drawing.new("Image") end)
-    if okImg and img then
-        espObj.EquippedImage = img
-        espObj.EquippedImage.Visible = false
-    else
-        espObj.EquippedImage = nil
-    end
     
+            -- Equipped tool display (text + optional image if supported)
+            espObj.EquippedText = Drawing.new("Text")
+            espObj.EquippedText.Center = true
+            espObj.EquippedText.Outline = true
+            espObj.EquippedText.OutlineColor = Color3.new(0,0,0)
+            espObj.EquippedText.Size = ESPSettings.TextSize
+            espObj.EquippedText.Font = 3
+            espObj.EquippedText.Visible = false
+    
+            local okImg, img = pcall(function() return Drawing.new("Image") end)
+            if okImg and img then
+                espObj.EquippedImage = img
+                espObj.EquippedImage.Visible = false
+            else
+                espObj.EquippedImage = nil
+            end
+    -- Outline square for crisp non-rainbow box rendering
     espObj.OutlineSquare = Drawing.new("Square")
     espObj.OutlineSquare.Filled = false
     espObj.OutlineSquare.Visible = false
     espObj.OutlineSquare.Thickness = ESPSettings.Thickness or 3
     espObj.OutlineSquare.Color = ESPSettings.BoxColor or Color3.fromRGB(0,170,255)
-    
     espObj.Name.Center = true
     espObj.Name.Outline = true
     espObj.Name.OutlineColor = Color3.new(0,0,0)
@@ -400,10 +443,14 @@ local function removeESP(espObj)
         for _, line in ipairs(espObj.BoxOutlineLines[side] or {}) do pcall(function() line:Remove() end) end
     end
     pcall(function() espObj.BoxFill:Remove() end)
-    for _, seg in ipairs(espObj.GradientSegments or {}) do pcall(function() seg:Remove() end) end
+    for _, seg in ipairs(espObj.GradientSegments or {}) do
+        pcall(function() seg:Remove() end)
+    end
     pcall(function() espObj.HealthBar:Remove() end)
     pcall(function() espObj.HealthBarOutline:Remove() end)
-    for _, seg in ipairs(espObj.HealthBarGradient or {}) do pcall(function() seg:Remove() end) end
+    for _, seg in ipairs(espObj.HealthBarGradient or {}) do
+        pcall(function() seg:Remove() end)
+    end
     for _, c in ipairs(espObj.Corners) do
         pcall(function() c.Line1:Remove() end)
         pcall(function() c.Line2:Remove() end)
@@ -437,11 +484,12 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
     local segments = espObj.GradientSegments
     local maxSegs = #segments
 
+    -- Use maximum segments for smoothest gradients
     local segCount = math.min(maxSegs, math.max(30, math.floor(rect.h)))
     local segH = rect.h / segCount
 
     for i = 1, segCount do
-        local t = (i - 0.5) / segCount
+        local t = (i - 0.5) / segCount -- normalized 0..1 down the box
         local segColor
         if useRainbow then
             segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
@@ -450,6 +498,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         end
 
         local segY = rect.y + (i - 1) * segH
+        -- No overlap to prevent visible seams with transparency
         segments[i].Size = Vector2.new(math.max(1, math.floor(rect.w)), math.max(1, math.ceil(segH)))
         segments[i].Position = Vector2.new(math.floor(rect.x), math.floor(segY))
         segments[i].Color = segColor
@@ -457,6 +506,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         segments[i].Visible = true
     end
 
+    -- Hide any remaining unused segments
     for i = segCount + 1, maxSegs do
         segments[i].Visible = false
     end
@@ -467,11 +517,13 @@ local function hideGradient(espObj)
 end
 
 local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, baseOffset)
+    -- Draw 4 sides: top, right, bottom, left
+    -- Rainbow gradient goes VERTICALLY DOWN based on Y position
     local sides = {
-        {x, y, x + w, y},
-        {x + w, y, x + w, y + h},
-        {x + w, y + h, x, y + h},
-        {x, y + h, x, y}
+        {x, y, x + w, y},         -- top (horizontal)
+        {x + w, y, x + w, y + h}, -- right (vertical)
+        {x + w, y + h, x, y + h}, -- bottom (horizontal)
+        {x, y + h, x, y}          -- left (vertical)
     }
     
     for sideIdx, side in ipairs(sides) do
@@ -479,6 +531,7 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
         local segCount = #espObj.BoxLines[sideIdx]
         
         for seg = 1, segCount do
+            -- add micro-overlap between segments to prevent gaps
             local eps = 0.002
             local t1 = math.clamp((seg - 1) / segCount - eps, 0, 1)
             local t2 = math.clamp(seg / segCount + eps, 0, 1)
@@ -493,18 +546,22 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
             
             line.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
             line.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
+            -- ensure dynamic thickness follows settings
             line.Thickness = ESPSettings.Thickness or 1
             
             outLine.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
             outLine.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
             
             if useRainbow then
+                -- Color based on Y position (vertical gradient going down)
                 local avgY = (ly1 + ly2) / 2
-                local yProgress = (avgY - y) / math.max(1, h)
+                local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
                 line.Color = getRainbowColor(baseOffset + yProgress * 0.5)
+                -- Hide outline when rainbow to prevent color interference
                 if outLine then outLine.Visible = false end
             else
                 line.Color = baseColor
+                -- Show outline for non-rainbow
                 if outLine then
                     outLine.Color = ESPSettings.BoxOutlineColor
                     outLine.Thickness = ESPSettings.Thickness or 3
@@ -523,66 +580,6 @@ local function hideBoxLines(espObj)
     end
 end
 
--- Health bar outline thickness
-	espObj.HealthBarOutline.Thickness = 2
-	
-	-- Pre-allocate 500 segments for health bar gradient (vertical and horizontal health bars)
-	espObj.HealthBarGradient = {}
-	for i = 1, 500 do
-		espObj.HealthBarGradient[i] = Drawing.new("Square")
-		espObj.HealthBarGradient[i].Filled = true
-		espObj.HealthBarGradient[i].Visible = false
-	end
-	
-	return espObj
-end
-
-local function removeESP(espObj)
-	pcall(function()
-		if espObj.Name then espObj.Name:Remove() end
-		if espObj.Tracer then espObj.Tracer:Remove() end
-		if espObj.BoxFill then espObj.BoxFill:Remove() end
-		if espObj.OutlineSquare then espObj.OutlineSquare:Remove() end
-		for _, segTable in ipairs(espObj.GradSegments or {}) do
-			for _, seg in ipairs(segTable) do pcall(function() seg:Remove() end) end
-		end
-		for side = 1, 4 do
-			for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
-			for _, out in ipairs(espObj.BoxOutlineLines[side] or {}) do pcall(function() out:Remove() end) end
-		end
-		for _, corner in ipairs(espObj.Corners or {}) do
-			if corner.Line1 then corner.Line1:Remove() end
-			if corner.Line2 then corner.Line2:Remove() end
-		end
-		if espObj.EquippedText then espObj.EquippedText:Remove() end
-		if espObj.EquippedImage then espObj.EquippedImage:Remove() end
-		if espObj.HealthBar then espObj.HealthBar:Remove() end
-		if espObj.HealthBarOutline then espObj.HealthBarOutline:Remove() end
-		for _, seg in ipairs(espObj.HealthBarGradient or {}) do pcall(function() seg:Remove() end) end
-		if espObj.Highlight then espObj.Highlight:Destroy() end
-	end)
-end
-
-local function hideESP(espObj)
-	if espObj.Name then espObj.Name.Visible = false end
-	if espObj.Tracer then espObj.Tracer.Visible = false end
-	if espObj.BoxFill then espObj.BoxFill.Visible = false end
-	if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
-	hideGradient(espObj)
-	hideBoxLines(espObj)
-	for _, c in ipairs(espObj.Corners or {}) do 
-		if c.Line1 then c.Line1.Visible = false end
-		if c.Line2 then c.Line2.Visible = false end
-	end
-	if espObj.EquippedText then espObj.EquippedText.Visible = false end
-	if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
-	if espObj.HealthBar then espObj.HealthBar.Visible = false end
-	if espObj.HealthBarOutline then espObj.HealthBarOutline.Visible = false end
-	for _, seg in ipairs(espObj.HealthBarGradient or {}) do seg.Visible = false end
-	if espObj.Highlight then espObj.Highlight.Enabled = false end
-end
-
--- ==================== Main Update Function ====================
 local function updateESP()
 
     for player, espObj in pairs(ESPObjects) do
@@ -854,7 +851,19 @@ local function updateESP()
                 espObj.BoxFill.Visible = false
                 hideGradient(espObj)
                 for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
+                if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
             end
+            else
+                -- ESP disabled - hide all visuals
+                espObj.Name.Visible = false
+                espObj.Tracer.Visible = false
+                hideBoxLines(espObj)
+                espObj.BoxFill.Visible = false
+                hideGradient(espObj)
+                for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
+                if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                if espObj.EquippedText then espObj.EquippedText.Visible = false end
+                if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
             end
 
             -- Health bar
@@ -1019,7 +1028,7 @@ local function removePlayerESP(player)
     ESPObjects[player] = nil
 end
 
--- ==================== Object ESP System ====================
+-- Object ESP System (for non-players)
 local function createObjectESPConfig(name, options)
     options = options or {}
     local config = {
@@ -1176,7 +1185,7 @@ local function updateObjectESP()
     end
 end
 
--- ==================== Main Render Loop ====================
+-- Main render loop
 local function mainUpdate()
     -- advance shared rainbow hue so all rainbow toggles stay in sync
     RainbowHue = (RainbowHue + (ESPSettings.RainbowSpeed or 1) * 0.001) % 1
@@ -1184,23 +1193,38 @@ local function mainUpdate()
     updateObjectESP()
 end
 
-local renderConn
-local function startRenderLoop()
-	if renderConn then renderConn:Disconnect() end
-	renderConn = RunService.RenderStepped:Connect(mainUpdate)
+if renderConn then renderConn:Disconnect() end
+renderConn = RunService.RenderStepped:Connect(mainUpdate)
+
+for _, p in ipairs(Players:GetPlayers()) do addESP(p) end
+Players.PlayerAdded:Connect(addESP)
+Players.PlayerRemoving:Connect(removePlayerESP)
+
+-- ==================== HELPER FUNCTIONS ====================
+-- Helper to enable/disable all player ESP visuals immediately
+local function setGlobalESPEnabled(enabled)
+    ESPSettings.Enabled = enabled
+    for player, espObj in pairs(ESPObjects) do
+        pcall(function()
+            if not enabled then
+                hideESP(espObj)
+            end
+        end)
+    end
 end
 
--- ==================== Player Management ====================
-local function initializePlayers()
-	for _, p in ipairs(Players:GetPlayers()) do addESP(p) end
-	Players.PlayerAdded:Connect(addESP)
-	Players.PlayerRemoving:Connect(removePlayerESP)
-end
-
--- ==================== API Export ====================
-local TrisESP_API = {
-    -- Settings table (shared)
+-- Expose API globally for external scripts
+getgenv().TrisESP = {
+    -- Direct access to settings table - modify any setting directly
+    -- Example: getgenv().TrisESP.Settings.Boxes = true
     Settings = ESPSettings,
+    
+    -- Direct access to object ESP configs
+    -- Example: getgenv().TrisESP.ObjectConfigs["Diamond"].Enabled = false
+    ObjectConfigs = ObjectESPConfigs,
+    
+    -- Enable/disable all ESP immediately
+    SetEnabled = setGlobalESPEnabled,
     
     -- === PLAYER FILTERING ===
     -- Whitelist a player (only show whitelisted players)
@@ -1208,7 +1232,7 @@ local TrisESP_API = {
     WhitelistPlayer = function(playerName)
         -- Accept string, Instance (Player/Folder/Model), or table of such
         if type(playerName) == "table" then
-            for _, v in ipairs(playerName) do TrisESP_API.WhitelistPlayer(v) end
+            for _, v in ipairs(playerName) do getgenv().TrisESP.WhitelistPlayer(v) end
             return
         end
         if typeof(playerName) == "Instance" then
@@ -1225,7 +1249,7 @@ local TrisESP_API = {
     -- Usage: TrisESP.BlacklistPlayer("PlayerName")
     BlacklistPlayer = function(playerName)
         if type(playerName) == "table" then
-            for _, v in ipairs(playerName) do TrisESP_API.BlacklistPlayer(v) end
+            for _, v in ipairs(playerName) do getgenv().TrisESP.BlacklistPlayer(v) end
             return
         end
         if typeof(playerName) == "Instance" then
@@ -1241,7 +1265,7 @@ local TrisESP_API = {
     -- Remove from whitelist
     RemoveWhitelist = function(playerName)
         if type(playerName) == "table" then
-            for _, v in ipairs(playerName) do TrisESP_API.RemoveWhitelist(v) end
+            for _, v in ipairs(playerName) do getgenv().TrisESP.RemoveWhitelist(v) end
             return
         end
         if typeof(playerName) == "Instance" then
@@ -1254,7 +1278,7 @@ local TrisESP_API = {
     -- Remove from blacklist
     RemoveBlacklist = function(playerName)
         if type(playerName) == "table" then
-            for _, v in ipairs(playerName) do TrisESP_API.RemoveBlacklist(v) end
+            for _, v in ipairs(playerName) do getgenv().TrisESP.RemoveBlacklist(v) end
             return
         end
         if typeof(playerName) == "Instance" then
@@ -1271,8 +1295,14 @@ local TrisESP_API = {
     end,
     
     -- === TEAM CONFIGURATION ===
-    -- Set team detection mode
-    -- Usage: TrisESP.SetTeamMode("Folder") or TrisESP.SetTeamMode("RobloxTeams")
+    -- Enable/disable team check (when enabled, teammates are auto-hidden)
+    -- Usage: TrisESP.EnableTeamCheck(true)
+    EnableTeamCheck = function(enabled)
+        ESPSettings.TeamCheckEnabled = enabled
+    end,
+    
+    -- Set team detection mode: "Auto", "RobloxTeams", "Folder", "Custom"
+    -- Usage: TrisESP.SetTeamMode("Folder")
     SetTeamMode = function(mode)
         ESPSettings.TeamDetectionMode = mode
     end,
@@ -1293,11 +1323,6 @@ local TrisESP_API = {
             ESPSettings.CustomTeamFunction = func
             ESPSettings.TeamDetectionMode = "Custom"
         end
-    end,
-    
-    -- Enable/disable team check entirely (auto-hides teammates)
-    EnableTeamCheck = function(enabled)
-        ESPSettings.TeamCheckEnabled = enabled
     end,
     
     -- === TEXT CUSTOMIZATION ===
@@ -1428,62 +1453,125 @@ local TrisESP_API = {
     CreateObjectConfig = createObjectESPConfig,
     AddObject = addObjectToESP,
     RemoveObject = removeObjectFromESP,
-    GetConfigs = function() return ObjectESPConfigs end,
-	
-	-- Tool image mappings
-	ToolImages = {},
-	PlaceToolImages = {},
-	
-	-- Set tool image globally
-	SetToolImage = function(toolName, imageData)
-		if not toolName then return end
-		TrisESP_API.ToolImages[toolName:lower()] = imageData
-	end,
-	
-	RemoveToolImage = function(toolName)
-		if not toolName then return end
-		TrisESP_API.ToolImages[toolName:lower()] = nil
-	end,
-	
-	-- Set per-place tool images
-	SetToolImageForPlace = function(placeId, toolName, imageData)
-		if not placeId or not toolName then return end
-		placeId = tostring(placeId)
-		TrisESP_API.PlaceToolImages[placeId] = TrisESP_API.PlaceToolImages[placeId] or {}
-		TrisESP_API.PlaceToolImages[placeId][toolName:lower()] = imageData
-	end,
-	
-	RemoveToolImageForPlace = function(placeId, toolName)
-		if not placeId or not toolName then return end
-		placeId = tostring(placeId)
-		if TrisESP_API.PlaceToolImages[placeId] then
-			TrisESP_API.PlaceToolImages[placeId][toolName:lower()] = nil
-		end
-	end,
-	
-	-- === INITIALIZATION ===
-	-- Start the ESP rendering
-	Start = function()
-		initializePlayers()
-		startRenderLoop()
-	end,
-	
-	-- Stop the ESP
-	Stop = function()
-		if renderConn then 
-			renderConn:Disconnect() 
-			renderConn = nil
-		end
-		for player, espObj in pairs(ESPObjects) do
-			hideESP(espObj)
-		end
-	end,
-	
-	-- === GLOBAL VARIABLE ACCESS ===
-	-- Direct access to internal tables for advanced users
-	GetESPObjects = function() return ESPObjects end,
-	GetObjectESPConfigs = function() return ObjectESPConfigs end,
+    GetConfigs = function() return ObjectESPConfigs end
 }
 
--- Return API for loadstring usage
-return TrisESP_API
+-- Per-tool image map and helper API
+getgenv().TrisESP.ToolImages = {}
+getgenv().TrisESP.PlaceToolImages = {}
+-- Global tool image
+getgenv().TrisESP.SetToolImage = function(toolName, imageData)
+    if not toolName then return end
+    getgenv().TrisESP.ToolImages[toolName:lower()] = imageData
+end
+getgenv().TrisESP.RemoveToolImage = function(toolName)
+    if not toolName then return end
+    getgenv().TrisESP.ToolImages[toolName:lower()] = nil
+end
+-- Per-place tool images
+getgenv().TrisESP.SetToolImageForPlace = function(placeId, toolName, imageData)
+    if not placeId or not toolName then return end
+    placeId = tostring(placeId)
+    getgenv().TrisESP.PlaceToolImages[placeId] = getgenv().TrisESP.PlaceToolImages[placeId] or {}
+    getgenv().TrisESP.PlaceToolImages[placeId][toolName:lower()] = imageData
+end
+getgenv().TrisESP.RemoveToolImageForPlace = function(placeId, toolName)
+    if not placeId or not toolName then return end
+    placeId = tostring(placeId)
+    if getgenv().TrisESP.PlaceToolImages[placeId] then
+        getgenv().TrisESP.PlaceToolImages[placeId][toolName:lower()] = nil
+    end
+end
+
+--[[
+    ====================== TrisESP API DOCUMENTATION ======================
+    
+    QUICK START:
+        local ESP = getgenv().TrisESP
+        ESP.Settings.Enabled = true
+        ESP.Settings.Boxes = true
+        ESP.Settings.BoxRainbow = true
+    
+    SETTINGS (access via ESP.Settings.SETTING_NAME):
+        Enabled = true/false                    -- Master toggle
+        MaxDistance = 1500                      -- Max render distance
+        TextSize = 14                           -- Text size
+        
+        -- Boxes
+        Boxes = true/false                      -- Enable boxes
+        BoxType = "Square" / "Corner"           -- Box type
+        BoxColor = Color3                       -- Box color
+        BoxRainbow = true/false                 -- Rainbow boxes
+        Thickness = 3                           -- Line thickness
+        BoxFill = true/false                    -- Enable fill
+        BoxFillColor = Color3                   -- Fill color
+        BoxFillRainbow = true/false             -- Rainbow fill
+        BoxFillGradient = true/false            -- Gradient fill
+        BoxFillGradientColor1 = Color3          -- Gradient start
+        BoxFillGradientColor2 = Color3          -- Gradient end
+        BoxFillTransparency = 0.5               -- Fill transparency (0-1)
+        
+        -- Tracers
+        Tracers = true/false                    -- Enable tracers
+        TracerColor = Color3                    -- Tracer color
+        TracerRainbow = true/false              -- Rainbow tracers
+        TracerFrom = "Bottom"/"Top"/"Center"/"Mouse"
+        TracerThickness = 2                     -- Tracer thickness
+        
+        -- Health Bar
+        HealthBarEnabled = true/false           -- Enable health bar
+        HealthBarPosition = "Left"/"Right"/"Top"/"Bottom"
+        HealthBarThickness = 3                  -- Bar thickness
+        HealthBarRainbow = true/false           -- Rainbow health bar
+        HealthBarOutline = true/false           -- Show outline
+        HealthBarOutlineColor = Color3          -- Outline color
+        
+        -- Chams
+        Highlight = true/false                  -- Enable chams
+        GlobalChamColor = Color3                -- Chams color
+        ChamsRainbow = true/false               -- Rainbow chams
+        FillTransparency = 0.5                  -- Fill transparency
+        OutlineTransparency = 0                 -- Outline transparency
+        
+        -- Text
+        ShowName = true/false                   -- Show player names
+        ShowHealthText = true/false             -- Show health text
+        ShowDistance = true/false               -- Show distance
+        NameColor = Color3                      -- Name color
+        NameRainbow = true/false                -- Rainbow names
+        
+        -- Equipped Tool
+        EquippedEnabled = true/false            -- Show equipped tool
+        EquippedMode = "Text" / "Image"         -- Display mode
+        EquippedPosition = "Inline" / "Bottom"  -- Position
+        
+        -- Team (when TeamCheckEnabled = true, teammates are auto-hidden)
+        TeamCheckEnabled = true/false           -- Enable team check
+        TeamDetectionMode = "Auto"/"RobloxTeams"/"Folder"/"Custom"
+        CustomTeamFolder = Folder Instance      -- For Folder mode
+        CustomTeamFunction = function(p1, p2)   -- For Custom mode
+        
+        -- Filtering
+        FilterMode = "All" / "Whitelist" / "Blacklist"
+        
+    OBJECT ESP (access via ESP.ObjectConfigs["name"]):
+        ESP.TrackObjectsByName("Diamond", {Color = Color3.new(1,1,0), Rainbow = true})
+        ESP.TrackFolder(workspace.Items, "Items", {ShowTracer = true})
+        ESP.AddSimpleObjectESP(workspace.Diamond, "Diamond")
+        ESP.ObjectConfigs["Diamond"].Enabled = false  -- Disable category
+    
+    HELPER FUNCTIONS:
+        ESP.SetEnabled(true/false)              -- Toggle all ESP
+        ESP.EnableTeamCheck(true/false)         -- Toggle team check
+        ESP.SetTeamMode("RobloxTeams")          -- Set team detection
+        ESP.SetTeamFolder(folder)               -- Set team folder
+        ESP.SetCustomTeamFunction(func)         -- Set custom team check
+        ESP.WhitelistPlayer("Name")             -- Add to whitelist
+        ESP.BlacklistPlayer("Name")             -- Add to blacklist
+        ESP.SetFilterMode("Whitelist")          -- Set filter mode
+        ESP.AddTextEntry("Label", func, order)  -- Add custom text
+    
+    =========================================================================
+--]]
+
+print("[TrisESP] Loaded successfully - Access via getgenv().TrisESP")
