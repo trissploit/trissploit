@@ -26,8 +26,7 @@ local ESPSettings = {
     WhitelistedEntities = {},
     BlacklistedEntities = {},
     
-    -- Team ESP settings
-    ShowTeammates = true,
+    -- Team ESP settings (auto-hides teammates when enabled)
     TeamCheckEnabled = true,
     TeamDetectionMode = "Auto",
     CustomTeamFolder = nil,
@@ -177,10 +176,9 @@ end
 local function shouldShowPlayer(player)
     if not player or player == LocalPlayer then return false end
     
-    if ESPSettings.TeamCheckEnabled and not ESPSettings.ShowTeammates then
-        if isSameTeam(player, LocalPlayer) then
-            return false
-        end
+    -- Team check - automatically hide teammates when enabled
+    if ESPSettings.TeamCheckEnabled and isSameTeam(player, LocalPlayer) then
+        return false
     end
     
     local function matchesEntityList(list)
@@ -1297,12 +1295,7 @@ local TrisESP_API = {
         end
     end,
     
-    -- Toggle showing teammates
-    ShowTeammates = function(enabled)
-        ESPSettings.ShowTeammates = enabled
-    end,
-    
-    -- Enable/disable team check entirely
+    -- Enable/disable team check entirely (auto-hides teammates)
     EnableTeamCheck = function(enabled)
         ESPSettings.TeamCheckEnabled = enabled
     end,
@@ -1485,6 +1478,11 @@ local TrisESP_API = {
 			hideESP(espObj)
 		end
 	end,
+	
+	-- === GLOBAL VARIABLE ACCESS ===
+	-- Direct access to internal tables for advanced users
+	GetESPObjects = function() return ESPObjects end,
+	GetObjectESPConfigs = function() return ObjectESPConfigs end,
 }
 
 -- Return API for loadstring usage
