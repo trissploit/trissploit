@@ -63,10 +63,13 @@ local ESPSettings = {
     ShowName = true,
     ShowHealthText = true,
     ShowDistance = true,
-    TextESPEnabled = true,
     NamePosition = "Top",
     HealthTextPosition = "Top",
     DistancePosition = "Top",
+    -- Individual rainbow toggles for text elements
+    NameRainbow = false,
+    HealthTextRainbow = false,
+    DistanceRainbow = false,
     
     -- Rainbow settings (per element)
     RainbowSpeed = 1,
@@ -492,6 +495,22 @@ local function createESPObject()
     espObj.Name.Size = ESPSettings.TextSize
     espObj.Name.Font = 3
     espObj.Name.Visible = false
+    -- Separate text objects for Name / Health / Distance (so they can be positioned independently)
+    espObj.HealthText = Drawing.new("Text")
+    espObj.HealthText.Center = true
+    espObj.HealthText.Outline = true
+    espObj.HealthText.OutlineColor = Color3.new(0,0,0)
+    espObj.HealthText.Size = ESPSettings.TextSize
+    espObj.HealthText.Font = 3
+    espObj.HealthText.Visible = false
+
+    espObj.DistanceText = Drawing.new("Text")
+    espObj.DistanceText.Center = true
+    espObj.DistanceText.Outline = true
+    espObj.DistanceText.OutlineColor = Color3.new(0,0,0)
+    espObj.DistanceText.Size = ESPSettings.TextSize
+    espObj.DistanceText.Font = 3
+    espObj.DistanceText.Visible = false
     
     espObj.Tracer.Thickness = ESPSettings.TracerThickness
     espObj.Tracer.Visible = false
@@ -519,6 +538,8 @@ end
 local function removeESP(espObj)
     if not espObj then return end
     pcall(function() espObj.Name:Remove() end)
+    pcall(function() if espObj.HealthText then espObj.HealthText:Remove() end end)
+    pcall(function() if espObj.DistanceText then espObj.DistanceText:Remove() end end)
     pcall(function() espObj.Tracer:Remove() end)
     for side = 1, 4 do
         for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
@@ -545,6 +566,8 @@ end
 
 local function hideESP(espObj)
     espObj.Name.Visible = false
+    if espObj.HealthText then espObj.HealthText.Visible = false end
+    if espObj.DistanceText then espObj.DistanceText.Visible = false end
     espObj.Tracer.Visible = false
     for side = 1, 4 do
         for _, line in ipairs(espObj.BoxLines[side] or {}) do line.Visible = false end
@@ -759,81 +782,122 @@ local function updateESP()
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
 
             if ESPSettings.Enabled then
-                -- Name/Info text (modular system - easy to add more text entries)
-                local textParts = {}
-                
-                -- Built-in text entries (only if TextESPEnabled is true)
-                if ESPSettings.TextESPEnabled then
-                    if ESPSettings.ShowName then 
-                        table.insert(textParts, {text = player.Name, order = 1, position = ESPSettings.NamePosition or "Top"}) 
-                    end
-                    if ESPSettings.ShowHealthText then 
-                        table.insert(textParts, {text = math.floor(hum.Health) .. "HP", order = 2, position = ESPSettings.HealthTextPosition or "Top"}) 
-                    end
-                    if ESPSettings.ShowDistance then 
-                        table.insert(textParts, {text = math.floor(distance) .. "m", order = 3, position = ESPSettings.DistancePosition or "Top"}) 
-                    end
+                -- Text: render Name, Health and Distance as separate Drawing.Text objects so
+                -- each can be positioned independently and receive per-element rainbow colors.
+                local topList, bottomList, leftList, rightList = {}, {}, {}, {}
+
+                if ESPSettings.ShowName then
+                    table.insert((ESPSettings.NamePosition or "Top") == "Top" and topList or (ESPSettings.NamePosition == "Bottom" and bottomList or (ESPSettings.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = player.Name})
                 end
-                
-                -- Custom text entries from TextEntries table
-                -- To add more text, add to ESPSettings.TextEntries or use getgenv().TrisESP.AddTextEntry()
+                if ESPSettings.ShowHealthText then
+                    table.insert((ESPSettings.HealthTextPosition or "Top") == "Top" and topList or (ESPSettings.HealthTextPosition == "Bottom" and bottomList or (ESPSettings.HealthTextPosition == "Left" and leftList or rightList)), {key = "Health", text = math.floor(hum.Health) .. "HP"})
+                end
+                if ESPSettings.ShowDistance then
+                    table.insert((ESPSettings.DistancePosition or "Top") == "Top" and topList or (ESPSettings.DistancePosition == "Bottom" and bottomList or (ESPSettings.DistancePosition == "Left" and leftList or rightList)), {key = "Distance", text = math.floor(distance) .. "m"})
+                end
+
+                -- Collect simple custom text entries and append to top by default
+                local customTopConcat
                 for entryName, entry in pairs(ESPSettings.TextEntries) do
                     if entry.Enabled and entry.GetText then
                         local customText = entry.GetText(player, char, hum, distance)
                         if customText then
-                            table.insert(textParts, {text = customText, order = entry.Order or 99})
+                            customTopConcat = customTopConcat and (customTopConcat .. " | " .. customText) or customText
                         end
                     end
                 end
 
-                -- Equipped tool inline support
-                local equippedName = nil
-                for _, item in ipairs(char:GetChildren()) do
-                    if item:IsA("Tool") then equippedName = item.Name break end
-                end
-                if ESPSettings.EquippedEnabled and ESPSettings.EquippedMode == "Text" and ESPSettings.EquippedPosition == "Inline" then
-                    table.insert(textParts, {text = (equippedName or "None"), order = 4})
+                -- Positioning helpers
+                local lineHeight = (ESPSettings.TextSize or 14) + 4
+                local function renderList(list, anchor)
+                    if not list or #list == 0 then return end
+                    if anchor == "Top" or anchor == "Bottom" then
+                        for i, item in ipairs(list) do
+                            local y
+                            if anchor == "Top" then
+                                y = math.floor(rect.y - 6 - (i - 1) * lineHeight)
+                            else
+                                y = math.floor(rect.y + rect.h + 6 + (i - 1) * lineHeight)
+                            end
+                            local x = math.floor(rect.cx)
+                            local col
+                            if item.key == "Name" then
+                                col = ESPSettings.NameRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Name") or ESPSettings.NameColor
+                                espObj.Name.Center = true
+                                espObj.Name.Size = ESPSettings.TextSize
+                                espObj.Name.Text = item.text
+                                espObj.Name.Position = Vector2.new(x, y)
+                                espObj.Name.Color = col
+                                espObj.Name.Visible = true
+                            elseif item.key == "Health" then
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "HealthBar") or Color3.fromRGB(255,255,255)
+                                espObj.HealthText.Center = true
+                                espObj.HealthText.Size = ESPSettings.TextSize
+                                espObj.HealthText.Text = item.text
+                                espObj.HealthText.Position = Vector2.new(x, y)
+                                espObj.HealthText.Color = col
+                                espObj.HealthText.Visible = true
+                            elseif item.key == "Distance" then
+                                col = ESPSettings.DistanceRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Tracer") or Color3.fromRGB(255,255,255)
+                                espObj.DistanceText.Center = true
+                                espObj.DistanceText.Size = ESPSettings.TextSize
+                                espObj.DistanceText.Text = item.text
+                                espObj.DistanceText.Position = Vector2.new(x, y)
+                                espObj.DistanceText.Color = col
+                                espObj.DistanceText.Visible = true
+                            end
+                        end
+                    else
+                        -- Left/Right: vertically centered stacking
+                        local startY = rect.cy - ((#list - 1) / 2) * lineHeight
+                        for i, item in ipairs(list) do
+                            local y = math.floor(startY + (i - 1) * lineHeight)
+                            local x
+                            if anchor == "Left" then x = math.floor(rect.x - 6) else x = math.floor(rect.x + rect.w + 6) end
+                            local col
+                            if item.key == "Name" then
+                                col = ESPSettings.NameRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Name") or ESPSettings.NameColor
+                                espObj.Name.Center = false
+                                espObj.Name.Size = ESPSettings.TextSize
+                                espObj.Name.Text = item.text
+                                espObj.Name.Position = Vector2.new(x, y)
+                                espObj.Name.Color = col
+                                espObj.Name.Visible = true
+                            elseif item.key == "Health" then
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "HealthBar") or Color3.fromRGB(255,255,255)
+                                espObj.HealthText.Center = false
+                                espObj.HealthText.Size = ESPSettings.TextSize
+                                espObj.HealthText.Text = item.text
+                                espObj.HealthText.Position = Vector2.new(x, y)
+                                espObj.HealthText.Color = col
+                                espObj.HealthText.Visible = true
+                            elseif item.key == "Distance" then
+                                col = ESPSettings.DistanceRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Tracer") or Color3.fromRGB(255,255,255)
+                                espObj.DistanceText.Center = false
+                                espObj.DistanceText.Size = ESPSettings.TextSize
+                                espObj.DistanceText.Text = item.text
+                                espObj.DistanceText.Position = Vector2.new(x, y)
+                                espObj.DistanceText.Color = col
+                                espObj.DistanceText.Visible = true
+                            end
+                        end
+                    end
                 end
 
-                -- Sort by order and group by position
-                table.sort(textParts, function(a, b) return (a.order or 99) < (b.order or 99) end)
-                local topTexts, bottomTexts, leftTexts, rightTexts = {}, {}, {}, {}
-                for _, part in ipairs(textParts) do
-                    local pos = part.position or "Top"
-                    if pos == "Top" then
-                        table.insert(topTexts, part.text)
-                    elseif pos == "Bottom" then
-                        table.insert(bottomTexts, part.text)
-                    elseif pos == "Left" then
-                        table.insert(leftTexts, part.text)
-                    elseif pos == "Right" then
-                        table.insert(rightTexts, part.text)
-                    else
-                        table.insert(topTexts, part.text)
-                    end
-                end
-                
-                -- Combine all positions into final text (for now, show all as one line)
-                -- TODO: Could render separate Drawing.Text objects per position in future
-                local allTexts = {}
-                if #topTexts > 0 then table.insert(allTexts, table.concat(topTexts, " | ")) end
-                if #leftTexts > 0 then table.insert(allTexts, "[" .. table.concat(leftTexts, " | ") .. "]") end
-                if #rightTexts > 0 then table.insert(allTexts, "[" .. table.concat(rightTexts, " | ") .. "]") end
-                if #bottomTexts > 0 then table.insert(allTexts, table.concat(bottomTexts, " | ")) end
-                
-                if #allTexts > 0 then
-                    espObj.Name.Text = table.concat(allTexts, " ")
-                    -- Adjust text position if healthbar is at top - use integer positioning for stability
-                    local textY = math.floor(rect.y - 18)
-                    if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
-                        textY = textY - ESPSettings.HealthBarThickness - 4
-                    end
-                    espObj.Name.Position = Vector2.new(math.floor(rect.cx), textY)
-                    espObj.Name.Color = nameColor
+                renderList(topList, "Top")
+                renderList(bottomList, "Bottom")
+                renderList(leftList, "Left")
+                renderList(rightList, "Right")
+
+                -- Render any collected custom text entries as a single top line (if present)
+                if customTopConcat and customTopConcat ~= "" then
+                    local y = math.floor(rect.y - 6 - (#topList) * lineHeight)
+                    espObj.Name.Center = true
                     espObj.Name.Size = ESPSettings.TextSize
+                    espObj.Name.Text = customTopConcat
+                    espObj.Name.Position = Vector2.new(math.floor(rect.cx), y)
+                    espObj.Name.Color = ESPSettings.NameColor
                     espObj.Name.Visible = true
-                else
-                    espObj.Name.Visible = false
                 end
 
                 -- Equipped display (Bottom / Image handling)
