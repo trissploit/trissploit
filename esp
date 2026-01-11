@@ -963,8 +963,14 @@ local function updateESP()
                         fillX, fillY = x, barY + 1
                     end
 
-                    -- Defer outline application until after gradient/fill draws so outline stays on top
-                    espObj.HealthBarOutline.Visible = false
+                    if ESPSettings.HealthBarOutline then
+                        espObj.HealthBarOutline.Size = Vector2.new(barW, barH)
+                        espObj.HealthBarOutline.Position = Vector2.new(barX, barY)
+                        espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
+                        espObj.HealthBarOutline.Visible = true
+                    else
+                        espObj.HealthBarOutline.Visible = false
+                    end
 
                     -- Health bar rendering with optimized gradient for rainbow
                     if ESPSettings.HealthBarRainbow then
@@ -976,15 +982,17 @@ local function updateESP()
                         
                         if isVertical then
                             -- Vertical health bar - gradient goes down
-                            local segCount = math.clamp(math.floor(fillH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillH))
+                            local totalH = math.max(0, math.floor(fillH))
+                            local segCount = 0
+                            if totalH > 0 then
+                                segCount = math.clamp(math.floor(totalH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalH))
+                            end
 
                             -- Integer-distributed positions to guarantee continuous coverage
                             local positions = {}
                             local baseY = math.floor(fillY)
-                            local totalH = math.max(0, math.floor(fillH))
-                            if totalH <= 0 then
+                            if totalH <= 0 or segCount <= 0 then
                                 for i = 1, maxSegs do segs[i].Visible = false end
-                                segCount = 0
                             else
                                 local baseSegH = math.floor(totalH / segCount)
                                 local rem = totalH - baseSegH * segCount
@@ -994,34 +1002,36 @@ local function updateESP()
                                     positions[i] = { y = baseY + used, h = math.max(1, h) }
                                     used = used + positions[i].h
                                 end
-                                -- No overlap for health bar gradients (they're always fully opaque)
-                                -- positions are already perfectly abutted
-                            end
+                                -- positions are perfectly abutted (no overlap) for opaque health bar
+                                positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
 
                                 for i = 1, segCount do
-                                local t = (i - 0.5) / segCount
-                                local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                segs[i].Size = Vector2.new(fillW, positions[i].h)
-                                segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
-                                segs[i].Color = segColor
-                                segs[i].Transparency = 0
-                                segs[i].Visible = true
-                            end
+                                    local t = (i - 0.5) / segCount
+                                    local segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
+                                    segs[i].Size = Vector2.new(math.max(1, math.floor(fillW)), positions[i].h)
+                                    segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
+                                    segs[i].Color = segColor
+                                    segs[i].Transparency = 0
+                                    segs[i].Visible = true
+                                end
 
-                            for i = segCount + 1, maxSegs do
-                                segs[i].Visible = false
+                                for i = segCount + 1, maxSegs do
+                                    segs[i].Visible = false
+                                end
                             end
                         else
                             -- Horizontal health bar - gradient goes across
-                            local segCount = math.clamp(math.floor(fillW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillW))
+                            local totalW = math.max(0, math.floor(fillW))
+                            local segCount = 0
+                            if totalW > 0 then
+                                segCount = math.clamp(math.floor(totalW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalW))
+                            end
 
                             -- Integer-distributed positions to guarantee continuous coverage
                             local positions = {}
                             local baseX = math.floor(fillX)
-                            local totalW = math.max(0, math.floor(fillW))
-                            if totalW <= 0 then
+                            if totalW <= 0 or segCount <= 0 then
                                 for i = 1, maxSegs do segs[i].Visible = false end
-                                segCount = 0
                             else
                                 local baseSegW = math.floor(totalW / segCount)
                                 local rem = totalW - baseSegW * segCount
@@ -1031,47 +1041,31 @@ local function updateESP()
                                     positions[i] = { x = baseX + used, w = math.max(1, w) }
                                     used = used + positions[i].w
                                 end
-                                -- tiny overlap to avoid hairline gaps (horizontal)
-                                for i = 1, segCount - 1 do
-                                    positions[i].w = positions[i].w + 1
-                                    positions[i + 1].x = positions[i + 1].x - 1
-                                    positions[i + 1].w = positions[i + 1].w + 1
-                                end
+                                -- positions are perfectly abutted for opaque health bar
                                 positions[segCount].w = math.max(1, (baseX + totalW) - positions[segCount].x)
-                            end
 
-                            for i = 1, segCount do
-                                local t = (i - 0.5) / segCount
-                                local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                segs[i].Size = Vector2.new(positions[i].w, fillH)
-                                segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
-                                segs[i].Color = segColor
-                                segs[i].Transparency = 0
-                                segs[i].Visible = true
-                            end
+                                for i = 1, segCount do
+                                    local t = (i - 0.5) / segCount
+                                    local segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
+                                    segs[i].Size = Vector2.new(positions[i].w, math.max(1, math.floor(fillH)))
+                                    segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
+                                    segs[i].Color = segColor
+                                    segs[i].Transparency = 0
+                                    segs[i].Visible = true
+                                end
 
-                            for i = segCount + 1, maxSegs do
-                                segs[i].Visible = false
+                                for i = segCount + 1, maxSegs do
+                                    segs[i].Visible = false
+                                end
                             end
                         end
-                        else
+                    else
                         -- Normal health color based on ratio
                         for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
-                        espObj.HealthBar.Size = Vector2.new(fillW, fillH)
-                        espObj.HealthBar.Position = Vector2.new(fillX, fillY)
+                        espObj.HealthBar.Size = Vector2.new(math.max(1, math.floor(fillW)), math.max(1, math.floor(fillH)))
+                        espObj.HealthBar.Position = Vector2.new(math.floor(fillX), math.floor(fillY))
                         espObj.HealthBar.Color = getHealthColor(ratio)
                         espObj.HealthBar.Visible = true
-                        end
-
-                    -- Re-apply outline after drawing (so it is on top of gradient/fill)
-                    if ESPSettings.HealthBarOutline then
-                        espObj.HealthBarOutline.Size = Vector2.new(barW, barH)
-                        espObj.HealthBarOutline.Position = Vector2.new(barX, barY)
-                        espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
-                        espObj.HealthBarOutline.Visible = true
-                    else
-                        espObj.HealthBarOutline.Visible = false
-                    end
                     end
             else
                 espObj.HealthBar.Visible = false
