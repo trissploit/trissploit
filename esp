@@ -982,88 +982,76 @@ local function updateESP()
                         
                         if isVertical then
                             -- Vertical health bar - gradient goes down
-                            local totalH = math.max(0, math.floor(fillH))
-                            local segCount = 0
-                            if totalH > 0 then
-                                segCount = math.clamp(math.floor(totalH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalH))
-                            end
+                            local segCount = math.clamp(math.floor(fillH / 1), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.max(1, fillH)))
 
                             -- Integer-distributed positions to guarantee continuous coverage
                             local positions = {}
                             local baseY = math.floor(fillY)
-                            if totalH <= 0 or segCount <= 0 then
-                                for i = 1, maxSegs do segs[i].Visible = false end
-                            else
-                                local baseSegH = math.floor(totalH / segCount)
-                                local rem = totalH - baseSegH * segCount
-                                local used = 0
-                                for i = 1, segCount do
-                                    local h = baseSegH + (i <= rem and 1 or 0)
-                                    positions[i] = { y = baseY + used, h = math.max(1, h) }
-                                    used = used + positions[i].h
-                                end
-                                -- positions are perfectly abutted (no overlap) for opaque health bar
-                                positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
+                            local totalH = math.max(1, math.floor(fillH))
+                            
+                            local baseSegH = math.floor(totalH / segCount)
+                            local rem = totalH - baseSegH * segCount
+                            local used = 0
+                            for i = 1, segCount do
+                                local h = baseSegH + (i <= rem and 1 or 0)
+                                positions[i] = { y = baseY + used, h = math.max(1, h) }
+                                used = used + positions[i].h
+                            end
+                            -- Ensure exact coverage with no gaps
+                            positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
 
-                                for i = 1, segCount do
-                                    local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
-                                    segs[i].Size = Vector2.new(math.max(1, math.floor(fillW)), positions[i].h)
-                                    segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
-                                    segs[i].Color = segColor
-                                    segs[i].Transparency = 0
-                                    segs[i].Visible = true
-                                end
+                            for i = 1, segCount do
+                                local t = (i - 0.5) / segCount
+                                local segColor = getRainbowColor(baseOffset + t * 0.5)
+                                segs[i].Size = Vector2.new(math.max(1, fillW), positions[i].h)
+                                segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
+                                segs[i].Color = segColor
+                                segs[i].Transparency = 1
+                                segs[i].Visible = true
+                            end
 
-                                for i = segCount + 1, maxSegs do
-                                    segs[i].Visible = false
-                                end
+                            for i = segCount + 1, maxSegs do
+                                segs[i].Visible = false
                             end
                         else
                             -- Horizontal health bar - gradient goes across
-                            local totalW = math.max(0, math.floor(fillW))
-                            local segCount = 0
-                            if totalW > 0 then
-                                segCount = math.clamp(math.floor(totalW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalW))
-                            end
+                            local segCount = math.clamp(math.floor(fillW / 1), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.max(1, fillW)))
 
                             -- Integer-distributed positions to guarantee continuous coverage
                             local positions = {}
                             local baseX = math.floor(fillX)
-                            if totalW <= 0 or segCount <= 0 then
-                                for i = 1, maxSegs do segs[i].Visible = false end
-                            else
-                                local baseSegW = math.floor(totalW / segCount)
-                                local rem = totalW - baseSegW * segCount
-                                local used = 0
-                                for i = 1, segCount do
-                                    local w = baseSegW + (i <= rem and 1 or 0)
-                                    positions[i] = { x = baseX + used, w = math.max(1, w) }
-                                    used = used + positions[i].w
-                                end
-                                -- positions are perfectly abutted for opaque health bar
-                                positions[segCount].w = math.max(1, (baseX + totalW) - positions[segCount].x)
+                            local totalW = math.max(1, math.floor(fillW))
+                            
+                            local baseSegW = math.floor(totalW / segCount)
+                            local rem = totalW - baseSegW * segCount
+                            local used = 0
+                            for i = 1, segCount do
+                                local w = baseSegW + (i <= rem and 1 or 0)
+                                positions[i] = { x = baseX + used, w = math.max(1, w) }
+                                used = used + positions[i].w
+                            end
+                            -- Ensure exact coverage with no gaps
+                            positions[segCount].w = math.max(1, (baseX + totalW) - positions[segCount].x)
 
-                                for i = 1, segCount do
-                                    local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
-                                    segs[i].Size = Vector2.new(positions[i].w, math.max(1, math.floor(fillH)))
-                                    segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
-                                    segs[i].Color = segColor
-                                    segs[i].Transparency = 0
-                                    segs[i].Visible = true
-                                end
+                            for i = 1, segCount do
+                                local t = (i - 0.5) / segCount
+                                local segColor = getRainbowColor(baseOffset + t * 0.5)
+                                segs[i].Size = Vector2.new(positions[i].w, math.max(1, fillH))
+                                segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
+                                segs[i].Color = segColor
+                                segs[i].Transparency = 1
+                                segs[i].Visible = true
+                            end
 
-                                for i = segCount + 1, maxSegs do
-                                    segs[i].Visible = false
-                                end
+                            for i = segCount + 1, maxSegs do
+                                segs[i].Visible = false
                             end
                         end
                     else
                         -- Normal health color based on ratio
                         for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
-                        espObj.HealthBar.Size = Vector2.new(math.max(1, math.floor(fillW)), math.max(1, math.floor(fillH)))
-                        espObj.HealthBar.Position = Vector2.new(math.floor(fillX), math.floor(fillY))
+                        espObj.HealthBar.Size = Vector2.new(fillW, fillH)
+                        espObj.HealthBar.Position = Vector2.new(fillX, fillY)
                         espObj.HealthBar.Color = getHealthColor(ratio)
                         espObj.HealthBar.Visible = true
                     end
