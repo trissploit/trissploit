@@ -23,7 +23,6 @@ local Camera = Workspace.CurrentCamera
 local renderConn
 
 local ESPObjects = {}
-local RainbowHue = 0
 
 local ESPSettings = {
     Enabled = true,
@@ -131,7 +130,8 @@ local AllowedParts = {
 -- Utility functions
 local function getRainbowColor(offset)
     offset = offset or 0
-    return Color3.fromHSV((RainbowHue + offset) % 1, 1, 1)
+    local t = offset % 1
+    return lerpColor(Color3.fromRGB(255, 60, 60), Color3.fromRGB(60, 60, 255), t)
 end
 
 local function lerpColor(c1, c2, t)
@@ -317,13 +317,36 @@ local function getObjectRect(obj)
     return { x = sp.X - size/2, y = sp.Y - size/2, w = size, h = size, cx = sp.X, cy = sp.Y, distance = distance, worldPos = pos }
 end
 
--- NOTE: Drawing library does NOT support native gradients. Segments are the ONLY way.
--- Using more segments creates smoother appearance.
--- Use many tiny gradient segments to approximate a smooth blended gradient.
--- More segments reduce banding; we allocate a high maximum and only use as many as
--- the box height (1px per segment) to produce a near-continuous vertical blend.
-local GRADIENT_SEGMENTS = 2000
+-- NOTE: Drawing library does NOT support native gradients. We'll use a global
+-- pool of small squares to approximate smooth horizontal gradients instead
+-- of the previous per-ESP HSV rainbow system.
 local BOX_LINE_SEGMENTS = 100
+
+-- Gradient settings (two-color gradient replacing HSV rainbow)
+local Position = Vector2.new(300, 300)
+local Size = Vector2.new(300, 120)
+local ColorStart = Color3.fromRGB(255, 60, 60)
+local ColorEnd = Color3.fromRGB(60, 60, 255)
+local Resolution = 100 -- Higher = smoother gradient
+
+-- Global pool for gradient rectangles
+local GradientRects = {}
+
+-- Alias to existing lerpColor
+local function LerpColor(c1, c2, t)
+    return lerpColor(c1, c2, t)
+end
+
+-- Pre-create a small pool of gradient rects used to draw any box fill
+for i = 1, Resolution do
+    local rect = Drawing.new("Square")
+    rect.Visible = false
+    rect.Filled = true
+    rect.Thickness = 0
+    rect.Transparency = 1
+    rect.Color = LerpColor(ColorStart, ColorEnd, (i - 1) / math.max(1, Resolution - 1))
+    GradientRects[i] = rect
+end
 
 local function createESPObject()
     local espObj = {
@@ -332,7 +355,6 @@ local function createESPObject()
         BoxLines = {},  -- 4 sides with gradient segments
         BoxOutlineLines = {},  -- outline for each side
         BoxFill = Drawing.new("Square"),
-        GradientSegments = {},
         Corners = {
             {Line1 = Drawing.new("Line"), Line2 = Drawing.new("Line")},
             {Line1 = Drawing.new("Line"), Line2 = Drawing.new("Line")},
@@ -374,12 +396,7 @@ local function createESPObject()
         end
     end
     
-    -- Create gradient segments for fill
-    for i = 1, GRADIENT_SEGMENTS do
-        espObj.GradientSegments[i] = Drawing.new("Square")
-        espObj.GradientSegments[i].Filled = true
-        espObj.GradientSegments[i].Visible = false
-    end
+    -- Gradient segments are now drawn from a global pool (GradientRects)
     
     
             -- Equipped tool display (text + optional image if supported)
@@ -443,9 +460,6 @@ local function removeESP(espObj)
         for _, line in ipairs(espObj.BoxOutlineLines[side] or {}) do pcall(function() line:Remove() end) end
     end
     pcall(function() espObj.BoxFill:Remove() end)
-    for _, seg in ipairs(espObj.GradientSegments or {}) do
-        pcall(function() seg:Remove() end)
-    end
     pcall(function() espObj.HealthBar:Remove() end)
     pcall(function() espObj.HealthBarOutline:Remove() end)
     for _, seg in ipairs(espObj.HealthBarGradient or {}) do
@@ -469,7 +483,7 @@ local function hideESP(espObj)
         for _, line in ipairs(espObj.BoxOutlineLines[side] or {}) do line.Visible = false end
     end
     espObj.BoxFill.Visible = false
-    for _, seg in ipairs(espObj.GradientSegments or {}) do seg.Visible = false end
+    hideGradient(espObj)
     for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
     espObj.HealthBar.Visible = false
     espObj.HealthBarOutline.Visible = false
@@ -480,98 +494,71 @@ local function hideESP(espObj)
     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
 end
 
+-- Use the global GradientRects pool positioned horizontally across the rect
 local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset)
-    local segments = espObj.GradientSegments
-    local maxSegs = #segments
-
-    -- Use maximum segments for smoothest gradients
-    local segCount = math.min(maxSegs, math.max(30, math.floor(rect.h)))
-    local segH = rect.h / segCount
-
-    for i = 1, segCount do
-        local t = (i - 0.5) / segCount -- normalized 0..1 down the box
-        local segColor
-        if useRainbow then
-            segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
-        else
-            segColor = lerpColor(color1, color2, t)
+        local segCount = Resolution
+        local segW = rect.w / math.max(1, segCount)
+        for i = 1, segCount do
+            local t = (i - 1) / math.max(1, segCount - 1)
+            local g = GradientRects[i]
+            if g then
+                local segColor = useRainbow and LerpColor(ColorStart, ColorEnd, t) or lerpColor(color1, color2, t)
+                g.Size = Vector2.new(math.max(1, math.floor(segW + 1)), math.max(1, math.ceil(rect.h)))
+                g.Position = Vector2.new(math.floor(rect.x + (i - 1) * segW), math.floor(rect.y))
+                g.Color = segColor
+                g.Transparency = transparency or 0
+                g.Visible = true
+            end
         end
-
-        local segY = rect.y + (i - 1) * segH
-        -- No overlap to prevent visible seams with transparency
-        segments[i].Size = Vector2.new(math.max(1, math.floor(rect.w)), math.max(1, math.ceil(segH)))
-        segments[i].Position = Vector2.new(math.floor(rect.x), math.floor(segY))
-        segments[i].Color = segColor
-        segments[i].Transparency = transparency or 0
-        segments[i].Visible = true
     end
-
-    -- Hide any remaining unused segments
-    for i = segCount + 1, maxSegs do
-        segments[i].Visible = false
-    end
-end
 
 local function hideGradient(espObj)
-    for _, seg in ipairs(espObj.GradientSegments or {}) do seg.Visible = false end
-end
+        for _, g in ipairs(GradientRects) do g.Visible = false end
+    end
 
-local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, baseOffset)
-    -- Draw 4 sides: top, right, bottom, left
-    -- Rainbow gradient goes VERTICALLY DOWN based on Y position
-    local sides = {
-        {x, y, x + w, y},         -- top (horizontal)
-        {x + w, y, x + w, y + h}, -- right (vertical)
-        {x + w, y + h, x, y + h}, -- bottom (horizontal)
-        {x, y + h, x, y}          -- left (vertical)
-    }
-    
-    for sideIdx, side in ipairs(sides) do
-        local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
-        local segCount = #espObj.BoxLines[sideIdx]
-        
-        for seg = 1, segCount do
-            -- add micro-overlap between segments to prevent gaps
-            local eps = 0.002
-            local t1 = math.clamp((seg - 1) / segCount - eps, 0, 1)
-            local t2 = math.clamp(seg / segCount + eps, 0, 1)
-            
-            local lx1 = sx + (ex - sx) * t1
-            local ly1 = sy + (ey - sy) * t1
-            local lx2 = sx + (ex - sx) * t2
-            local ly2 = sy + (ey - sy) * t2
-            
-            local line = espObj.BoxLines[sideIdx][seg]
-            local outLine = espObj.BoxOutlineLines[sideIdx][seg]
-            
-            line.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
-            line.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
-            -- ensure dynamic thickness follows settings
-            line.Thickness = ESPSettings.Thickness or 1
-            
-            outLine.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
-            outLine.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
-            
-            if useRainbow then
-                -- Color based on Y position (vertical gradient going down)
-                local avgY = (ly1 + ly2) / 2
-                local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
-                line.Color = getRainbowColor(baseOffset + yProgress * 0.5)
-                -- Hide outline when rainbow to prevent color interference
-                if outLine then outLine.Visible = false end
-            else
-                line.Color = baseColor
-                -- Show outline for non-rainbow
-                if outLine then
-                    outLine.Color = ESPSettings.BoxOutlineColor
-                    outLine.Thickness = ESPSettings.Thickness or 3
-                    outLine.Visible = true
+local function drawBoxWithGradient(espObj, x, y, w, h, useGradient, baseColor, baseOffset)
+        local sides = {
+            {x, y, x + w, y},         -- top
+            {x + w, y, x + w, y + h}, -- right
+            {x + w, y + h, x, y + h}, -- bottom
+            {x, y + h, x, y}          -- left
+        }
+
+        for sideIdx, side in ipairs(sides) do
+            local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
+            local segCount = #espObj.BoxLines[sideIdx]
+            for seg = 1, segCount do
+                local eps = 0.002
+                local t1 = math.clamp((seg - 1) / segCount - eps, 0, 1)
+                local t2 = math.clamp(seg / segCount + eps, 0, 1)
+                local lx1 = sx + (ex - sx) * t1
+                local ly1 = sy + (ey - sy) * t1
+                local lx2 = sx + (ex - sx) * t2
+                local ly2 = sy + (ey - sy) * t2
+
+                local line = espObj.BoxLines[sideIdx][seg]
+                local outLine = espObj.BoxOutlineLines[sideIdx][seg]
+                line.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
+                line.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
+                line.Thickness = ESPSettings.Thickness or 1
+
+                if useGradient then
+                    local avgY = (ly1 + ly2) / 2
+                    local yProgress = (avgY - y) / math.max(1, h)
+                    line.Color = LerpColor(ColorStart, ColorEnd, yProgress)
+                    if outLine then outLine.Visible = false end
+                else
+                    line.Color = baseColor
+                    if outLine then
+                        outLine.Color = ESPSettings.BoxOutlineColor
+                        outLine.Thickness = ESPSettings.Thickness or 3
+                        outLine.Visible = true
+                    end
                 end
+                line.Visible = true
             end
-            line.Visible = true
         end
     end
-end
 
 local function hideBoxLines(espObj)
     for side = 1, 4 do
@@ -1187,8 +1174,7 @@ end
 
 -- Main render loop
 local function mainUpdate()
-    -- advance shared rainbow hue so all rainbow toggles stay in sync
-    RainbowHue = (RainbowHue + (ESPSettings.RainbowSpeed or 1) * 0.001) % 1
+    -- gradient system is now two-color and static; no HSV hue update needed
     updateESP()
     updateObjectESP()
 end
