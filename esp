@@ -1006,7 +1006,8 @@ local function updateESP()
                                 segs[i].Size = Vector2.new(math.max(1, fillW), positions[i].h)
                                 segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
                                 segs[i].Color = segColor
-                                segs[i].Transparency = 1
+                                -- Drawing transparency: 0 = opaque, 1 = fully transparent
+                                segs[i].Transparency = 0
                                 segs[i].Visible = true
                             end
 
@@ -1039,7 +1040,8 @@ local function updateESP()
                                 segs[i].Size = Vector2.new(positions[i].w, math.max(1, fillH))
                                 segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
                                 segs[i].Color = segColor
-                                segs[i].Transparency = 1
+                                -- Drawing transparency: 0 = opaque, 1 = fully transparent
+                                segs[i].Transparency = 0
                                 segs[i].Visible = true
                             end
 
