@@ -170,6 +170,8 @@ local function getRainbowColor(offset, element)
             return {ESPSettings.ChamsCustomColor1, ESPSettings.ChamsCustomColor2, ESPSettings.ChamsCustomColor3}
         elseif el == "Name" then
             return {ESPSettings.NameCustomColor1, ESPSettings.NameCustomColor2, ESPSettings.NameCustomColor3}
+        elseif el == "BoxFill" then
+            return {ESPSettings.BoxFillCustomColor1, ESPSettings.BoxFillCustomColor2, ESPSettings.BoxFillCustomColor3}
         elseif el == "FOV" then
             return {ESPSettings.FOVCustomColor1, ESPSettings.FOVCustomColor2, ESPSettings.FOVCustomColor3}
         elseif el == "Object" then
@@ -899,7 +901,7 @@ local function updateESP()
                         local innerH = math.max(0, h - inset * 2)
 
                         drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillColor, ESPSettings.BoxFillColor, 
-                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "Box")
+                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "BoxFill")
                         espObj.BoxFill.Visible = false
 
                         -- Draw outline around gradient fill for proper bounding using exact positions
