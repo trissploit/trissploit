@@ -79,11 +79,11 @@ local ESPSettings = {
     BoxFill = false,
     BoxFillColor = Color3.fromRGB(0, 170, 255),
     BoxFillTransparency = 0.5,
-    BoxFillRainbow = false,
+
     
     -- Gradient settings
     BoxFillGradient = false,
-    GradientType = "Custom", -- "Rainbow" or "Custom"
+    GradientType = "Rainbow", -- "Rainbow" or "Custom"
     GradientMode = "Vertical", -- "Vertical", "Spiral"
     BoxFillGradientColor1 = Color3.fromRGB(255, 0, 0),
     BoxFillGradientColor2 = Color3.fromRGB(0, 0, 255),
@@ -501,9 +501,9 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
     gradientMode = gradientMode or "Vertical"
     
 
-    -- Vertical mode: gradient goes top to bottom and animates
+    -- Vertical mode: animated top-to-bottom gradient with smoothing
     if gradientMode == "Vertical" then
-        local segCount = math.clamp(math.floor(rectH / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.max(1, math.floor(rectH))))
+        local segCount = math.clamp(math.floor(rectH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.max(1, math.floor(rectH))))
         
         local positions = {}
         local baseSegH = rectH / segCount
@@ -517,8 +517,20 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
             positions[segCount].h = (rectY + rectH) - positions[segCount].y
             if positions[segCount].h < 0 then positions[segCount].h = 0 end
         end
+
+        local baseAlpha = transparency or 0
+        local hasTransparency = baseAlpha > 0
+        local overlap = hasTransparency and 0.5 or 0
+        -- apply tiny overlaps when transparent to blend edges, with alternating alpha modulation
+        if overlap > 0 then
+            for i = 1, segCount - 1 do
+                positions[i].h = positions[i].h + overlap
+                positions[i + 1].y = positions[i + 1].y - overlap
+                positions[i + 1].h = positions[i + 1].h + overlap
+            end
+            positions[segCount].h = (rectY + rectH) - positions[segCount].y
+        end
         
-        -- use RainbowHue for smooth animation; for custom gradients, scroll the lerp position
         for i = 1, segCount do
             local baseT = (i - 0.5) / segCount
             local animT = (baseT + RainbowHue * 0.5) % 1
@@ -529,10 +541,14 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
                 segColor = lerpColor(color1, color2, animT)
             end
             
+            -- small alternating alpha modulation to reduce banding
+            local alphaMod = (i % 2 == 0) and -0.02 or 0.02
+            local segAlpha = math.clamp(baseAlpha + alphaMod, 0, 1)
+
             segments[i].Size = Vector2.new(rectW, positions[i].h)
             segments[i].Position = Vector2.new(rectX, positions[i].y)
             segments[i].Color = segColor
-            segments[i].Transparency = transparency or 0
+            segments[i].Transparency = segAlpha
             segments[i].Visible = true
         end
         
@@ -552,6 +568,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         local totalRadius = minDim / 2
         local layerThickness = totalRadius / segCount
         
+        local baseAlpha = transparency or 0
         for i = 1, segCount do
             local layerIndex = i - 1
             local t = layerIndex / math.max(1, segCount - 1)
@@ -570,12 +587,13 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
             local layerW = math.max(0.5, rectW - shrink * 2)
             local layerH = math.max(0.5, rectH - shrink * 2)
 
-            -- Use inner-most layers with smooth alpha to blend
-            local alpha = transparency or 0
+            -- Gradually increase transparency towards the center to blend layers
+            local layerAlpha = math.clamp(baseAlpha + (layerIndex / math.max(1, segCount - 1)) * 0.4, 0, 1)
+
             segments[i].Size = Vector2.new(layerW, layerH)
             segments[i].Position = Vector2.new(layerX, layerY)
             segments[i].Color = segColor
-            segments[i].Transparency = alpha
+            segments[i].Transparency = layerAlpha
             segments[i].Visible = true
         end
 
@@ -854,7 +872,7 @@ local function updateESP()
                     
                 -- Box fill first (behind lines) - works for BOTH square and corner
                 if ESPSettings.BoxFill then
-                    if ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow then
+                    if ESPSettings.BoxFillGradient then
                         -- Use new gradient system: GradientType (Rainbow/Custom) and GradientMode (Vertical/Spiral)
                         local useRainbow = (ESPSettings.GradientType == "Rainbow")
                         local gradientMode = ESPSettings.GradientMode or "Vertical"
@@ -1640,8 +1658,9 @@ end
         Thickness = 3                           -- Line thickness
         BoxFill = true/false                    -- Enable fill
         BoxFillColor = Color3                   -- Fill color
-        BoxFillRainbow = true/false             -- Rainbow fill
         BoxFillGradient = true/false            -- Gradient fill
+        GradientType = "Rainbow"/"Custom"     -- Which gradient type to use
+        GradientMode = "Vertical"/"Spiral"    -- Gradient pattern (animated)
         BoxFillGradientColor1 = Color3          -- Gradient start
         BoxFillGradientColor2 = Color3          -- Gradient end
         BoxFillTransparency = 0.5               -- Fill transparency (0-1)
