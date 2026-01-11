@@ -84,7 +84,7 @@ local ESPSettings = {
     -- Gradient settings
     BoxFillGradient = false,
     GradientType = "Rainbow", -- "Rainbow" or "Custom"
-    GradientMode = "Vertical", -- "Vertical", "Spiral"
+    GradientMode = "Vertical", -- "Vertical", "Spin"
     BoxFillGradientColor1 = Color3.fromRGB(255, 0, 0),
     BoxFillGradientColor2 = Color3.fromRGB(0, 0, 255),
     GradientSteps = 8,
@@ -501,52 +501,44 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
     gradientMode = gradientMode or "Vertical"
     
 
-    -- Vertical mode: integer-aligned segments, continuous color mapping to avoid reset seams
+    -- Vertical mode: smooth gradient with pixel-perfect blending
     if gradientMode == "Vertical" then
-        -- Use integer heights/positions to avoid fractional gaps
         local totalH = math.max(0, math.floor(rectH))
         if totalH <= 0 then
             for i = 1, maxSegs do segments[i].Visible = false end
             return
         end
 
-        local segCount = math.clamp(math.floor(totalH / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalH))
-        local baseSegH = math.floor(totalH / segCount)
-        local rem = totalH - baseSegH * segCount
-        local positions = {}
-        local used = 0
-        for i = 1, segCount do
-            local h = baseSegH + (i <= rem and 1 or 0)
-            positions[i] = { y = math.floor(rectY) + used, h = math.max(1, h) }
-            used = used + positions[i].h
-        end
-        -- Add 1px overlap between segments only when fully opaque to avoid gaps
-        if (transparency == nil or transparency == 0) then
-            for i = 1, segCount - 1 do
-                positions[i].h = positions[i].h + 1
-                positions[i + 1].y = positions[i + 1].y - 1
-                positions[i + 1].h = positions[i + 1].h + 1
-            end
-        end
-        positions[segCount].h = math.max(1, (math.floor(rectY) + totalH) - positions[segCount].y)
-
+        -- Use more segments for smoother blending (1-2px per segment ideal)
+        local segCount = math.clamp(math.floor(totalH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalH))
+        local segHeight = totalH / segCount
+        
         local baseAlpha = transparency or 0
         for i = 1, segCount do
-            -- center-based continuous progress to avoid abrupt resetting
-            local centerY = positions[i].y + positions[i].h * 0.5
-            local progress = (centerY - rectY) / math.max(1, rectH)
-            -- animate by shifting progress with RainbowHue
-            local animProgress = (progress + RainbowHue * 0.5) % 1
-
+            -- Calculate exact floating-point position for smooth gradients
+            local startY = rectY + (i - 1) * segHeight
+            local endY = rectY + i * segHeight
+            local centerY = (startY + endY) / 2
+            
+            -- Progress based on center position (0 to 1)
+            local progress = (centerY - rectY) / rectH
+            
             local segColor
             if useRainbow then
+                -- Rainbow animates smoothly
                 segColor = getRainbowColor((baseOffset or 0) + progress * 0.5 + RainbowHue * 0.5)
             else
-                segColor = lerpColor(color1, color2, animProgress)
+                -- Custom gradient: NO animation, just interpolate between colors
+                segColor = lerpColor(color1, color2, progress)
             end
-
-            segments[i].Size = Vector2.new(math.max(1, math.floor(rectW)), positions[i].h)
-            segments[i].Position = Vector2.new(math.floor(rectX), positions[i].y)
+            
+            -- Round to pixel boundaries for clean rendering
+            local pixelY = math.floor(startY + 0.5)
+            local pixelEndY = math.floor(endY + 0.5)
+            local pixelH = math.max(1, pixelEndY - pixelY)
+            
+            segments[i].Size = Vector2.new(math.max(1, math.floor(rectW)), pixelH)
+            segments[i].Position = Vector2.new(math.floor(rectX), pixelY)
             segments[i].Color = segColor
             segments[i].Transparency = baseAlpha
             segments[i].Visible = true
@@ -558,8 +550,8 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         return
     end
     
-    -- Spiral mode: concentric integer layers, smooth animation and blending
-    if gradientMode == "Spiral" then
+    -- Spin mode: rotating concentric layers with smooth blending
+    if gradientMode == "Spin" then
         local minDim = math.min(math.floor(rectW), math.floor(rectH))
         if minDim <= 0 then
             for i = 1, maxSegs do segments[i].Visible = false end
@@ -569,32 +561,37 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         local maxLayers = math.clamp(math.floor(minDim / 4), 4, math.min(40, maxSegs))
         local segCount = maxLayers
 
-        -- integer layer thickness and integer insets to avoid pixel gaps
+        -- Integer layer thickness for clean rendering
         local totalRadius = minDim / 2
         local layerThickness = math.floor(totalRadius / segCount)
         if layerThickness < 1 then layerThickness = 1 end
 
         local baseAlpha = transparency or 0
+        -- Spin animation: rotate the color offset over time
+        local spinOffset = (baseOffset or 0) + RainbowHue
+        
         for i = 1, segCount do
             local layerIndex = i - 1
             local t = layerIndex / math.max(1, segCount - 1)
-            local animT = (t + RainbowHue * 0.5) % 1
+            
             local segColor
             if useRainbow then
-                segColor = getRainbowColor((baseOffset or 0) + t * 0.5 + RainbowHue * 0.5)
+                -- Rainbow spins through layers
+                segColor = getRainbowColor(spinOffset + t * 0.5)
             else
-                segColor = lerpColor(color1, color2, animT)
+                -- Custom gradient: NO animation for static effect
+                segColor = lerpColor(color1, color2, t)
             end
 
-            -- Integer-based inset/size
+            -- Integer-based inset/size for pixel-perfect rendering
             local shrink = layerIndex * layerThickness
             local layerX = math.floor(rectX + shrink)
             local layerY = math.floor(rectY + shrink)
             local layerW = math.max(1, math.floor(rectW - shrink * 2))
             local layerH = math.max(1, math.floor(rectH - shrink * 2))
 
-            -- Smooth alpha ramp to blend layers (more transparent at center)
-            local layerAlpha = math.clamp(baseAlpha + (layerIndex / math.max(1, segCount - 1)) * 0.5, 0, 1)
+            -- Gentle alpha gradient toward center for depth
+            local layerAlpha = math.clamp(baseAlpha + t * 0.3, 0, 1)
 
             segments[i].Size = Vector2.new(layerW, layerH)
             segments[i].Position = Vector2.new(layerX, layerY)
