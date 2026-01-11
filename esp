@@ -167,49 +167,44 @@ local function isSameTeam(player1, player2)
         if folder and folder:IsA("Folder") then
             local char1 = player1.Character
             local char2 = player2.Character
-                        if isVertical then
-                            -- Vertical health bar - gradient goes down
-                            local positions = {}
-                            local baseY = math.floor(fillY)
-                            local totalH = math.max(0, math.floor(fillH))
+            if char1 and char2 then
+                -- Check if both characters are in the same child folder
+                for _, teamFolder in ipairs(folder:GetChildren()) do
+                    if teamFolder:IsA("Folder") then
+                        local has1 = teamFolder:IsAncestorOf(char1)
+                        local has2 = teamFolder:IsAncestorOf(char2)
+                        if has1 and has2 then return true end
+                    end
+                end
+            end
+        end
+        return false
+    end
+    
+    -- Roblox built-in Teams or Auto mode
+    if mode == "RobloxTeams" or mode == "Auto" then
+        if player1.Team and player2.Team then
+            return player1.Team == player2.Team
+        end
+    end
+    
+    return false
+end
 
-                            -- Choose segment count that never exceeds the available pixels
-                            local segCount
-                            if totalH <= 0 then
-                                segCount = 0
-                            elseif totalH < MIN_GRADIENT_SEGMENTS then
-                                segCount = math.min(maxSegs, totalH)
-                            else
-                                segCount = math.clamp(math.floor(totalH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalH))
-                            end
-
-                            if segCount <= 0 then
-                                for i = 1, maxSegs do segs[i].Visible = false end
-                            else
-                                local baseSegH = math.floor(totalH / segCount)
-                                local rem = totalH - baseSegH * segCount
-                                local used = 0
-                                for i = 1, segCount do
-                                    local h = baseSegH + (i <= rem and 1 or 0)
-                                    positions[i] = { y = baseY + used, h = math.max(1, h) }
-                                    used = used + positions[i].h
-                                end
-                                -- positions are abutted (no overlap) for opaque healthbar
-
-                                -- Render segments with strict integer sizes matching fill area
-                                for i = 1, segCount do
-                                    local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                    segs[i].Size = Vector2.new(math.max(1, math.floor(fillW)), positions[i].h)
-                                    segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
-                                    segs[i].Color = segColor
-                                    segs[i].Transparency = 1
-                                    segs[i].Visible = true
-                                end
-
-                                for i = segCount + 1, maxSegs do
-                                    segs[i].Visible = false
-                                end
+local function shouldShowPlayer(player)
+    if not player or player == LocalPlayer then return false end
+    
+    -- Team check - when enabled, automatically hide teammates
+    if ESPSettings.TeamCheckEnabled then
+        if isSameTeam(player, LocalPlayer) then
+            return false -- Hide teammates
+        end
+    end
+    
+    local function matchesEntityList(list)
+        -- list contains keys that may be strings or Instances
+        if not list then return false end
+        -- name match
         if list[player.Name] then return true end
         -- instance matches (folders/models/players)
         for ent, _ in pairs(list) do
@@ -618,19 +613,6 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
             end
         end
     end
-
-    -- If using a rainbow (segmented) box, draw a single crisp outline on top
-    -- so the outline appears above the rainbow segments. We set its size
-    -- and position to match the full box and make it visible after segments
-    -- are drawn to ensure it renders above segmented lines.
-    if useRainbow and espObj.OutlineSquare then
-        local thickness = ESPSettings.Thickness or 1
-        espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
-        espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
-        espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor or Color3.new(0,0,0)
-        espObj.OutlineSquare.Thickness = thickness
-        espObj.OutlineSquare.Visible = true
-    end
 end
 
 local function hideBoxLines(espObj)
@@ -872,8 +854,15 @@ local function updateESP()
                     if ESPSettings.BoxRainbow then
                         -- Use segmented lines for smooth vertical rainbow gradient
                         drawBoxWithGradient(espObj, x, y, w, h, true, boxColor, baseOffset)
-                        -- hide crisp outline when using gradient segments
-                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                        -- Draw outline above the rainbow segments
+                        if espObj.OutlineSquare then
+                            local thickness = ESPSettings.Thickness or 1
+                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
+                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
+                            espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
+                            espObj.OutlineSquare.Thickness = thickness
+                            espObj.OutlineSquare.Visible = true
+                        end
                     else
                         -- Use a single square outline for crisp, sharp edges when not rainbow
                         hideBoxLines(espObj)
@@ -1000,47 +989,45 @@ local function updateESP()
                         
                         if isVertical then
                             -- Vertical health bar - gradient goes down
+                            local segCount = math.clamp(math.floor(fillH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillH))
+
+                            -- Integer-distributed positions to guarantee continuous coverage
                             local positions = {}
-                            local baseX = math.floor(fillX)
-                            local totalW = math.max(0, math.floor(fillW))
-
-                            -- Choose segment count that never exceeds the available pixels
-                            local segCount
-                            if totalW <= 0 then
-                                segCount = 0
-                            elseif totalW < MIN_GRADIENT_SEGMENTS then
-                                segCount = math.min(maxSegs, totalW)
-                            else
-                                segCount = math.clamp(math.floor(totalW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalW))
-                            end
-
-                            if segCount <= 0 then
+                            local baseY = math.floor(fillY)
+                            local totalH = math.max(0, math.floor(fillH))
+                            if totalH <= 0 then
                                 for i = 1, maxSegs do segs[i].Visible = false end
+                                segCount = 0
                             else
-                                local baseSegW = math.floor(totalW / segCount)
-                                local rem = totalW - baseSegW * segCount
+                                local baseSegH = math.floor(totalH / segCount)
+                                local rem = totalH - baseSegH * segCount
                                 local used = 0
                                 for i = 1, segCount do
-                                    local w = baseSegW + (i <= rem and 1 or 0)
-                                    positions[i] = { x = baseX + used, w = math.max(1, w) }
-                                    used = used + positions[i].w
+                                    local h = baseSegH + (i <= rem and 1 or 0)
+                                    positions[i] = { y = baseY + used, h = math.max(1, h) }
+                                    used = used + positions[i].h
                                 end
-                                -- positions are abutted (no overlap) for opaque healthbar
+                                -- No overlap for health bar gradients (they're always fully opaque)
+                                -- positions are already perfectly abutted
+                            end
 
+                            if segCount > 0 then
                                 for i = 1, segCount do
                                     local t = (i - 0.5) / segCount
                                     local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                    segs[i].Size = Vector2.new(positions[i].w, math.max(1, math.floor(fillH)))
-                                    segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
+                                    segs[i].Size = Vector2.new(math.max(1, math.floor(fillW)), positions[i].h)
+                                    segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
                                     segs[i].Color = segColor
                                     segs[i].Transparency = 1
                                     segs[i].Visible = true
                                 end
-
-                                for i = segCount + 1, maxSegs do
-                                    segs[i].Visible = false
-                                end
                             end
+
+                            for i = segCount + 1, maxSegs do
+                                segs[i].Visible = false
+                            end
+                        else
+                            -- Horizontal health bar - gradient goes across
                             local segCount = math.clamp(math.floor(fillW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillW))
 
                             -- Integer-distributed positions to guarantee continuous coverage
