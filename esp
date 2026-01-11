@@ -506,10 +506,21 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         positions[i] = { y = baseY + used, h = math.max(1, h) }
         used = used + positions[i].h
     end
-    -- Ensure no gaps or overlaps by adjusting the last segment
-    positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
     
-    -- Render segments with precise positioning and no overlaps
+    -- Handle overlaps based on transparency to prevent artifacts
+    local hasTransparency = transparency and transparency > 0
+    if not hasTransparency then
+        -- Add tiny 1px overlap between segments to avoid hairline gaps when fully opaque
+        for i = 1, segCount - 1 do
+            positions[i].h = positions[i].h + 1
+            positions[i + 1].y = positions[i + 1].y - 1
+            positions[i + 1].h = positions[i + 1].h + 1
+        end
+        -- Recalculate last segment height to exactly fill remaining pixels
+        positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
+    end
+    
+    -- Render segments with precise positioning
     for i = 1, segCount do
         local t = (i - 0.5) / segCount
         local segColor
@@ -805,6 +816,15 @@ local function updateESP()
                         drawGradient(espObj, {x = x, y = y, w = w, h = h}, ESPSettings.BoxFillGradientColor1, ESPSettings.BoxFillGradientColor2, 
                             0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset)
                         espObj.BoxFill.Visible = false
+                        -- Draw outline around gradient fill for proper bounding
+                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
+                            local thickness = ESPSettings.Thickness or 1
+                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
+                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
+                            espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
+                            espObj.OutlineSquare.Thickness = thickness
+                            espObj.OutlineSquare.Visible = true
+                        end
                     else
                         hideGradient(espObj)
                         local fillColor = ESPSettings.BoxFillColor
@@ -813,10 +833,20 @@ local function updateESP()
                         espObj.BoxFill.Color = fillColor
                         espObj.BoxFill.Transparency = 1 - ESPSettings.BoxFillTransparency
                         espObj.BoxFill.Visible = true
+                        -- Draw outline around solid fill for proper bounding
+                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
+                            local thickness = ESPSettings.Thickness or 1
+                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
+                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
+                            espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
+                            espObj.OutlineSquare.Thickness = thickness
+                            espObj.OutlineSquare.Visible = true
+                        end
                     end
                 else
                     espObj.BoxFill.Visible = false
                     hideGradient(espObj)
+                    if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                 end
                 
                 if ESPSettings.BoxType == "Square" then
@@ -829,12 +859,12 @@ local function updateESP()
                     else
                         -- Use a single square outline for crisp, sharp edges when not rainbow
                         hideBoxLines(espObj)
-                        if espObj.OutlineSquare then
-                            -- Round position and size to whole pixels for crisp edges
+                        if espObj.OutlineSquare and not ESPSettings.BoxFill then
+                            -- Only draw outline if not already drawn for fill
                             local thickness = ESPSettings.Thickness or 1
                             local offset = math.floor(thickness / 2)
-                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w + thickness), math.floor(h + thickness))
-                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x - offset), math.floor(y - offset))
+                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
+                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
                             espObj.OutlineSquare.Color = boxColor
                             espObj.OutlineSquare.Thickness = thickness
                             espObj.OutlineSquare.Visible = true
@@ -934,10 +964,8 @@ local function updateESP()
                     end
 
                     if ESPSettings.HealthBarOutline then
-                        local thickness = 2
-                        local offset = math.floor(thickness / 2)
-                        espObj.HealthBarOutline.Size = Vector2.new(barW + thickness, barH + thickness)
-                        espObj.HealthBarOutline.Position = Vector2.new(barX - offset, barY - offset)
+                        espObj.HealthBarOutline.Size = Vector2.new(barW, barH)
+                        espObj.HealthBarOutline.Position = Vector2.new(barX, barY)
                         espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
                         espObj.HealthBarOutline.Visible = true
                     else
@@ -972,7 +1000,8 @@ local function updateESP()
                                     positions[i] = { y = baseY + used, h = math.max(1, h) }
                                     used = used + positions[i].h
                                 end
-                                positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
+                                -- No overlap for health bar gradients (they're always fully opaque)
+                                -- positions are already perfectly abutted
                             end
 
                                 for i = 1, segCount do
@@ -1007,6 +1036,12 @@ local function updateESP()
                                     local w = baseSegW + (i <= rem and 1 or 0)
                                     positions[i] = { x = baseX + used, w = math.max(1, w) }
                                     used = used + positions[i].w
+                                end
+                                -- tiny overlap to avoid hairline gaps (horizontal)
+                                for i = 1, segCount - 1 do
+                                    positions[i].w = positions[i].w + 1
+                                    positions[i + 1].x = positions[i + 1].x - 1
+                                    positions[i + 1].w = positions[i + 1].w + 1
                                 end
                                 positions[segCount].w = math.max(1, (baseX + totalW) - positions[segCount].x)
                             end
