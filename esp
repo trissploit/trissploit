@@ -668,10 +668,9 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
     
     for sideIdx, side in ipairs(sides) do
         local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
-        -- Align to pixel boundaries to ensure rainbow segments match the exact
-        -- outline square positioning used for non-rainbow rendering.
-        local ax_sx, ax_sy = math.floor(sx + 0.5), math.floor(sy + 0.5)
-        local ax_ex, ax_ey = math.floor(ex + 0.5), math.floor(ey + 0.5)
+        -- Align to integer pixel boundaries so segments exactly cover the outline
+        local ax_sx, ax_sy = math.floor(sx), math.floor(sy)
+        local ax_ex, ax_ey = math.floor(ex), math.floor(ey)
         local segCount = #espObj.BoxLines[sideIdx]
         
         -- Calculate line length for this side
@@ -680,19 +679,29 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
         local dynamicSegCount = math.clamp(math.max(1, math.floor(lineLength)), 1, segCount)
         
         for seg = 1, dynamicSegCount do
-            -- Precise positioning with NO overlap to prevent transparency artifacts
-            local t1 = (seg - 1) / dynamicSegCount
-            local t2 = seg / dynamicSegCount
-            
-            local lx1 = ax_sx + (ax_ex - ax_sx) * t1
-            local ly1 = ax_sy + (ax_ey - ax_sy) * t1
-            local lx2 = ax_sx + (ax_ex - ax_sx) * t2
-            local ly2 = ax_sy + (ax_ey - ax_sy) * t2
-            
+            -- Compute integer-aligned segment endpoints so the rainbow segments
+            -- exactly cover the same pixel-aligned rectangle as the non-rainbow outline.
+            local dx = ax_ex - ax_sx
+            local dy = ax_ey - ax_sy
+            local lx1, ly1, lx2, ly2
+            if math.abs(dx) >= math.abs(dy) then
+                -- Horizontal side (or mostly horizontal)
+                local segLen = dx / dynamicSegCount
+                local startF = ax_sx + (seg - 1) * segLen
+                local endF = (seg == dynamicSegCount) and ax_ex or (ax_sx + seg * segLen)
+                lx1, ly1 = startF, ax_sy
+                lx2, ly2 = endF, ax_ey
+            else
+                -- Vertical side
+                local segLen = dy / dynamicSegCount
+                local startF = ax_sy + (seg - 1) * segLen
+                local endF = (seg == dynamicSegCount) and ax_ey or (ax_sy + seg * segLen)
+                lx1, ly1 = ax_sx, startF
+                lx2, ly2 = ax_ex, endF
+            end
             -- Round to nearest pixel for crisp rendering
             local line = espObj.BoxLines[sideIdx][seg]
             local outLine = espObj.BoxOutlineLines[sideIdx][seg]
-            
             line.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
             line.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
             line.Thickness = ESPSettings.Thickness or 1
@@ -826,8 +835,9 @@ local function updateESP()
                 -- Helper to detect collisions of multiple items in same anchor; when multiple
                 -- items (eg Name+Health) share the same anchor we fall back to the old combined
                 -- single-line behavior to preserve spacing and avoid overlap.
-                local function shouldCombine(list)
-                    return list and #list > 1
+                local function shouldCombine(list, anchor)
+                    -- Only use combined single-line fallback for Top anchor (preserves old UX)
+                    return anchor == "Top" and list and #list > 1
                 end
 
                 local function renderCombined(list, anchor)
@@ -864,7 +874,7 @@ local function updateESP()
 
                 local function renderList(list, anchor)
                     if not list or #list == 0 then return end
-                    if shouldCombine(list) then
+                    if shouldCombine(list, anchor) then
                         renderCombined(list, anchor)
                         return
                     end
