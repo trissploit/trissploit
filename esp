@@ -1093,12 +1093,14 @@ local function updateESP()
                         espObj.BoxFill.Visible = false
 
                         -- Draw outline around gradient fill for proper bounding using exact positions
-                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
+                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" and ESPSettings.Boxes then
                             espObj.OutlineSquare.Size = Vector2.new(w, h)
                             espObj.OutlineSquare.Position = Vector2.new(x, y)
                             espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
                             espObj.OutlineSquare.Thickness = thickness
                             espObj.OutlineSquare.Visible = true
+                        else
+                            if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         end
                     else
                         hideGradient(espObj)
@@ -1108,14 +1110,16 @@ local function updateESP()
                         espObj.BoxFill.Color = fillColor
                         espObj.BoxFill.Transparency = 1 - ESPSettings.BoxFillTransparency
                         espObj.BoxFill.Visible = true
-                        -- Draw outline around solid fill for proper bounding
-                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
+                        -- Draw outline around solid fill for proper bounding (only when box outlines enabled)
+                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" and ESPSettings.Boxes then
                             local thickness = ESPSettings.Thickness or 1
                             espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
                             espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
                             espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
                             espObj.OutlineSquare.Thickness = thickness
                             espObj.OutlineSquare.Visible = true
+                        else
+                            if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         end
                     end
                 else
@@ -1154,12 +1158,24 @@ local function updateESP()
                     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     hideBoxLines(espObj)
                     
-                    local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
+                    -- If BoxFill gradient is active we used an inset inner rect for the fill;
+                    -- align corner lines to the visible filled rect so corners and fills match.
+                    local bx, by, bw, bh = x, y, w, h
+                    if ESPSettings.BoxFill and (ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow) then
+                        local thickness = ESPSettings.Thickness or 1
+                        local inset = thickness / 2
+                        bx = x + inset
+                        by = y + inset
+                        bw = math.max(0, w - inset * 2)
+                        bh = math.max(0, h - inset * 2)
+                    end
+
+                    local L = math.clamp(math.floor(math.min(bw, bh) * 0.25), 2, 50)
                     local corners = {
-                        {x, y, x + L, y, x, y + L},                     -- top-left
-                        {x + w, y, x + w - L, y, x + w, y + L},         -- top-right
-                        {x, y + h, x + L, y + h, x, y + h - L},         -- bottom-left
-                        {x + w, y + h, x + w - L, y + h, x + w, y + h - L} -- bottom-right
+                        {bx, by, bx + L, by, bx, by + L},                     -- top-left
+                        {bx + bw, by, bx + bw - L, by, bx + bw, by + L},       -- top-right
+                        {bx, by + bh, bx + L, by + bh, bx, by + bh - L},       -- bottom-left
+                        {bx + bw, by + bh, bx + bw - L, by + bh, bx + bw, by + bh - L} -- bottom-right
                     }
                     
                     -- Y positions for vertical rainbow gradient
@@ -1167,11 +1183,19 @@ local function updateESP()
                     
                     for i, corner in ipairs(corners) do
                         local c = espObj.Corners[i]
-                        c.Line1.From = Vector2.new(corner[1], corner[2])
-                        c.Line1.To = Vector2.new(corner[3], corner[4])
-                        c.Line2.From = Vector2.new(corner[1], corner[2])
-                        c.Line2.To = Vector2.new(corner[5], corner[6])
-                            if ESPSettings.BoxRainbow then
+                        local x1 = math.floor(corner[1] + 0.5)
+                        local y1 = math.floor(corner[2] + 0.5)
+                        local x2 = math.floor(corner[3] + 0.5)
+                        local y2 = math.floor(corner[4] + 0.5)
+                        local x3 = math.floor(corner[5] + 0.5)
+                        local y3 = math.floor(corner[6] + 0.5)
+
+                        c.Line1.From = Vector2.new(x1, y1)
+                        c.Line1.To = Vector2.new(x2, y2)
+                        c.Line2.From = Vector2.new(x1, y1)
+                        c.Line2.To = Vector2.new(x3, y3)
+
+                        if ESPSettings.BoxRainbow then
                             -- Vertical gradient: top corners share one color, bottom corners share another
                             local yProgress = cornerYs[i]
                             c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
@@ -1179,9 +1203,10 @@ local function updateESP()
                         else
                             c.Line1.Color, c.Line2.Color = boxColor, boxColor
                         end
-                            c.Line1.Thickness = ESPSettings.Thickness or 1
-                            c.Line2.Thickness = ESPSettings.Thickness or 1
-                            c.Line1.Visible, c.Line2.Visible = true, true
+
+                        c.Line1.Thickness = ESPSettings.Thickness or 1
+                        c.Line2.Thickness = ESPSettings.Thickness or 1
+                        c.Line1.Visible, c.Line2.Visible = true, true
                     end
                 end
                 else
