@@ -1025,12 +1025,7 @@ local function updateESP()
                     if espObj.OutlineSquare and not ESPSettings.BoxFill then espObj.OutlineSquare.Visible = false end
                     for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                 end
-            else
-                hideBoxLines(espObj)
-                hideGradient(espObj)
-                for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
-                if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
-            end
+                
             else
                 -- ESP disabled - hide all visuals
                 espObj.Name.Visible = false
