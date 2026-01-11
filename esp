@@ -23,14 +23,6 @@ local Camera = Workspace.CurrentCamera
 local renderConn
 
 local ESPObjects = {}
-
--- Optimized gradient system
-local GradientPosition = Vector2.new(300, 300)
-local GradientSize = Vector2.new(300, 120)
-local GradientColorStart = Color3.fromRGB(255, 60, 60)
-local GradientColorEnd = Color3.fromRGB(60, 60, 255)
-local GradientResolution = 100
-local GradientRects = {}
 local RainbowHue = 0
 
 local ESPSettings = {
@@ -137,6 +129,11 @@ local AllowedParts = {
 }
 
 -- Utility functions
+local function getRainbowColor(offset)
+    offset = offset or 0
+    return Color3.fromHSV((RainbowHue + offset) % 1, 1, 1)
+end
+
 local function lerpColor(c1, c2, t)
     t = math.clamp(t, 0, 1)
     return Color3.new(
@@ -144,31 +141,6 @@ local function lerpColor(c1, c2, t)
         c1.G + (c2.G - c1.G) * t,
         c1.B + (c2.B - c1.B) * t
     )
-end
-
--- Initialize optimized gradient
-for i = 0, GradientResolution - 1 do
-    local t = i / (GradientResolution - 1)
-    local rect = Drawing.new("Square")
-    rect.Visible = false
-    rect.Filled = true
-    rect.Thickness = 0
-    rect.Transparency = 1
-    rect.Color = lerpColor(GradientColorStart, GradientColorEnd, t)
-    rect.Size = Vector2.new(GradientSize.X / GradientResolution + 1, GradientSize.Y)
-    rect.Position = Vector2.new(
-        GradientPosition.X + (GradientSize.X / GradientResolution) * i,
-        GradientPosition.Y
-    )
-    table.insert(GradientRects, rect)
-end
-
--- Rainbow color function using gradient system
-local function getRainbowColor(offset)
-    offset = offset or 0
-    local idx = math.floor(((RainbowHue + offset) % 1) * GradientResolution)
-    idx = math.clamp(idx, 1, #GradientRects)
-    return GradientRects[idx].Color
 end
 
 local function getHealthColor(ratio)
@@ -346,12 +318,12 @@ local function getObjectRect(obj)
 end
 
 -- NOTE: Drawing library does NOT support native gradients. Segments are the ONLY way.
--- Using more segments creates smoother appearance.
--- Use many tiny gradient segments to approximate a smooth blended gradient.
--- More segments reduce banding; we allocate a high maximum and only use as many as
--- the box height (1px per segment) to produce a near-continuous vertical blend.
-local GRADIENT_SEGMENTS = 2000
-local BOX_LINE_SEGMENTS = 100
+-- Optimized gradient system: dynamically allocate segments based on box size
+-- to minimize drawing calls while maintaining smooth appearance.
+-- Segments are precisely positioned with NO overlap to prevent transparency artifacts.
+local MAX_GRADIENT_SEGMENTS = 500  -- Reduced from 2000 for better performance
+local MIN_GRADIENT_SEGMENTS = 10   -- Minimum segments for very small boxes
+local BOX_LINE_SEGMENTS = 50       -- Reduced from 100 for better performance
 
 local function createESPObject()
     local espObj = {
@@ -402,8 +374,8 @@ local function createESPObject()
         end
     end
     
-    -- Create gradient segments for fill
-    for i = 1, GRADIENT_SEGMENTS do
+    -- Create gradient segments for fill (optimized pool size)
+    for i = 1, MAX_GRADIENT_SEGMENTS do
         espObj.GradientSegments[i] = Drawing.new("Square")
         espObj.GradientSegments[i].Filled = true
         espObj.GradientSegments[i].Visible = false
@@ -511,30 +483,51 @@ end
 local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
-
-    -- Use maximum segments for smoothest gradients
-    local segCount = math.min(maxSegs, math.max(30, math.floor(rect.h)))
-    local segH = rect.h / segCount
-
+    
+    -- Dynamic segment count: scale with box height but cap at reasonable limits
+    -- Fewer segments = better performance, but need enough for smooth gradients
+    local segCount = math.clamp(math.floor(rect.h / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.floor(rect.h)))
+    
+    -- Pre-calculate all segment positions to ensure pixel-perfect alignment
+    local positions = {}
+    local totalHeight = 0
+    
     for i = 1, segCount do
-        local t = (i - 0.5) / segCount -- normalized 0..1 down the box
+        local idealY = rect.y + (rect.h * (i - 1) / segCount)
+        local nextIdealY = rect.y + (rect.h * i / segCount)
+        local segHeight = math.max(1, math.floor(nextIdealY - idealY))
+        
+        positions[i] = {
+            y = math.floor(idealY),
+            h = segHeight
+        }
+        totalHeight = totalHeight + segHeight
+    end
+    
+    -- Adjust last segment to fill any remaining pixels (prevents gaps)
+    local remainder = math.floor(rect.y + rect.h) - (positions[segCount].y + positions[segCount].h)
+    if remainder > 0 then
+        positions[segCount].h = positions[segCount].h + remainder
+    end
+    
+    -- Render segments with precise positioning and NO overlap
+    for i = 1, segCount do
+        local t = (i - 0.5) / segCount
         local segColor
         if useRainbow then
             segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
         else
             segColor = lerpColor(color1, color2, t)
         end
-
-        local segY = rect.y + (i - 1) * segH
-        -- No overlap to prevent visible seams with transparency
-        segments[i].Size = Vector2.new(math.max(1, math.floor(rect.w)), math.max(1, math.ceil(segH)))
-        segments[i].Position = Vector2.new(math.floor(rect.x), math.floor(segY))
+        
+        segments[i].Size = Vector2.new(math.max(1, math.floor(rect.w)), positions[i].h)
+        segments[i].Position = Vector2.new(math.floor(rect.x), positions[i].y)
         segments[i].Color = segColor
         segments[i].Transparency = transparency or 0
         segments[i].Visible = true
     end
-
-    -- Hide any remaining unused segments
+    
+    -- Hide unused segments
     for i = segCount + 1, maxSegs do
         segments[i].Visible = false
     end
@@ -558,23 +551,26 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
         local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
         local segCount = #espObj.BoxLines[sideIdx]
         
-        for seg = 1, segCount do
-            -- add micro-overlap between segments to prevent gaps
-            local eps = 0.002
-            local t1 = math.clamp((seg - 1) / segCount - eps, 0, 1)
-            local t2 = math.clamp(seg / segCount + eps, 0, 1)
+        -- Calculate line length for this side
+        local lineLength = math.sqrt((ex - sx)^2 + (ey - sy)^2)
+        local dynamicSegCount = math.clamp(math.floor(lineLength / 3), 5, segCount)
+        
+        for seg = 1, dynamicSegCount do
+            -- Precise positioning with NO overlap to prevent transparency artifacts
+            local t1 = (seg - 1) / dynamicSegCount
+            local t2 = seg / dynamicSegCount
             
             local lx1 = sx + (ex - sx) * t1
             local ly1 = sy + (ey - sy) * t1
             local lx2 = sx + (ex - sx) * t2
             local ly2 = sy + (ey - sy) * t2
             
+            -- Round to nearest pixel for crisp rendering
             local line = espObj.BoxLines[sideIdx][seg]
             local outLine = espObj.BoxOutlineLines[sideIdx][seg]
             
             line.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
             line.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
-            -- ensure dynamic thickness follows settings
             line.Thickness = ESPSettings.Thickness or 1
             
             outLine.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
@@ -597,6 +593,14 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
                 end
             end
             line.Visible = true
+        end
+        
+        -- Hide unused segments
+        for seg = dynamicSegCount + 1, segCount do
+            espObj.BoxLines[sideIdx][seg].Visible = false
+            if espObj.BoxOutlineLines[sideIdx][seg] then
+                espObj.BoxOutlineLines[sideIdx][seg].Visible = false
+            end
         end
     end
 end
@@ -939,7 +943,7 @@ local function updateESP()
                         espObj.HealthBarOutline.Visible = false
                     end
 
-                    -- Health bar rendering with gradient for rainbow
+                    -- Health bar rendering with optimized gradient for rainbow
                     if ESPSettings.HealthBarRainbow then
                         -- Use gradient segments for smooth rainbow blend
                         espObj.HealthBar.Visible = false
@@ -949,45 +953,69 @@ local function updateESP()
                         
                         if isVertical then
                             -- Vertical health bar - gradient goes down
-                            -- Use maximum segments for smoothest appearance
-                            local segCount = math.min(maxSegs, math.max(20, math.floor(fillH)))
-                            local segH = fillH / segCount
+                            local segCount = math.clamp(math.floor(fillH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillH))
+                            
+                            -- Pre-calculate positions for pixel-perfect alignment
+                            local positions = {}
+                            for i = 1, segCount do
+                                local idealY = fillY + (fillH * (i - 1) / segCount)
+                                local nextIdealY = fillY + (fillH * i / segCount)
+                                positions[i] = {
+                                    y = math.floor(idealY),
+                                    h = math.max(1, math.floor(nextIdealY - idealY))
+                                }
+                            end
+                            
+                            -- Adjust last segment to fill remaining pixels
+                            local remainder = (fillY + fillH) - (positions[segCount].y + positions[segCount].h)
+                            if remainder > 0 then
+                                positions[segCount].h = positions[segCount].h + remainder
+                            end
                             
                             for i = 1, segCount do
                                 local t = (i - 0.5) / segCount
                                 local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                local segY = fillY + (i - 1) * segH
-                                -- No overlap to prevent visible seams
-                                segs[i].Size = Vector2.new(fillW, math.max(1, math.ceil(segH)))
-                                segs[i].Position = Vector2.new(math.floor(fillX), math.floor(segY))
+                                segs[i].Size = Vector2.new(fillW, positions[i].h)
+                                segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
                                 segs[i].Color = segColor
                                 segs[i].Transparency = 1
                                 segs[i].Visible = true
                             end
                             
-                            -- Hide unused segments
                             for i = segCount + 1, maxSegs do
                                 segs[i].Visible = false
                             end
                         else
                             -- Horizontal health bar - gradient goes across
-                            -- Use maximum segments for smoothest appearance
-                            local segCount = math.min(maxSegs, math.max(20, math.floor(fillW)))
-                            local segW = fillW / segCount
+                            local segCount = math.clamp(math.floor(fillW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillW))
+                            
+                            -- Pre-calculate positions for pixel-perfect alignment
+                            local positions = {}
+                            for i = 1, segCount do
+                                local idealX = fillX + (fillW * (i - 1) / segCount)
+                                local nextIdealX = fillX + (fillW * i / segCount)
+                                positions[i] = {
+                                    x = math.floor(idealX),
+                                    w = math.max(1, math.floor(nextIdealX - idealX))
+                                }
+                            end
+                            
+                            -- Adjust last segment to fill remaining pixels
+                            local remainder = (fillX + fillW) - (positions[segCount].x + positions[segCount].w)
+                            if remainder > 0 then
+                                positions[segCount].w = positions[segCount].w + remainder
+                            end
                             
                             for i = 1, segCount do
                                 local t = (i - 0.5) / segCount
                                 local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                local segX = fillX + (i - 1) * segW
-                                -- No overlap to prevent visible seams
-                                segs[i].Size = Vector2.new(math.max(1, math.ceil(segW)), fillH)
-                                segs[i].Position = Vector2.new(math.floor(segX), math.floor(fillY))
+                                segs[i].Size = Vector2.new(positions[i].w, fillH)
+                                segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
                                 segs[i].Color = segColor
                                 segs[i].Transparency = 1
                                 segs[i].Visible = true
                             end
                             
-                            -- Hide unused segments
                             for i = segCount + 1, maxSegs do
                                 segs[i].Visible = false
                             end
