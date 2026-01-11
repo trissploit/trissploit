@@ -67,56 +67,34 @@ local ESPSettings = {
     -- Rainbow settings (per element)
     RainbowSpeed = 1,
     
-    -- Box Outline Gradient System
-    BoxGradientType = "Rainbow", -- "Rainbow" or "Custom"
-    BoxGradientMode = "Vertical", -- "Static", "Vertical", "Spiral"
-    BoxGradientColor1 = Color3.fromRGB(255, 0, 128),
-    BoxGradientColor2 = Color3.fromRGB(0, 128, 255),
-    BoxGradientSpiralSpeed = 2,
+    -- Custom gradient colors for rainbow (instead of HSV rainbow)
+    UseCustomGradient = false,
+    CustomGradientColor1 = Color3.fromRGB(255, 0, 0),
+    CustomGradientColor2 = Color3.fromRGB(255, 165, 0),
+    CustomGradientColor3 = Color3.fromRGB(255, 255, 0),
+    CustomGradientColor4 = Color3.fromRGB(0, 255, 0),
+    CustomGradientColor5 = Color3.fromRGB(0, 255, 255),
+    CustomGradientColor6 = Color3.fromRGB(0, 0, 255),
+    CustomGradientStops = 6, -- How many colors to use (2-6)
     
-    -- Box Fill Gradient System
-    BoxFillGradientType = "Rainbow",
-    BoxFillGradientMode = "Vertical",
-    BoxFillGradientFillColor1 = Color3.fromRGB(255, 0, 128),
-    BoxFillGradientFillColor2 = Color3.fromRGB(0, 128, 255),
-    BoxFillGradientSpiralSpeed = 2,
-    
-    -- FOV Circle Gradient System
-    FOVGradientType = "Rainbow",
-    FOVGradientMode = "Spiral",
-    FOVGradientColor1 = Color3.fromRGB(255, 0, 128),
-    FOVGradientColor2 = Color3.fromRGB(0, 128, 255),
-    FOVGradientSpiralSpeed = 2,
-    
-    -- Health Bar Gradient System
-    HealthGradientType = "Rainbow",
-    HealthGradientMode = "Vertical",
-    HealthGradientColor1 = Color3.fromRGB(255, 0, 128),
-    HealthGradientColor2 = Color3.fromRGB(0, 128, 255),
-    HealthGradientSpiralSpeed = 2,
-    
-    -- Tracer Gradient System
-    TracerGradientType = "Rainbow",
-    TracerGradientMode = "Static",
-    TracerGradientColor1 = Color3.fromRGB(255, 0, 128),
-    TracerGradientColor2 = Color3.fromRGB(0, 128, 255),
-    TracerGradientSpiralSpeed = 2,
-    
-    -- Text Gradient System
-    TextGradientType = "Rainbow",
-    TextGradientMode = "Static",
-    TextGradientColor1 = Color3.fromRGB(255, 0, 128),
-    TextGradientColor2 = Color3.fromRGB(0, 128, 255),
-    TextGradientSpiralSpeed = 2,
-    
-    -- FOV Circle Settings
+    -- FOV Circle settings
     FOVCircleEnabled = false,
     FOVCircleRadius = 100,
-    FOVCircleThickness = 2,
     FOVCircleColor = Color3.fromRGB(255, 255, 255),
+    FOVCircleThickness = 1,
+    FOVCircleTransparency = 0,
+    FOVCircleRainbow = false,
+    FOVCircleGradient = false,
+    FOVCircleGradientColor1 = Color3.fromRGB(255, 0, 0),
+    FOVCircleGradientColor2 = Color3.fromRGB(0, 0, 255),
     FOVCircleFilled = false,
-    FOVCircleGradient = false, -- Enable gradient on FOV circle
-    FOVCircleSegments = 64, -- Number of segments for gradient circle
+    FOVCircleFillColor = Color3.fromRGB(255, 255, 255),
+    FOVCircleFillTransparency = 0.8,
+    FOVCircleFillRainbow = false,
+    FOVCircleFillGradient = false,
+    FOVCircleFillGradientColor1 = Color3.fromRGB(255, 0, 0),
+    FOVCircleFillGradientColor2 = Color3.fromRGB(0, 0, 255),
+    FOVCircleSegments = 64,
     
     -- Box settings
     Boxes = true,
@@ -182,7 +160,46 @@ local AllowedParts = {
 -- Utility functions
 local function getRainbowColor(offset)
     offset = offset or 0
+    
+    -- Use custom gradient colors if enabled
+    if ESPSettings.UseCustomGradient then
+        local stops = math.clamp(ESPSettings.CustomGradientStops or 6, 2, 6)
+        local colors = {
+            ESPSettings.CustomGradientColor1,
+            ESPSettings.CustomGradientColor2,
+            ESPSettings.CustomGradientColor3,
+            ESPSettings.CustomGradientColor4,
+            ESPSettings.CustomGradientColor5,
+            ESPSettings.CustomGradientColor6
+        }
+        
+        -- Normalize offset to 0-1 range with wrapping
+        local t = ((RainbowHue + offset) % 1) * (stops - 1)
+        local idx = math.floor(t)
+        local frac = t - idx
+        
+        local c1 = colors[idx + 1] or colors[1]
+        local c2 = colors[math.min(idx + 2, stops)] or colors[stops]
+        
+        return Color3.new(
+            c1.R + (c2.R - c1.R) * frac,
+            c1.G + (c2.G - c1.G) * frac,
+            c1.B + (c2.B - c1.B) * frac
+        )
+    end
+    
+    -- Default HSV rainbow
     return Color3.fromHSV((RainbowHue + offset) % 1, 1, 1)
+end
+
+-- Get custom gradient color (for non-rainbow gradients with custom colors)
+local function getCustomGradientColor(t, color1, color2)
+    t = math.clamp(t, 0, 1)
+    return Color3.new(
+        color1.R + (color2.R - color1.R) * t,
+        color1.G + (color2.G - color1.G) * t,
+        color1.B + (color2.B - color1.B) * t
+    )
 end
 
 local function lerpColor(c1, c2, t)
@@ -192,73 +209,6 @@ local function lerpColor(c1, c2, t)
         c1.G + (c2.G - c1.G) * t,
         c1.B + (c2.B - c1.B) * t
     )
-end
-
--- Unified gradient color function that handles Rainbow/Custom and Static/Vertical/Spiral modes
-local BoxSpiralPhase = 0
-local BoxFillSpiralPhase = 0
-local FOVSpiralPhase = 0
-local HealthSpiralPhase = 0
-local TracerSpiralPhase = 0
-local TextSpiralPhase = 0
-
-local function getGradientColor(t, baseOffset, elementType)
-    -- t = position along gradient (0-1)
-    -- baseOffset = vertical position offset for vertical mode
-    -- elementType = "Box", "BoxFill", "FOV", "Health", "Tracer", "Text"
-    baseOffset = baseOffset or 0
-    elementType = elementType or "Box"
-    
-    -- Get settings for this element type
-    local prefix = elementType
-    local mode = ESPSettings[prefix .. "GradientMode"] or "Vertical"
-    local gradType = ESPSettings[prefix .. "GradientType"] or "Rainbow"
-    local color1Key = prefix .. "GradientColor1"
-    local color2Key = prefix .. "GradientColor2"
-    if elementType == "BoxFill" then
-        color1Key = prefix .. "GradientFillColor1"
-        color2Key = prefix .. "GradientFillColor2"
-    end
-    local color1 = ESPSettings[color1Key] or Color3.fromRGB(255, 0, 128)
-    local color2 = ESPSettings[color2Key] or Color3.fromRGB(0, 128, 255)
-    
-    -- Get spiral phase for this element
-    local spiralPhase = 0
-    if elementType == "Box" then spiralPhase = BoxSpiralPhase
-    elseif elementType == "BoxFill" then spiralPhase = BoxFillSpiralPhase
-    elseif elementType == "FOV" then spiralPhase = FOVSpiralPhase
-    elseif elementType == "Health" then spiralPhase = HealthSpiralPhase
-    elseif elementType == "Tracer" then spiralPhase = TracerSpiralPhase
-    elseif elementType == "Text" then spiralPhase = TextSpiralPhase
-    end
-    
-    local colorT = t
-    
-    if mode == "Static" then
-        -- Static: gradient doesn't animate, just use t directly
-        colorT = t
-    elseif mode == "Vertical" then
-        -- Vertical: gradient based on vertical position + rainbow hue offset
-        colorT = (t + baseOffset + RainbowHue) % 1
-    elseif mode == "Spiral" then
-        -- Spiral: like vertical but adds spinning animation
-        colorT = (t + baseOffset + RainbowHue + spiralPhase) % 1
-    end
-    
-    if gradType == "Rainbow" then
-        return Color3.fromHSV(colorT % 1, 1, 1)
-    else
-        -- Custom: blend color1→color2→color1 smoothly
-        -- Map 0→0.5→1 to color1→color2→color1
-        local cycle = (colorT % 1) * 2
-        if cycle <= 1 then
-            -- First half: blend from color1 to color2
-            return lerpColor(color1, color2, cycle)
-        else
-            -- Second half: blend from color2 back to color1
-            return lerpColor(color2, color1, cycle - 1)
-        end
-    end
 end
 
 local function getHealthColor(ratio)
@@ -598,7 +548,7 @@ local function hideESP(espObj)
     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
 end
 
-local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset, elementType)
+local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
     
@@ -634,13 +584,12 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
 
     -- Do NOT add integer overlaps here - we rely on float segmentation for exact coverage
     
-    -- Render segments with exact positioning using unified gradient system
+    -- Render segments with exact positioning
     for i = 1, segCount do
         local t = (i - 0.5) / segCount
         local segColor
         if useRainbow then
-            -- Use the unified gradient system with element type
-            segColor = getGradientColor(t * 0.5, baseOffset or 0, elementType or "BoxFill")
+            segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
         else
             segColor = lerpColor(color1, color2, t)
         end
@@ -662,9 +611,9 @@ local function hideGradient(espObj)
     for _, seg in ipairs(espObj.GradientSegments or {}) do seg.Visible = false end
 end
 
-local function drawBoxWithGradient(espObj, x, y, w, h, useGradient, baseColor, baseOffset, elementType)
+local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, baseOffset)
     -- Draw 4 sides: top, right, bottom, left
-    -- Gradient goes VERTICALLY DOWN based on Y position
+    -- Rainbow gradient goes VERTICALLY DOWN based on Y position
     local sides = {
         {x, y, x + w, y},         -- top (horizontal)
         {x + w, y, x + w, y + h}, -- right (vertical)
@@ -701,16 +650,16 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useGradient, baseColor, b
             outLine.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
             outLine.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
             
-            if useGradient then
+            if useRainbow then
                 -- Color based on Y position (vertical gradient going down)
                 local avgY = (ly1 + ly2) / 2
                 local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
-                line.Color = getGradientColor(yProgress * 0.5, baseOffset, elementType or "Box")
-                -- Hide outline when gradient to prevent color interference
+                line.Color = getRainbowColor(baseOffset + yProgress * 0.5)
+                -- Hide outline when rainbow to prevent color interference
                 if outLine then outLine.Visible = false end
             else
                 line.Color = baseColor
-                -- Show outline for non-gradient
+                -- Show outline for non-rainbow
                 if outLine then
                     outLine.Color = ESPSettings.BoxOutlineColor
                     outLine.Thickness = ESPSettings.Thickness or 3
@@ -773,18 +722,18 @@ local function updateESP()
             local baseOffset = 0
             if rect and vh and vh > 0 then baseOffset = rect.y / vh end
             
-            -- For non-box elements, use their Y position relative to box using unified gradient
-            local topColor = getGradientColor(0, baseOffset, "Box")                    -- Top of box
-            local centerColor = getGradientColor(0.25, baseOffset, "Box")              -- Center of box
-            local bottomColor = getGradientColor(0.5, baseOffset, "Box")               -- Bottom of box
+            -- For non-box elements, use their Y position relative to box
+            local topColor = getRainbowColor(baseOffset)                    -- Top of box
+            local centerColor = getRainbowColor(baseOffset + 0.25)          -- Center of box
+            local bottomColor = getRainbowColor(baseOffset + 0.5)           -- Bottom of box
             
             local boxColor = ESPSettings.BoxRainbow and topColor or ESPSettings.BoxColor
-            -- Tracer ends at bottom of box, use Tracer gradient system
-            local tracerColor = ESPSettings.TracerRainbow and getGradientColor(0, baseOffset, "Tracer") or ESPSettings.TracerColor
+            -- Tracer ends at bottom of box, so use bottom color
+            local tracerColor = ESPSettings.TracerRainbow and bottomColor or ESPSettings.TracerColor
             -- Chams use center color
             local chamColor = ESPSettings.ChamsRainbow and centerColor or ESPSettings.GlobalChamColor
-            -- Name is above box, use Text gradient system
-            local nameColor = ESPSettings.NameRainbow and getGradientColor(0, baseOffset, "Text") or ESPSettings.NameColor
+            -- Name is above box, use top color
+            local nameColor = ESPSettings.NameRainbow and topColor or ESPSettings.NameColor
 
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
@@ -937,7 +886,7 @@ local function updateESP()
                         local innerH = math.max(0, h - inset * 2)
 
                         drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillGradientColor1, ESPSettings.BoxFillGradientColor2, 
-                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "BoxFill")
+                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset)
                         espObj.BoxFill.Visible = false
 
                         -- Draw outline around gradient fill for proper bounding using exact positions
@@ -976,7 +925,7 @@ local function updateESP()
                     -- Square box
                     if ESPSettings.BoxRainbow then
                         -- Use segmented lines for smooth vertical rainbow gradient
-                        drawBoxWithGradient(espObj, x, y, w, h, true, boxColor, baseOffset, "Box")
+                        drawBoxWithGradient(espObj, x, y, w, h, true, boxColor, baseOffset)
                         -- hide crisp outline when using gradient segments
                         if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     else
@@ -1020,8 +969,8 @@ local function updateESP()
                         if ESPSettings.BoxRainbow then
                             -- Vertical gradient: top corners share one color, bottom corners share another
                             local yProgress = cornerYs[i]
-                                c.Line1.Color = getGradientColor(yProgress * 0.5, baseOffset, "Box")
-                                c.Line2.Color = getGradientColor(yProgress * 0.5, baseOffset, "Box")
+                                c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5)
+                                c.Line2.Color = getRainbowColor(baseOffset + yProgress * 0.5)
                         else
                                 c.Line1.Color, c.Line2.Color = boxColor, boxColor
                         end
@@ -1123,7 +1072,7 @@ local function updateESP()
 
                                 for i = 1, segCount do
                                     local t = (i - 0.5) / segCount
-                                    local segColor = getGradientColor(t * 0.5, baseOffset, "Health")
+                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
                                     segs[i].Size = Vector2.new(math.max(1, fillW), positions[i].h)
                                     segs[i].Position = Vector2.new(fillX, positions[i].y)
                                     segs[i].Color = segColor
@@ -1155,7 +1104,7 @@ local function updateESP()
 
                                 for i = 1, segCount do
                                     local t = (i - 0.5) / segCount
-                                    local segColor = getGradientColor(t * 0.5, baseOffset, "Health")
+                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
                                     segs[i].Size = Vector2.new(positions[i].w, math.max(1, fillH))
                                     segs[i].Position = Vector2.new(positions[i].x, fillY)
                                     segs[i].Color = segColor
@@ -1344,7 +1293,7 @@ local function updateObjectESP()
                 local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                 local baseOffset = 0
                 if rect and vh and vh > 0 then baseOffset = (rect.cy / vh) end
-                local color = config.Rainbow and getGradientColor(0, baseOffset, "Box") or config.Color
+                local color = config.Rainbow and getRainbowColor(baseOffset) or config.Color
                 
                 -- Name
                 if config.ShowName or config.ShowDistance then
@@ -1389,93 +1338,179 @@ local function updateObjectESP()
     end
 end
 
--- FOV Circle Drawing Objects
-local FOVCircleSegments = {}
-local FOV_CIRCLE_MAX_SEGMENTS = 128
-for i = 1, FOV_CIRCLE_MAX_SEGMENTS do
+-- Main render loop
+-- FOV Circle drawing objects
+local FOVCircleOutline = Drawing.new("Circle")
+FOVCircleOutline.Thickness = 1
+FOVCircleOutline.NumSides = 64
+FOVCircleOutline.Filled = false
+FOVCircleOutline.Transparency = 1
+FOVCircleOutline.Color = Color3.new(0, 0, 0)
+FOVCircleOutline.Visible = false
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.NumSides = 64
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Visible = false
+
+local FOVCircleFill = Drawing.new("Circle")
+FOVCircleFill.Thickness = 1
+FOVCircleFill.NumSides = 64
+FOVCircleFill.Filled = true
+FOVCircleFill.Transparency = 0.2
+FOVCircleFill.Color = Color3.fromRGB(255, 255, 255)
+FOVCircleFill.Visible = false
+
+-- Gradient circle segments for FOV (for gradient/rainbow circle outline)
+local FOV_GRADIENT_SEGMENTS = 64
+local FOVGradientSegments = {}
+for i = 1, FOV_GRADIENT_SEGMENTS do
     local seg = Drawing.new("Line")
-    seg.Thickness = 2
+    seg.Thickness = 1
     seg.Visible = false
-    FOVCircleSegments[i] = seg
+    FOVGradientSegments[i] = seg
 end
 
--- Simple non-gradient FOV circle (fallback)
-local FOVCircleSimple = Drawing.new("Circle")
-FOVCircleSimple.Filled = false
-FOVCircleSimple.Visible = false
+-- Gradient fill segments for FOV circle fill
+local FOVFillGradientSegments = {}
+for i = 1, FOV_GRADIENT_SEGMENTS do
+    local seg = Drawing.new("Triangle")
+    seg.Filled = true
+    seg.Visible = false
+    FOVFillGradientSegments[i] = seg
+end
 
 local function updateFOVCircle()
-    local mousePos = UserInputService:GetMouseLocation()
-    
     if not ESPSettings.FOVCircleEnabled then
-        FOVCircleSimple.Visible = false
-        for i = 1, FOV_CIRCLE_MAX_SEGMENTS do
-            FOVCircleSegments[i].Visible = false
-        end
+        FOVCircle.Visible = false
+        FOVCircleOutline.Visible = false
+        FOVCircleFill.Visible = false
+        for _, seg in ipairs(FOVGradientSegments) do seg.Visible = false end
+        for _, seg in ipairs(FOVFillGradientSegments) do seg.Visible = false end
         return
     end
     
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     local radius = ESPSettings.FOVCircleRadius or 100
-    local thickness = ESPSettings.FOVCircleThickness or 2
-    local useGradient = ESPSettings.FOVCircleGradient
+    local segments = ESPSettings.FOVCircleSegments or 64
+    local thickness = ESPSettings.FOVCircleThickness or 1
     
-    if useGradient then
-        -- Draw gradient circle using line segments
-        FOVCircleSimple.Visible = false
-        local segCount = math.clamp(ESPSettings.FOVCircleSegments or 64, 16, FOV_CIRCLE_MAX_SEGMENTS)
+    -- Determine if we need gradient/rainbow for outline
+    local useGradientOutline = ESPSettings.FOVCircleGradient or ESPSettings.FOVCircleRainbow
+    
+    if useGradientOutline then
+        -- Hide solid circle, use gradient segments
+        FOVCircle.Visible = false
+        FOVCircleOutline.Visible = false
         
+        local segCount = math.min(segments, FOV_GRADIENT_SEGMENTS)
         for i = 1, segCount do
             local angle1 = (i - 1) / segCount * math.pi * 2
             local angle2 = i / segCount * math.pi * 2
             
-            local x1 = mousePos.X + math.cos(angle1) * radius
-            local y1 = mousePos.Y + math.sin(angle1) * radius
-            local x2 = mousePos.X + math.cos(angle2) * radius
-            local y2 = mousePos.Y + math.sin(angle2) * radius
+            local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
+            local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
             
-            local seg = FOVCircleSegments[i]
-            seg.From = Vector2.new(x1, y1)
-            seg.To = Vector2.new(x2, y2)
+            local seg = FOVGradientSegments[i]
+            seg.From = p1
+            seg.To = p2
             seg.Thickness = thickness
+            seg.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
             
-            -- Get gradient color based on angle position + spiral phase for spinning effect
             local t = (i - 0.5) / segCount
-            seg.Color = getGradientColor(t + FOVSpiralPhase, 0, "FOV")
+            if ESPSettings.FOVCircleRainbow then
+                seg.Color = getRainbowColor(t * 0.5)
+            else
+                seg.Color = getCustomGradientColor(t, ESPSettings.FOVCircleGradientColor1, ESPSettings.FOVCircleGradientColor2)
+            end
             seg.Visible = true
         end
         
         -- Hide unused segments
-        for i = segCount + 1, FOV_CIRCLE_MAX_SEGMENTS do
-            FOVCircleSegments[i].Visible = false
+        for i = segCount + 1, FOV_GRADIENT_SEGMENTS do
+            FOVGradientSegments[i].Visible = false
         end
     else
-        -- Use simple circle
-        for i = 1, FOV_CIRCLE_MAX_SEGMENTS do
-            FOVCircleSegments[i].Visible = false
-        end
+        -- Use solid circle
+        for _, seg in ipairs(FOVGradientSegments) do seg.Visible = false end
         
-        FOVCircleSimple.Position = mousePos
-        FOVCircleSimple.Radius = radius
-        FOVCircleSimple.Thickness = thickness
-        FOVCircleSimple.Color = ESPSettings.FOVCircleColor or Color3.new(1, 1, 1)
-        FOVCircleSimple.Filled = ESPSettings.FOVCircleFilled or false
-        FOVCircleSimple.Visible = true
+        -- Outline
+        FOVCircleOutline.Position = center
+        FOVCircleOutline.Radius = radius + 1
+        FOVCircleOutline.Thickness = thickness + 2
+        FOVCircleOutline.NumSides = segments
+        FOVCircleOutline.Color = Color3.new(0, 0, 0)
+        FOVCircleOutline.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
+        FOVCircleOutline.Visible = true
+        
+        -- Main circle
+        FOVCircle.Position = center
+        FOVCircle.Radius = radius
+        FOVCircle.Thickness = thickness
+        FOVCircle.NumSides = segments
+        FOVCircle.Color = ESPSettings.FOVCircleColor
+        FOVCircle.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
+        FOVCircle.Visible = true
+    end
+    
+    -- Fill circle
+    if ESPSettings.FOVCircleFilled then
+        local useFillGradient = ESPSettings.FOVCircleFillGradient or ESPSettings.FOVCircleFillRainbow
+        
+        if useFillGradient then
+            -- Use triangle segments for gradient fill
+            FOVCircleFill.Visible = false
+            
+            local segCount = math.min(segments, FOV_GRADIENT_SEGMENTS)
+            for i = 1, segCount do
+                local angle1 = (i - 1) / segCount * math.pi * 2
+                local angle2 = i / segCount * math.pi * 2
+                
+                local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
+                local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
+                
+                local seg = FOVFillGradientSegments[i]
+                seg.PointA = center
+                seg.PointB = p1
+                seg.PointC = p2
+                seg.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
+                
+                local t = (i - 0.5) / segCount
+                if ESPSettings.FOVCircleFillRainbow then
+                    seg.Color = getRainbowColor(t * 0.5)
+                else
+                    seg.Color = getCustomGradientColor(t, ESPSettings.FOVCircleFillGradientColor1, ESPSettings.FOVCircleFillGradientColor2)
+                end
+                seg.Visible = true
+            end
+            
+            -- Hide unused
+            for i = segCount + 1, FOV_GRADIENT_SEGMENTS do
+                FOVFillGradientSegments[i].Visible = false
+            end
+        else
+            -- Solid fill
+            for _, seg in ipairs(FOVFillGradientSegments) do seg.Visible = false end
+            
+            FOVCircleFill.Position = center
+            FOVCircleFill.Radius = radius - thickness / 2
+            FOVCircleFill.NumSides = segments
+            FOVCircleFill.Color = ESPSettings.FOVCircleFillColor
+            FOVCircleFill.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
+            FOVCircleFill.Visible = true
+        end
+    else
+        FOVCircleFill.Visible = false
+        for _, seg in ipairs(FOVFillGradientSegments) do seg.Visible = false end
     end
 end
 
--- Main render loop
 local function mainUpdate()
     -- advance shared rainbow hue so all rainbow toggles stay in sync
     RainbowHue = (RainbowHue + (ESPSettings.RainbowSpeed or 1) * 0.001) % 1
-    
-    -- advance spiral phases for each element type independently
-    BoxSpiralPhase = (BoxSpiralPhase + (ESPSettings.BoxGradientSpiralSpeed or 2) * 0.005) % 1
-    BoxFillSpiralPhase = (BoxFillSpiralPhase + (ESPSettings.BoxFillGradientSpiralSpeed or 2) * 0.005) % 1
-    FOVSpiralPhase = (FOVSpiralPhase + (ESPSettings.FOVGradientSpiralSpeed or 2) * 0.005) % 1
-    HealthSpiralPhase = (HealthSpiralPhase + (ESPSettings.HealthGradientSpiralSpeed or 2) * 0.005) % 1
-    TracerSpiralPhase = (TracerSpiralPhase + (ESPSettings.TracerGradientSpiralSpeed or 2) * 0.005) % 1
-    TextSpiralPhase = (TextSpiralPhase + (ESPSettings.TextGradientSpiralSpeed or 2) * 0.005) % 1
-    
     updateESP()
     updateObjectESP()
     updateFOVCircle()
