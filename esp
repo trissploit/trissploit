@@ -133,7 +133,9 @@ local AllowedParts = {
 -- Utility functions
 local function getRainbowColor(offset)
     offset = offset or 0
-    return Color3.fromHSV((RainbowHue + offset) % 1, 1, 1)
+    -- Use frac for smooth wrapping without visible resets
+    local hue = (RainbowHue + offset) - math.floor(RainbowHue + offset)
+    return Color3.fromHSV(hue, 1, 1)
 end
 
 local function lerpColor(c1, c2, t)
@@ -515,7 +517,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         
         local baseAlpha = transparency or 0
         -- Animation offset that spins colors through the gradient
-        local animOffset = RainbowHue * 0.6
+        local animOffset = RainbowHue * 0.7
         
         for i = 1, segCount do
             -- Calculate exact floating-point position for smooth gradients
@@ -527,15 +529,15 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
             local progress = (centerY - rectY) / rectH
             
             -- Spin the colors by offsetting progress continuously
-            -- Use smooth wrapping to avoid visible resets
-            local spinProgress = (progress + animOffset) % 1.0
+            -- Use frac for smooth wrapping to avoid visible resets
+            local spinProgress = (progress + animOffset) - math.floor(progress + animOffset)
             
             local segColor
             if useRainbow then
-                -- Rainbow spins through the gradient
-                segColor = getRainbowColor((baseOffset or 0) + spinProgress * 0.5)
+                -- Rainbow spins through the gradient - simple offset, no extra multiplication
+                segColor = getRainbowColor(spinProgress * 0.3)
             else
-                -- Custom gradient also spins/animates
+                -- Custom gradient animates identically to rainbow
                 segColor = lerpColor(color1, color2, spinProgress)
             end
             
@@ -557,60 +559,70 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         return
     end
     
-    -- Spin mode: rotating concentric layers with smooth blending
+    -- Spin mode: rotating linear gradient (angle rotates continuously)
     if gradientMode == "Spin" then
-        local minDim = math.min(math.floor(rectW), math.floor(rectH))
-        if minDim <= 0 then
+        local totalArea = math.max(1, math.floor(rectW * rectH))
+        if totalArea <= 0 then
             for i = 1, maxSegs do segments[i].Visible = false end
             return
         end
 
-        local maxLayers = math.clamp(math.floor(minDim / 4), 4, math.min(40, maxSegs))
-        local segCount = maxLayers
-
-        -- Integer layer thickness for clean rendering
-        local totalRadius = minDim / 2
-        local layerThickness = math.floor(totalRadius / segCount)
-        if layerThickness < 1 then layerThickness = 1 end
-
-        local baseAlpha = transparency or 0
-        -- Spin animation: rotate the color offset over time
-        local animOffset = RainbowHue * 0.6
+        -- Calculate rotating angle based on time
+        local angle = RainbowHue * math.pi * 2 -- 0 to 360 degrees rotation
+        local cosAngle = math.cos(angle)
+        local sinAngle = math.sin(angle)
         
-        for i = 1, segCount do
-            local layerIndex = i - 1
-            local t = layerIndex / math.max(1, segCount - 1)
-            
-            -- Spin the colors continuously
-            local spinT = (t + animOffset) % 1.0
-            
-            local segColor
-            if useRainbow then
-                -- Rainbow spins through layers
-                segColor = getRainbowColor((baseOffset or 0) + spinT * 0.5)
-            else
-                -- Custom gradient also spins/animates
-                segColor = lerpColor(color1, color2, spinT)
+        -- Calculate diagonal distance for gradient projection
+        local maxDist = math.sqrt(rectW * rectW + rectH * rectH)
+        
+        -- Use grid-based segments for smooth rotating gradient
+        local segSize = 3 -- pixel size of each segment
+        local segCountW = math.max(1, math.ceil(rectW / segSize))
+        local segCountH = math.max(1, math.ceil(rectH / segSize))
+        local totalSegs = math.min(segCountW * segCountH, maxSegs)
+        
+        local baseAlpha = transparency or 0
+        local segIndex = 0
+        
+        for iy = 0, segCountH - 1 do
+            for ix = 0, segCountW - 1 do
+                segIndex = segIndex + 1
+                if segIndex > maxSegs then break end
+                
+                -- Calculate segment position and size
+                local segX = rectX + ix * segSize
+                local segY = rectY + iy * segSize
+                local segW = math.min(segSize, rectW - ix * segSize)
+                local segH = math.min(segSize, rectH - iy * segSize)
+                
+                -- Calculate center of segment relative to rect center
+                local centerX = (segX + segW * 0.5) - (rectX + rectW * 0.5)
+                local centerY = (segY + segH * 0.5) - (rectY + rectH * 0.5)
+                
+                -- Project position onto rotating gradient direction
+                local projected = (centerX * cosAngle + centerY * sinAngle) / maxDist
+                
+                -- Map projection to 0-1 range and add color cycling
+                local progress = (projected + 0.5 + RainbowHue * 0.5) - math.floor(projected + 0.5 + RainbowHue * 0.5)
+                
+                local segColor
+                if useRainbow then
+                    segColor = getRainbowColor(progress * 0.3)
+                else
+                    -- Custom gradient matches rainbow behavior
+                    segColor = lerpColor(color1, color2, progress)
+                end
+                
+                segments[segIndex].Size = Vector2.new(math.max(1, math.floor(segW)), math.max(1, math.floor(segH)))
+                segments[segIndex].Position = Vector2.new(math.floor(segX), math.floor(segY))
+                segments[segIndex].Color = segColor
+                segments[segIndex].Transparency = baseAlpha
+                segments[segIndex].Visible = true
             end
-
-            -- Integer-based inset/size for pixel-perfect rendering
-            local shrink = layerIndex * layerThickness
-            local layerX = math.floor(rectX + shrink)
-            local layerY = math.floor(rectY + shrink)
-            local layerW = math.max(1, math.floor(rectW - shrink * 2))
-            local layerH = math.max(1, math.floor(rectH - shrink * 2))
-
-            -- Gentle alpha gradient toward center for depth
-            local layerAlpha = math.clamp(baseAlpha + t * 0.3, 0, 1)
-
-            segments[i].Size = Vector2.new(layerW, layerH)
-            segments[i].Position = Vector2.new(layerX, layerY)
-            segments[i].Color = segColor
-            segments[i].Transparency = layerAlpha
-            segments[i].Visible = true
+            if segIndex > maxSegs then break end
         end
 
-        for i = segCount + 1, maxSegs do
+        for i = segIndex + 1, maxSegs do
             segments[i].Visible = false
         end
         return
