@@ -156,52 +156,47 @@ local function getRainbowColor(offset, element)
     offset = offset or 0
     element = element or ""
 
-    -- If custom gradient is enabled, use per-element 3-color gradient (stops always = 3)
-    if ESPSettings.UseCustomGradient then
-        local stops = 3
+    -- Use per-element 3-color gradient (stops always = 3)
+    local stops = 3
 
-        local function pickColorsForElement(el)
-            if el == "Box" then
-                return {ESPSettings.BoxCustomColor1, ESPSettings.BoxCustomColor2, ESPSettings.BoxCustomColor3}
-            elseif el == "Tracer" then
-                return {ESPSettings.TracerCustomColor1, ESPSettings.TracerCustomColor2, ESPSettings.TracerCustomColor3}
-            elseif el == "HealthBar" then
-                return {ESPSettings.HealthBarCustomColor1, ESPSettings.HealthBarCustomColor2, ESPSettings.HealthBarCustomColor3}
-            elseif el == "Chams" then
-                return {ESPSettings.ChamsCustomColor1, ESPSettings.ChamsCustomColor2, ESPSettings.ChamsCustomColor3}
-            elseif el == "Name" then
-                return {ESPSettings.NameCustomColor1, ESPSettings.NameCustomColor2, ESPSettings.NameCustomColor3}
-            elseif el == "FOV" then
-                return {ESPSettings.FOVCustomColor1, ESPSettings.FOVCustomColor2, ESPSettings.FOVCustomColor3}
-            elseif el == "Object" then
-                return {ESPSettings.ObjectCustomColor1, ESPSettings.ObjectCustomColor2, ESPSettings.ObjectCustomColor3}
-            else
-                return {ESPSettings.CustomGradientColor1, ESPSettings.CustomGradientColor2, ESPSettings.CustomGradientColor3}
-            end
+    local function pickColorsForElement(el)
+        if el == "Box" then
+            return {ESPSettings.BoxCustomColor1, ESPSettings.BoxCustomColor2, ESPSettings.BoxCustomColor3}
+        elseif el == "Tracer" then
+            return {ESPSettings.TracerCustomColor1, ESPSettings.TracerCustomColor2, ESPSettings.TracerCustomColor3}
+        elseif el == "HealthBar" then
+            return {ESPSettings.HealthBarCustomColor1, ESPSettings.HealthBarCustomColor2, ESPSettings.HealthBarCustomColor3}
+        elseif el == "Chams" then
+            return {ESPSettings.ChamsCustomColor1, ESPSettings.ChamsCustomColor2, ESPSettings.ChamsCustomColor3}
+        elseif el == "Name" then
+            return {ESPSettings.NameCustomColor1, ESPSettings.NameCustomColor2, ESPSettings.NameCustomColor3}
+        elseif el == "FOV" then
+            return {ESPSettings.FOVCustomColor1, ESPSettings.FOVCustomColor2, ESPSettings.FOVCustomColor3}
+        elseif el == "Object" then
+            return {ESPSettings.ObjectCustomColor1, ESPSettings.ObjectCustomColor2, ESPSettings.ObjectCustomColor3}
+        else
+            return {ESPSettings.CustomGradientColor1, ESPSettings.CustomGradientColor2, ESPSettings.CustomGradientColor3}
         end
-
-        local colors = pickColorsForElement(element)
-
-        -- Use absolute time + offset for smooth animation
-        local t = ((RainbowHue + offset) % 1) * stops
-        local idx = math.floor(t) % stops
-        local frac = t - math.floor(t)
-
-        local c1 = colors[idx + 1]
-        local c2 = colors[(idx + 1) % stops + 1]
-
-        -- Smoothstep interpolation for cleaner blending
-        frac = frac * frac * (3 - 2 * frac)
-
-        return Color3.new(
-            c1.R + (c2.R - c1.R) * frac,
-            c1.G + (c2.G - c1.G) * frac,
-            c1.B + (c2.B - c1.B) * frac
-        )
     end
 
-    -- Default HSV rainbow
-    return Color3.fromHSV((RainbowHue + offset) % 1, 1, 1)
+    local colors = pickColorsForElement(element)
+
+    -- Use absolute time + offset for smooth animation through stops
+    local t = ((RainbowHue + offset) % 1) * stops
+    local idx = math.floor(t) % stops
+    local frac = t - math.floor(t)
+
+    local c1 = colors[idx + 1]
+    local c2 = colors[(idx + 1) % stops + 1]
+
+    -- Smoothstep interpolation for cleaner blending
+    frac = frac * frac * (3 - 2 * frac)
+
+    return Color3.new(
+        c1.R + (c2.R - c1.R) * frac,
+        c1.G + (c2.G - c1.G) * frac,
+        c1.B + (c2.B - c1.B) * frac
+    )
 end
 
 -- Get custom gradient color (for non-rainbow gradients with custom colors)
