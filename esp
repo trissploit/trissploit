@@ -77,14 +77,6 @@ local ESPSettings = {
     CustomGradientColor6 = Color3.fromRGB(0, 0, 255),
     CustomGradientStops = 6, -- How many colors to use (2-6)
     
-    -- Per-element custom gradient toggles
-    BoxUseCustomGradient = false,
-    TracerUseCustomGradient = false,
-    HealthBarUseCustomGradient = false,
-    ChamsUseCustomGradient = false,
-    NameUseCustomGradient = false,
-    FOVCircleUseCustomGradient = false,
-    
     -- FOV Circle settings
     FOVCircleEnabled = false,
     FOVCircleRadius = 100,
@@ -154,12 +146,11 @@ local AllowedParts = {
 }
 
 -- Utility functions
-local function getRainbowColor(offset, useCustom)
+local function getRainbowColor(offset)
     offset = offset or 0
-    useCustom = useCustom == nil and ESPSettings.UseCustomGradient or useCustom
     
     -- Use custom gradient colors if enabled
-    if useCustom then
+    if ESPSettings.UseCustomGradient then
         local stops = math.clamp(ESPSettings.CustomGradientStops or 6, 2, 6)
         local colors = {
             ESPSettings.CustomGradientColor1,
@@ -169,21 +160,24 @@ local function getRainbowColor(offset, useCustom)
             ESPSettings.CustomGradientColor5,
             ESPSettings.CustomGradientColor6
         }
-
-        -- Use absolute time for camera-independent gradient
+        
+        -- Use absolute time + offset for smooth animation
         local t = ((RainbowHue + offset) % 1) * stops
         local idx = math.floor(t) % stops
         local frac = t - math.floor(t)
-
-        -- Smooth interpolation (smoothstep) to reduce banding
-        frac = frac * frac * (3 - 2 * frac)
-
+        
         local c1 = colors[idx + 1]
         -- Wrap to first color after last color for seamless loop
         local c2 = colors[(idx + 1) % stops + 1]
-
-        -- Use gamma-corrected interpolation for perceptual smoothness
-        return lerpColorGamma(c1, c2, frac)
+        
+        -- Smoothstep interpolation for cleaner blending
+        frac = frac * frac * (3 - 2 * frac)
+        
+        return Color3.new(
+            c1.R + (c2.R - c1.R) * frac,
+            c1.G + (c2.G - c1.G) * frac,
+            c1.B + (c2.B - c1.B) * frac
+        )
     end
     
     -- Default HSV rainbow
@@ -207,18 +201,6 @@ local function lerpColor(c1, c2, t)
         c1.G + (c2.G - c1.G) * t,
         c1.B + (c2.B - c1.B) * t
     )
-end
-
--- Gamma-corrected color interpolation for smoother perceived blending
-local function lerpColorGamma(c1, c2, t)
-    t = math.clamp(t, 0, 1)
-    local g = 2.2
-    local r1, g1, b1 = math.max(c1.R, 0), math.max(c1.G, 0), math.max(c1.B, 0)
-    local r2, g2, b2 = math.max(c2.R, 0), math.max(c2.G, 0), math.max(c2.B, 0)
-    local R = (r1 ^ g + (r2 ^ g - r1 ^ g) * t) ^ (1 / g)
-    local G = (g1 ^ g + (g2 ^ g - g1 ^ g) * t) ^ (1 / g)
-    local B = (b1 ^ g + (b2 ^ g - b1 ^ g) * t) ^ (1 / g)
-    return Color3.new(math.clamp(R, 0, 1), math.clamp(G, 0, 1), math.clamp(B, 0, 1))
 end
 
 local function getHealthColor(ratio)
@@ -621,7 +603,7 @@ local function hideGradient(espObj)
     for _, seg in ipairs(espObj.GradientSegments or {}) do seg.Visible = false end
 end
 
-local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, baseOffset, useCustomGrad)
+local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, baseOffset)
     -- Draw 4 sides: top, right, bottom, left
     -- Rainbow gradient goes VERTICALLY DOWN based on Y position
     local sides = {
@@ -664,7 +646,7 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
                 -- Color based on Y position (vertical gradient going down)
                 local avgY = (ly1 + ly2) / 2
                 local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
-                line.Color = getRainbowColor(baseOffset + yProgress * 0.5, useCustomGrad)
+                line.Color = getRainbowColor(baseOffset + yProgress * 0.5)
                 -- Hide outline when rainbow to prevent color interference
                 if outLine then outLine.Visible = false end
             else
@@ -726,29 +708,30 @@ local function updateESP()
                 return
             end
 
-            -- Calculate colors with individual rainbow settings (WORLD-anchored vertical gradient)
-            -- Use world Y (HumanoidRootPart.Position.Y) to anchor gradient to world space
-            local baseOffset = 0
-            if hrp and hrp.Position then
-                -- Use a repeating scale so gradients wrap every 50 studs (adjustable)
-                baseOffset = (hrp.Position.Y / 50) % 1
-            else
-                local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
-                if rect and vh and vh > 0 then baseOffset = rect.y / vh end
+            -- Calculate colors with individual rainbow settings
+            -- Use world-space Y position for camera-independent gradient (doesn't shift when camera moves)
+            local worldY = 0
+            if character and character.PrimaryPart then
+                worldY = character.PrimaryPart.Position.Y
+            elseif character and character:FindFirstChild("HumanoidRootPart") then
+                worldY = character.HumanoidRootPart.Position.Y
             end
             
+            -- Normalize world Y to 0-1 range (assuming typical world height 0-500)
+            local baseOffset = (worldY % 500) / 500
+            
             -- For non-box elements, use their Y position relative to box
-            local topColor = getRainbowColor(baseOffset, ESPSettings.BoxUseCustomGradient)                    -- Top of box
-            local centerColor = getRainbowColor(baseOffset + 0.25, ESPSettings.ChamsUseCustomGradient)          -- Center of box
-            local bottomColor = getRainbowColor(baseOffset + 0.5, ESPSettings.TracerUseCustomGradient)           -- Bottom of box
+            local topColor = getRainbowColor(baseOffset)                    -- Top of box
+            local centerColor = getRainbowColor(baseOffset + 0.25)          -- Center of box
+            local bottomColor = getRainbowColor(baseOffset + 0.5)           -- Bottom of box
             
             local boxColor = ESPSettings.BoxRainbow and topColor or ESPSettings.BoxColor
             -- Tracer ends at bottom of box, so use bottom color
             local tracerColor = ESPSettings.TracerRainbow and bottomColor or ESPSettings.TracerColor
             -- Chams use center color
             local chamColor = ESPSettings.ChamsRainbow and centerColor or ESPSettings.GlobalChamColor
-            -- Name is above box, use top color with its own custom gradient flag
-            local nameColor = ESPSettings.NameRainbow and getRainbowColor(baseOffset, ESPSettings.NameUseCustomGradient) or ESPSettings.NameColor
+            -- Name is above box, use top color
+            local nameColor = ESPSettings.NameRainbow and topColor or ESPSettings.NameColor
 
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
@@ -940,7 +923,7 @@ local function updateESP()
                     -- Square box
                     if ESPSettings.BoxRainbow then
                         -- Use segmented lines for smooth vertical rainbow gradient
-                        drawBoxWithGradient(espObj, x, y, w, h, true, boxColor, baseOffset, ESPSettings.BoxUseCustomGradient)
+                        drawBoxWithGradient(espObj, x, y, w, h, true, boxColor, baseOffset)
                         -- hide crisp outline when using gradient segments
                         if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     else
@@ -984,8 +967,8 @@ local function updateESP()
                         if ESPSettings.BoxRainbow then
                             -- Vertical gradient: top corners share one color, bottom corners share another
                             local yProgress = cornerYs[i]
-                                c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5, ESPSettings.BoxUseCustomGradient)
-                                c.Line2.Color = getRainbowColor(baseOffset + yProgress * 0.5, ESPSettings.BoxUseCustomGradient)
+                                c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5)
+                                c.Line2.Color = getRainbowColor(baseOffset + yProgress * 0.5)
                         else
                                 c.Line1.Color, c.Line2.Color = boxColor, boxColor
                         end
@@ -1087,7 +1070,7 @@ local function updateESP()
 
                                 for i = 1, segCount do
                                     local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5, ESPSettings.HealthBarUseCustomGradient)
+                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
                                     segs[i].Size = Vector2.new(math.max(1, fillW), positions[i].h)
                                     segs[i].Position = Vector2.new(fillX, positions[i].y)
                                     segs[i].Color = segColor
@@ -1119,7 +1102,7 @@ local function updateESP()
 
                                 for i = 1, segCount do
                                     local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5, ESPSettings.HealthBarUseCustomGradient)
+                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
                                     segs[i].Size = Vector2.new(positions[i].w, math.max(1, fillH))
                                     segs[i].Position = Vector2.new(positions[i].x, fillY)
                                     segs[i].Color = segColor
@@ -1305,20 +1288,9 @@ local function updateObjectESP()
                     return
                 end
                 
+                local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                 local baseOffset = 0
-                -- Try to anchor object gradient to world Y if possible
-                local worldY = nil
-                if obj and obj:IsA and obj:IsA("BasePart") and obj.Position then
-                    worldY = obj.Position.Y
-                elseif obj and obj.PrimaryPart and obj.PrimaryPart.Position then
-                    worldY = obj.PrimaryPart.Position.Y
-                end
-                if worldY then
-                    baseOffset = (worldY / 50) % 1
-                else
-                    local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
-                    if rect and vh and vh > 0 then baseOffset = (rect.cy / vh) end
-                end
+                if rect and vh and vh > 0 then baseOffset = (rect.cy / vh) end
                 local color = config.Rainbow and getRainbowColor(baseOffset) or config.Color
                 
                 -- Name
@@ -1426,16 +1398,16 @@ local function updateFOVCircle()
     
     -- Determine if we need rainbow for outline
     local useRainbowOutline = ESPSettings.FOVCircleRainbow
-    local useCustomGrad = ESPSettings.FOVCircleUseCustomGradient
     
     if useRainbowOutline then
-        -- Hide solid circle, use rainbow segments
+        -- Hide solid circle, use rainbow segments with improved blending
         FOVCircle.Visible = false
         FOVCircleOutline.Visible = false
         
         for i = 1, segments do
-            local angle1 = (i - 1) / segments * math.pi * 2
-            local angle2 = i / segments * math.pi * 2
+            -- Smooth angle transitions with slight overlap for perfect blending
+            local angle1 = ((i - 1) / segments) * math.pi * 2
+            local angle2 = (i / segments) * math.pi * 2
             
             local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
             local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
@@ -1443,12 +1415,12 @@ local function updateFOVCircle()
             local seg = FOVGradientSegments[i]
             seg.From = p1
             seg.To = p2
-            seg.Thickness = thickness
+            seg.Thickness = thickness + 0.5  -- Slight thickness increase for better blending
             seg.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
             
-            -- Use smooth time-based offset for gradient that doesn't move with camera
-            local t = (i - 0.5) / segments
-            seg.Color = getRainbowColor(t, useCustomGrad)
+            -- Use time-based gradient with smoothstep for clean blending
+            local t = i / segments
+            seg.Color = getRainbowColor(t)
             seg.Visible = true
         end
         
@@ -1479,16 +1451,16 @@ local function updateFOVCircle()
         FOVCircle.Visible = true
     end
     
-    -- Fill circle
+    -- Fill circle with improved rendering
     if ESPSettings.FOVCircleFilled then
         if ESPSettings.FOVCircleFillRainbow then
-            -- Use triangle segments for rainbow fill with no gaps
+            -- Use triangle segments for rainbow fill with perfect blending
             FOVCircleFill.Visible = false
             
             for i = 1, segments do
-                -- Add overlap to prevent gaps completely
-                local angle1 = (i - 1) / segments * math.pi * 2 - 0.002
-                local angle2 = i / segments * math.pi * 2 + 0.002
+                -- Perfect triangle coverage with no gaps or overlaps
+                local angle1 = ((i - 1) / segments) * math.pi * 2
+                local angle2 = (i / segments) * math.pi * 2
                 
                 local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
                 local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
@@ -1499,10 +1471,11 @@ local function updateFOVCircle()
                 seg.PointC = p2
                 seg.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
                 
-                -- Use smooth time-based offset for gradient
-                local t = (i - 0.5) / segments
-                seg.Color = getRainbowColor(t, useCustomGrad)
+                -- Use time-based gradient with smoothstep
+                local t = i / segments
+                seg.Color = getRainbowColor(t)
                 seg.Visible = true
+                seg.Filled = true
             end
             
             -- Hide unused
@@ -1514,10 +1487,11 @@ local function updateFOVCircle()
             for _, seg in ipairs(FOVFillGradientSegments) do seg.Visible = false end
             
             FOVCircleFill.Position = center
-            FOVCircleFill.Radius = radius - thickness / 2
+            FOVCircleFill.Radius = radius
             FOVCircleFill.NumSides = segments
             FOVCircleFill.Color = ESPSettings.FOVCircleFillColor
             FOVCircleFill.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
+            FOVCircleFill.Filled = true
             FOVCircleFill.Visible = true
         end
     else
