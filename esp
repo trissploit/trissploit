@@ -815,14 +815,28 @@ local function updateESP()
                     
                 -- Box fill first (behind lines) - works for BOTH square and corner
                 if ESPSettings.BoxFill then
+                    -- inset by half the outline thickness so gradients/fills don't paint over the outline
+                    local thickness = ESPSettings.Thickness or 1
+                    local inset = math.ceil(thickness / 2)
+                    local innerX = x + inset
+                    local innerY = y + inset
+                    local innerW = w - inset * 2
+                    local innerH = h - inset * 2
+
                     if ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow then
                         local useRainbow = ESPSettings.BoxFillRainbow
-                        drawGradient(espObj, {x = x, y = y, w = w, h = h}, ESPSettings.BoxFillGradientColor1, ESPSettings.BoxFillGradientColor2, 
-                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset)
+                        -- If inner area is too small, fall back to full rect
+                        if innerW > 0 and innerH > 0 then
+                            drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillGradientColor1, ESPSettings.BoxFillGradientColor2, 
+                                0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset)
+                        else
+                            drawGradient(espObj, {x = x, y = y, w = w, h = h}, ESPSettings.BoxFillGradientColor1, ESPSettings.BoxFillGradientColor2, 
+                                0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset)
+                        end
                         espObj.BoxFill.Visible = false
+
                         -- Draw outline around gradient fill for proper bounding
                         if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
-                            local thickness = ESPSettings.Thickness or 1
                             espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
                             espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
                             espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
@@ -832,14 +846,22 @@ local function updateESP()
                     else
                         hideGradient(espObj)
                         local fillColor = ESPSettings.BoxFillColor
-                        espObj.BoxFill.Size = Vector2.new(math.max(1, w), math.max(1, h))
-                        espObj.BoxFill.Position = Vector2.new(x, y)
+
+                        -- Use inset for solid fill as well so it doesn't overlap the outline
+                        if innerW > 0 and innerH > 0 then
+                            espObj.BoxFill.Size = Vector2.new(math.max(1, innerW), math.max(1, innerH))
+                            espObj.BoxFill.Position = Vector2.new(innerX, innerY)
+                        else
+                            espObj.BoxFill.Size = Vector2.new(math.max(1, w), math.max(1, h))
+                            espObj.BoxFill.Position = Vector2.new(x, y)
+                        end
+
                         espObj.BoxFill.Color = fillColor
                         espObj.BoxFill.Transparency = 1 - ESPSettings.BoxFillTransparency
                         espObj.BoxFill.Visible = true
+
                         -- Draw outline around solid fill for proper bounding
                         if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
-                            local thickness = ESPSettings.Thickness or 1
                             espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
                             espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
                             espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
