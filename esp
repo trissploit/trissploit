@@ -63,9 +63,7 @@ local ESPSettings = {
     ShowName = true,
     ShowHealthText = true,
     ShowDistance = true,
-    -- Master toggle for Text ESP (UI-controlled)
     TextESPEnabled = true,
-    -- Per-text-item default positions
     NamePosition = "Top",
     HealthTextPosition = "Top",
     DistancePosition = "Top",
@@ -412,9 +410,6 @@ local BOX_LINE_SEGMENTS = 50       -- Reduced from 100 for better performance
 local function createESPObject()
     local espObj = {
         Name = Drawing.new("Text"),
-        NameText = Drawing.new("Text"),
-        HealthText = Drawing.new("Text"),
-        DistanceText = Drawing.new("Text"),
         Tracer = Drawing.new("Line"),
         BoxLines = {},  -- 4 sides with gradient segments
         BoxOutlineLines = {},  -- outline for each side
@@ -491,23 +486,12 @@ local function createESPObject()
     espObj.OutlineSquare.Visible = false
     espObj.OutlineSquare.Thickness = ESPSettings.Thickness or 3
     espObj.OutlineSquare.Color = ESPSettings.BoxColor or Color3.fromRGB(0,170,255)
-    -- Configure combined name text (legacy)
     espObj.Name.Center = true
     espObj.Name.Outline = true
     espObj.Name.OutlineColor = Color3.new(0,0,0)
     espObj.Name.Size = ESPSettings.TextSize
     espObj.Name.Font = 3
     espObj.Name.Visible = false
-
-    -- Configure per-element text objects
-    for _, tObj in ipairs({espObj.NameText, espObj.HealthText, espObj.DistanceText}) do
-        tObj.Center = true
-        tObj.Outline = true
-        tObj.OutlineColor = Color3.new(0,0,0)
-        tObj.Size = ESPSettings.TextSize
-        tObj.Font = 3
-        tObj.Visible = false
-    end
     
     espObj.Tracer.Thickness = ESPSettings.TracerThickness
     espObj.Tracer.Visible = false
@@ -535,9 +519,6 @@ end
 local function removeESP(espObj)
     if not espObj then return end
     pcall(function() espObj.Name:Remove() end)
-    pcall(function() if espObj.NameText then espObj.NameText:Remove() end end)
-    pcall(function() if espObj.HealthText then espObj.HealthText:Remove() end end)
-    pcall(function() if espObj.DistanceText then espObj.DistanceText:Remove() end end)
     pcall(function() espObj.Tracer:Remove() end)
     for side = 1, 4 do
         for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
@@ -564,9 +545,6 @@ end
 
 local function hideESP(espObj)
     espObj.Name.Visible = false
-    if espObj.NameText then espObj.NameText.Visible = false end
-    if espObj.HealthText then espObj.HealthText.Visible = false end
-    if espObj.DistanceText then espObj.DistanceText.Visible = false end
     espObj.Tracer.Visible = false
     for side = 1, 4 do
         for _, line in ipairs(espObj.BoxLines[side] or {}) do line.Visible = false end
@@ -780,79 +758,83 @@ local function updateESP()
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
 
-            -- Text ESP: render per-element text objects when Text ESP is enabled
-            if ESPSettings.Enabled and ESPSettings.TextESPEnabled then
-                -- Name
-                if ESPSettings.ShowName then
-                    local txt = player.Name
-                    local pos
-                    if ESPSettings.NamePosition == "Top" then
-                        pos = Vector2.new(math.floor(rect.cx), math.floor(rect.y - 12))
-                    elseif ESPSettings.NamePosition == "Bottom" then
-                        pos = Vector2.new(math.floor(rect.cx), math.floor(rect.y + rect.h + 12))
-                    elseif ESPSettings.NamePosition == "Left" then
-                        pos = Vector2.new(math.floor(rect.x - 12), math.floor(rect.cy))
-                    else
-                        pos = Vector2.new(math.floor(rect.x + rect.w + 12), math.floor(rect.cy))
+            if ESPSettings.Enabled then
+                -- Name/Info text (modular system - easy to add more text entries)
+                local textParts = {}
+                
+                -- Built-in text entries (only if TextESPEnabled is true)
+                if ESPSettings.TextESPEnabled then
+                    if ESPSettings.ShowName then 
+                        table.insert(textParts, {text = player.Name, order = 1, position = ESPSettings.NamePosition or "Top"}) 
                     end
-                    espObj.NameText.Text = txt
-                    espObj.NameText.Position = pos
-                    espObj.NameText.Color = nameColor
-                    espObj.NameText.Size = ESPSettings.TextSize
-                    espObj.NameText.Visible = true
-                else
-                    espObj.NameText.Visible = false
+                    if ESPSettings.ShowHealthText then 
+                        table.insert(textParts, {text = math.floor(hum.Health) .. "HP", order = 2, position = ESPSettings.HealthTextPosition or "Top"}) 
+                    end
+                    if ESPSettings.ShowDistance then 
+                        table.insert(textParts, {text = math.floor(distance) .. "m", order = 3, position = ESPSettings.DistancePosition or "Top"}) 
+                    end
+                end
+                
+                -- Custom text entries from TextEntries table
+                -- To add more text, add to ESPSettings.TextEntries or use getgenv().TrisESP.AddTextEntry()
+                for entryName, entry in pairs(ESPSettings.TextEntries) do
+                    if entry.Enabled and entry.GetText then
+                        local customText = entry.GetText(player, char, hum, distance)
+                        if customText then
+                            table.insert(textParts, {text = customText, order = entry.Order or 99})
+                        end
+                    end
                 end
 
-                -- Health
-                if ESPSettings.ShowHealthText then
-                    local txt = math.floor(hum.Health) .. "HP"
-                    local pos
-                    if ESPSettings.HealthTextPosition == "Top" then
-                        pos = Vector2.new(math.floor(rect.cx), math.floor(rect.y - 28))
-                    elseif ESPSettings.HealthTextPosition == "Bottom" then
-                        pos = Vector2.new(math.floor(rect.cx), math.floor(rect.y + rect.h + 28))
-                    elseif ESPSettings.HealthTextPosition == "Left" then
-                        pos = Vector2.new(math.floor(rect.x - 28), math.floor(rect.cy))
-                    else
-                        pos = Vector2.new(math.floor(rect.x + rect.w + 28), math.floor(rect.cy))
-                    end
-                    espObj.HealthText.Text = txt
-                    espObj.HealthText.Position = pos
-                    espObj.HealthText.Color = getHealthColor((hum.Health or 0) / math.max(1, (hum.MaxHealth or 100)))
-                    espObj.HealthText.Size = ESPSettings.TextSize
-                    espObj.HealthText.Visible = true
-                else
-                    espObj.HealthText.Visible = false
+                -- Equipped tool inline support
+                local equippedName = nil
+                for _, item in ipairs(char:GetChildren()) do
+                    if item:IsA("Tool") then equippedName = item.Name break end
+                end
+                if ESPSettings.EquippedEnabled and ESPSettings.EquippedMode == "Text" and ESPSettings.EquippedPosition == "Inline" then
+                    table.insert(textParts, {text = (equippedName or "None"), order = 4})
                 end
 
-                -- Distance
-                if ESPSettings.ShowDistance then
-                    local txt = math.floor(distance) .. "m"
-                    local pos
-                    if ESPSettings.DistancePosition == "Top" then
-                        pos = Vector2.new(math.floor(rect.cx), math.floor(rect.y - 44))
-                    elseif ESPSettings.DistancePosition == "Bottom" then
-                        pos = Vector2.new(math.floor(rect.cx), math.floor(rect.y + rect.h + 44))
-                    elseif ESPSettings.DistancePosition == "Left" then
-                        pos = Vector2.new(math.floor(rect.x - 44), math.floor(rect.cy))
+                -- Sort by order and group by position
+                table.sort(textParts, function(a, b) return (a.order or 99) < (b.order or 99) end)
+                local topTexts, bottomTexts, leftTexts, rightTexts = {}, {}, {}, {}
+                for _, part in ipairs(textParts) do
+                    local pos = part.position or "Top"
+                    if pos == "Top" then
+                        table.insert(topTexts, part.text)
+                    elseif pos == "Bottom" then
+                        table.insert(bottomTexts, part.text)
+                    elseif pos == "Left" then
+                        table.insert(leftTexts, part.text)
+                    elseif pos == "Right" then
+                        table.insert(rightTexts, part.text)
                     else
-                        pos = Vector2.new(math.floor(rect.x + rect.w + 44), math.floor(rect.cy))
+                        table.insert(topTexts, part.text)
                     end
-                    espObj.DistanceText.Text = txt
-                    espObj.DistanceText.Position = pos
-                    espObj.DistanceText.Color = nameColor
-                    espObj.DistanceText.Size = ESPSettings.TextSize
-                    espObj.DistanceText.Visible = true
-                else
-                    espObj.DistanceText.Visible = false
                 end
-            else
-                -- Ensure text is hidden when Text ESP is disabled
-                if espObj.NameText then espObj.NameText.Visible = false end
-                if espObj.HealthText then espObj.HealthText.Visible = false end
-                if espObj.DistanceText then espObj.DistanceText.Visible = false end
-            end
+                
+                -- Combine all positions into final text (for now, show all as one line)
+                -- TODO: Could render separate Drawing.Text objects per position in future
+                local allTexts = {}
+                if #topTexts > 0 then table.insert(allTexts, table.concat(topTexts, " | ")) end
+                if #leftTexts > 0 then table.insert(allTexts, "[" .. table.concat(leftTexts, " | ") .. "]") end
+                if #rightTexts > 0 then table.insert(allTexts, "[" .. table.concat(rightTexts, " | ") .. "]") end
+                if #bottomTexts > 0 then table.insert(allTexts, table.concat(bottomTexts, " | ")) end
+                
+                if #allTexts > 0 then
+                    espObj.Name.Text = table.concat(allTexts, " ")
+                    -- Adjust text position if healthbar is at top - use integer positioning for stability
+                    local textY = math.floor(rect.y - 18)
+                    if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
+                        textY = textY - ESPSettings.HealthBarThickness - 4
+                    end
+                    espObj.Name.Position = Vector2.new(math.floor(rect.cx), textY)
+                    espObj.Name.Color = nameColor
+                    espObj.Name.Size = ESPSettings.TextSize
+                    espObj.Name.Visible = true
+                else
+                    espObj.Name.Visible = false
+                end
 
                 -- Equipped display (Bottom / Image handling)
                 if ESPSettings.EquippedEnabled then
@@ -929,10 +911,11 @@ local function updateESP()
                     espObj.Tracer.Visible = false
                 end
 
-                -- Box Fill (independent of Box outline)
+                -- Box fill (independent from Box ESP)
                 if ESPSettings.BoxFill then
                     if ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow then
                         local useRainbow = ESPSettings.BoxFillRainbow
+                        -- Inset gradient so it stays fully inside the outline stroke
                         local thickness = ESPSettings.Thickness or 1
                         local inset = thickness / 2
                         local innerX = x + inset
@@ -940,10 +923,11 @@ local function updateESP()
                         local innerW = math.max(0, w - inset * 2)
                         local innerH = math.max(0, h - inset * 2)
 
-                        drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillColor, ESPSettings.BoxFillColor,
-                            0, 1 - ESPSettings.BoxFillTransparency, ESPSettings.BoxFillRainbow, baseOffset, "BoxFill")
+                        drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillColor, ESPSettings.BoxFillColor, 
+                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "BoxFill")
                         espObj.BoxFill.Visible = false
 
+                        -- Draw outline around gradient fill for proper bounding using exact positions
                         if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
                             espObj.OutlineSquare.Size = Vector2.new(w, h)
                             espObj.OutlineSquare.Position = Vector2.new(x, y)
@@ -959,7 +943,7 @@ local function updateESP()
                         espObj.BoxFill.Color = fillColor
                         espObj.BoxFill.Transparency = 1 - ESPSettings.BoxFillTransparency
                         espObj.BoxFill.Visible = true
-
+                        -- Draw outline around solid fill for proper bounding
                         if espObj.OutlineSquare and ESPSettings.BoxType == "Square" then
                             local thickness = ESPSettings.Thickness or 1
                             espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
@@ -972,12 +956,11 @@ local function updateESP()
                 else
                     espObj.BoxFill.Visible = false
                     hideGradient(espObj)
-                    if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                    if espObj.OutlineSquare and not ESPSettings.Boxes then espObj.OutlineSquare.Visible = false end
                 end
 
-                -- Boxes
+                -- Boxes (outline)
                 if ESPSettings.Boxes then
-                
                 if ESPSettings.BoxType == "Square" then
                     -- Square box
                     if ESPSettings.BoxRainbow then
@@ -1036,9 +1019,14 @@ local function updateESP()
                             c.Line1.Visible, c.Line2.Visible = true, true
                     end
                 end
+                else
+                    -- Hide box outlines when Boxes disabled
+                    hideBoxLines(espObj)
+                    if espObj.OutlineSquare and not ESPSettings.BoxFill then espObj.OutlineSquare.Visible = false end
+                    for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
+                end
             else
                 hideBoxLines(espObj)
-                espObj.BoxFill.Visible = false
                 hideGradient(espObj)
                 for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                 if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
