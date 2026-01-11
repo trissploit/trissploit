@@ -76,6 +76,7 @@ local ESPSettings = {
     CustomGradientColor3 = Color3.fromRGB(0, 0, 255),
     -- Per-element custom 3-color sets (Boxes, Tracers, HealthBar, Chams, Name, FOV, Objects)
     BoxCustomColor1 = Color3.fromRGB(255, 0, 0), BoxCustomColor2 = Color3.fromRGB(255, 165, 0), BoxCustomColor3 = Color3.fromRGB(0, 0, 255),
+    BoxFillCustomColor1 = Color3.fromRGB(255, 0, 0), BoxFillCustomColor2 = Color3.fromRGB(255, 165, 0), BoxFillCustomColor3 = Color3.fromRGB(0, 0, 255),
     TracerCustomColor1 = Color3.fromRGB(255, 0, 0), TracerCustomColor2 = Color3.fromRGB(255, 165, 0), TracerCustomColor3 = Color3.fromRGB(0, 0, 255),
     HealthBarCustomColor1 = Color3.fromRGB(255, 0, 0), HealthBarCustomColor2 = Color3.fromRGB(255, 165, 0), HealthBarCustomColor3 = Color3.fromRGB(0, 0, 255),
     ChamsCustomColor1 = Color3.fromRGB(255, 0, 0), ChamsCustomColor2 = Color3.fromRGB(255, 165, 0), ChamsCustomColor3 = Color3.fromRGB(0, 0, 255),
@@ -162,6 +163,8 @@ local function getRainbowColor(offset, element)
     local function pickColorsForElement(el)
         if el == "Box" then
             return {ESPSettings.BoxCustomColor1, ESPSettings.BoxCustomColor2, ESPSettings.BoxCustomColor3}
+        elseif el == "BoxFill" then
+            return {ESPSettings.BoxFillCustomColor1, ESPSettings.BoxFillCustomColor2, ESPSettings.BoxFillCustomColor3}
         elseif el == "Tracer" then
             return {ESPSettings.TracerCustomColor1, ESPSettings.TracerCustomColor2, ESPSettings.TracerCustomColor3}
         elseif el == "HealthBar" then
@@ -170,8 +173,6 @@ local function getRainbowColor(offset, element)
             return {ESPSettings.ChamsCustomColor1, ESPSettings.ChamsCustomColor2, ESPSettings.ChamsCustomColor3}
         elseif el == "Name" then
             return {ESPSettings.NameCustomColor1, ESPSettings.NameCustomColor2, ESPSettings.NameCustomColor3}
-        elseif el == "BoxFill" then
-            return {ESPSettings.BoxFillCustomColor1, ESPSettings.BoxFillCustomColor2, ESPSettings.BoxFillCustomColor3}
         elseif el == "FOV" then
             return {ESPSettings.FOVCustomColor1, ESPSettings.FOVCustomColor2, ESPSettings.FOVCustomColor3}
         elseif el == "Object" then
