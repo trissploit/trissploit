@@ -68,14 +68,20 @@ local ESPSettings = {
     RainbowSpeed = 1,
     
     -- Custom gradient colors for rainbow (instead of HSV rainbow)
+    -- Global toggle: when true, use per-element custom 3-color gradients
     UseCustomGradient = false,
+    -- Global fallback 3 colors
     CustomGradientColor1 = Color3.fromRGB(255, 0, 0),
     CustomGradientColor2 = Color3.fromRGB(255, 165, 0),
-    CustomGradientColor3 = Color3.fromRGB(255, 255, 0),
-    CustomGradientColor4 = Color3.fromRGB(0, 255, 0),
-    CustomGradientColor5 = Color3.fromRGB(0, 255, 255),
-    CustomGradientColor6 = Color3.fromRGB(0, 0, 255),
-    CustomGradientStops = 6, -- How many colors to use (2-6)
+    CustomGradientColor3 = Color3.fromRGB(0, 0, 255),
+    -- Per-element custom 3-color sets (Boxes, Tracers, HealthBar, Chams, Name, FOV, Objects)
+    BoxCustomColor1 = Color3.fromRGB(255, 0, 0), BoxCustomColor2 = Color3.fromRGB(255, 165, 0), BoxCustomColor3 = Color3.fromRGB(0, 0, 255),
+    TracerCustomColor1 = Color3.fromRGB(255, 0, 0), TracerCustomColor2 = Color3.fromRGB(255, 165, 0), TracerCustomColor3 = Color3.fromRGB(0, 0, 255),
+    HealthBarCustomColor1 = Color3.fromRGB(255, 0, 0), HealthBarCustomColor2 = Color3.fromRGB(255, 165, 0), HealthBarCustomColor3 = Color3.fromRGB(0, 0, 255),
+    ChamsCustomColor1 = Color3.fromRGB(255, 0, 0), ChamsCustomColor2 = Color3.fromRGB(255, 165, 0), ChamsCustomColor3 = Color3.fromRGB(0, 0, 255),
+    NameCustomColor1 = Color3.fromRGB(255, 0, 0), NameCustomColor2 = Color3.fromRGB(255, 165, 0), NameCustomColor3 = Color3.fromRGB(0, 0, 255),
+    FOVCustomColor1 = Color3.fromRGB(255, 0, 0), FOVCustomColor2 = Color3.fromRGB(255, 165, 0), FOVCustomColor3 = Color3.fromRGB(0, 0, 255),
+    ObjectCustomColor1 = Color3.fromRGB(255, 0, 0), ObjectCustomColor2 = Color3.fromRGB(255, 165, 0), ObjectCustomColor3 = Color3.fromRGB(0, 0, 255),
     
     -- FOV Circle settings
     FOVCircleEnabled = false,
@@ -146,40 +152,54 @@ local AllowedParts = {
 }
 
 -- Utility functions
-local function getRainbowColor(offset)
+local function getRainbowColor(offset, element)
     offset = offset or 0
-    
-    -- Use custom gradient colors if enabled
+    element = element or ""
+
+    -- If custom gradient is enabled, use per-element 3-color gradient (stops always = 3)
     if ESPSettings.UseCustomGradient then
-        local stops = math.clamp(ESPSettings.CustomGradientStops or 6, 2, 6)
-        local colors = {
-            ESPSettings.CustomGradientColor1,
-            ESPSettings.CustomGradientColor2,
-            ESPSettings.CustomGradientColor3,
-            ESPSettings.CustomGradientColor4,
-            ESPSettings.CustomGradientColor5,
-            ESPSettings.CustomGradientColor6
-        }
-        
+        local stops = 3
+
+        local function pickColorsForElement(el)
+            if el == "Box" then
+                return {ESPSettings.BoxCustomColor1, ESPSettings.BoxCustomColor2, ESPSettings.BoxCustomColor3}
+            elseif el == "Tracer" then
+                return {ESPSettings.TracerCustomColor1, ESPSettings.TracerCustomColor2, ESPSettings.TracerCustomColor3}
+            elseif el == "HealthBar" then
+                return {ESPSettings.HealthBarCustomColor1, ESPSettings.HealthBarCustomColor2, ESPSettings.HealthBarCustomColor3}
+            elseif el == "Chams" then
+                return {ESPSettings.ChamsCustomColor1, ESPSettings.ChamsCustomColor2, ESPSettings.ChamsCustomColor3}
+            elseif el == "Name" then
+                return {ESPSettings.NameCustomColor1, ESPSettings.NameCustomColor2, ESPSettings.NameCustomColor3}
+            elseif el == "FOV" then
+                return {ESPSettings.FOVCustomColor1, ESPSettings.FOVCustomColor2, ESPSettings.FOVCustomColor3}
+            elseif el == "Object" then
+                return {ESPSettings.ObjectCustomColor1, ESPSettings.ObjectCustomColor2, ESPSettings.ObjectCustomColor3}
+            else
+                return {ESPSettings.CustomGradientColor1, ESPSettings.CustomGradientColor2, ESPSettings.CustomGradientColor3}
+            end
+        end
+
+        local colors = pickColorsForElement(element)
+
         -- Use absolute time + offset for smooth animation
         local t = ((RainbowHue + offset) % 1) * stops
         local idx = math.floor(t) % stops
         local frac = t - math.floor(t)
-        
+
         local c1 = colors[idx + 1]
-        -- Wrap to first color after last color for seamless loop
         local c2 = colors[(idx + 1) % stops + 1]
-        
+
         -- Smoothstep interpolation for cleaner blending
         frac = frac * frac * (3 - 2 * frac)
-        
+
         return Color3.new(
             c1.R + (c2.R - c1.R) * frac,
             c1.G + (c2.G - c1.G) * frac,
             c1.B + (c2.B - c1.B) * frac
         )
     end
-    
+
     -- Default HSV rainbow
     return Color3.fromHSV((RainbowHue + offset) % 1, 1, 1)
 end
@@ -540,7 +560,7 @@ local function hideESP(espObj)
     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
 end
 
-local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset)
+local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset, element)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
     
@@ -581,7 +601,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         local t = (i - 0.5) / segCount
         local segColor
         if useRainbow then
-            segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
+            segColor = getRainbowColor((baseOffset or 0) + t * 0.5, element)
         else
             segColor = lerpColor(color1, color2, t)
         end
@@ -646,7 +666,7 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
                 -- Color based on Y position (vertical gradient going down)
                 local avgY = (ly1 + ly2) / 2
                 local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
-                line.Color = getRainbowColor(baseOffset + yProgress * 0.5)
+                line.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
                 -- Hide outline when rainbow to prevent color interference
                 if outLine then outLine.Visible = false end
             else
@@ -721,17 +741,17 @@ local function updateESP()
             local baseOffset = (worldY % 500) / 500
             
             -- For non-box elements, use their Y position relative to box
-            local topColor = getRainbowColor(baseOffset)                    -- Top of box
-            local centerColor = getRainbowColor(baseOffset + 0.25)          -- Center of box
-            local bottomColor = getRainbowColor(baseOffset + 0.5)           -- Bottom of box
+            local topColor = getRainbowColor(baseOffset, "Box")                    -- Top of box
+            local centerColor = getRainbowColor(baseOffset + 0.25, "Chams")          -- Center of box
+            local bottomColor = getRainbowColor(baseOffset + 0.5, "Tracer")           -- Bottom of box
             
             local boxColor = ESPSettings.BoxRainbow and topColor or ESPSettings.BoxColor
             -- Tracer ends at bottom of box, so use bottom color
             local tracerColor = ESPSettings.TracerRainbow and bottomColor or ESPSettings.TracerColor
             -- Chams use center color
             local chamColor = ESPSettings.ChamsRainbow and centerColor or ESPSettings.GlobalChamColor
-            -- Name is above box, use top color
-            local nameColor = ESPSettings.NameRainbow and topColor or ESPSettings.NameColor
+            -- Name is above box; when using rainbow, use Name element colors
+            local nameColor = ESPSettings.NameRainbow and getRainbowColor(baseOffset, "Name") or ESPSettings.NameColor
 
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
@@ -883,8 +903,8 @@ local function updateESP()
                         local innerW = math.max(0, w - inset * 2)
                         local innerH = math.max(0, h - inset * 2)
 
-                        drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillGradientColor1, ESPSettings.BoxFillGradientColor2, 
-                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset)
+                        drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillColor, ESPSettings.BoxFillColor, 
+                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "Box")
                         espObj.BoxFill.Visible = false
 
                         -- Draw outline around gradient fill for proper bounding using exact positions
@@ -964,13 +984,13 @@ local function updateESP()
                         c.Line1.To = Vector2.new(corner[3], corner[4])
                         c.Line2.From = Vector2.new(corner[1], corner[2])
                         c.Line2.To = Vector2.new(corner[5], corner[6])
-                        if ESPSettings.BoxRainbow then
+                            if ESPSettings.BoxRainbow then
                             -- Vertical gradient: top corners share one color, bottom corners share another
                             local yProgress = cornerYs[i]
-                                c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5)
-                                c.Line2.Color = getRainbowColor(baseOffset + yProgress * 0.5)
+                            c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
+                            c.Line2.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
                         else
-                                c.Line1.Color, c.Line2.Color = boxColor, boxColor
+                            c.Line1.Color, c.Line2.Color = boxColor, boxColor
                         end
                             c.Line1.Thickness = ESPSettings.Thickness or 1
                             c.Line2.Thickness = ESPSettings.Thickness or 1
@@ -1070,7 +1090,7 @@ local function updateESP()
 
                                 for i = 1, segCount do
                                     local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
+                                    local segColor = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
                                     segs[i].Size = Vector2.new(math.max(1, fillW), positions[i].h)
                                     segs[i].Position = Vector2.new(fillX, positions[i].y)
                                     segs[i].Color = segColor
@@ -1102,7 +1122,7 @@ local function updateESP()
 
                                 for i = 1, segCount do
                                     local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
+                                    local segColor = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
                                     segs[i].Size = Vector2.new(positions[i].w, math.max(1, fillH))
                                     segs[i].Position = Vector2.new(positions[i].x, fillY)
                                     segs[i].Color = segColor
@@ -1291,7 +1311,7 @@ local function updateObjectESP()
                 local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                 local baseOffset = 0
                 if rect and vh and vh > 0 then baseOffset = (rect.cy / vh) end
-                local color = config.Rainbow and getRainbowColor(baseOffset) or config.Color
+                local color = config.Rainbow and getRainbowColor(baseOffset, "Object") or config.Color
                 
                 -- Name
                 if config.ShowName or config.ShowDistance then
@@ -1420,7 +1440,7 @@ local function updateFOVCircle()
             
             -- Use time-based gradient with smoothstep for clean blending
             local t = i / segments
-            seg.Color = getRainbowColor(t)
+            seg.Color = getRainbowColor(t, "FOV")
             seg.Visible = true
         end
         
@@ -1476,7 +1496,7 @@ local function updateFOVCircle()
 
                 -- center-based t gives even circular distribution; use mid-angle for color
                 local t = (i - 0.5) / segments
-                seg.Color = getRainbowColor(t)
+                seg.Color = getRainbowColor(t, "FOV")
                 seg.Visible = true
             end
             
