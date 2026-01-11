@@ -613,6 +613,19 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
             end
         end
     end
+
+    -- If using a rainbow (segmented) box, draw a single crisp outline on top
+    -- so the outline appears above the rainbow segments. We set its size
+    -- and position to match the full box and make it visible after segments
+    -- are drawn to ensure it renders above segmented lines.
+    if useRainbow and espObj.OutlineSquare then
+        local thickness = ESPSettings.Thickness or 1
+        espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
+        espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
+        espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor or Color3.new(0,0,0)
+        espObj.OutlineSquare.Thickness = thickness
+        espObj.OutlineSquare.Visible = true
+    end
 end
 
 local function hideBoxLines(espObj)
