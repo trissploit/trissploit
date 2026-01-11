@@ -506,6 +506,15 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         positions[i] = { y = baseY + used, h = math.max(1, h) }
         used = used + positions[i].h
     end
+    -- Add a tiny 1px overlap between segments to avoid hairline gaps caused
+    -- by rounding or rendering artifacts. Trim the last segment to fit exactly.
+    for i = 1, segCount - 1 do
+        positions[i].h = positions[i].h + 1
+        positions[i + 1].y = positions[i + 1].y - 1
+        positions[i + 1].h = positions[i + 1].h + 1
+    end
+    -- Recalculate last segment height to exactly fill remaining pixels
+    positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
     
     -- Render segments with precise positioning and NO overlap
     for i = 1, segCount do
@@ -968,9 +977,16 @@ local function updateESP()
                                     positions[i] = { y = baseY + used, h = math.max(1, h) }
                                     used = used + positions[i].h
                                 end
+                                -- tiny overlap to avoid hairline gaps
+                                for i = 1, segCount - 1 do
+                                    positions[i].h = positions[i].h + 1
+                                    positions[i + 1].y = positions[i + 1].y - 1
+                                    positions[i + 1].h = positions[i + 1].h + 1
+                                end
+                                positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
                             end
 
-                            for i = 1, segCount do
+                                for i = 1, segCount do
                                 local t = (i - 0.5) / segCount
                                 local segColor = getRainbowColor(baseOffset + t * 0.5)
                                 segs[i].Size = Vector2.new(fillW, positions[i].h)
@@ -1003,6 +1019,13 @@ local function updateESP()
                                     positions[i] = { x = baseX + used, w = math.max(1, w) }
                                     used = used + positions[i].w
                                 end
+                                -- tiny overlap to avoid hairline gaps (horizontal)
+                                for i = 1, segCount - 1 do
+                                    positions[i].w = positions[i].w + 1
+                                    positions[i + 1].x = positions[i + 1].x - 1
+                                    positions[i + 1].w = positions[i + 1].w + 1
+                                end
+                                positions[segCount].w = math.max(1, (baseX + totalW) - positions[segCount].x)
                             end
 
                             for i = 1, segCount do
