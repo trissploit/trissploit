@@ -137,11 +137,6 @@ local AllowedParts = {
 }
 
 -- Utility functions
-local function getRainbowColor(offset)
-    offset = offset or 0
-    return Color3.fromHSV((RainbowHue + offset) % 1, 1, 1)
-end
-
 local function lerpColor(c1, c2, t)
     t = math.clamp(t, 0, 1)
     return Color3.new(
@@ -149,6 +144,31 @@ local function lerpColor(c1, c2, t)
         c1.G + (c2.G - c1.G) * t,
         c1.B + (c2.B - c1.B) * t
     )
+end
+
+-- Initialize optimized gradient
+for i = 0, GradientResolution - 1 do
+    local t = i / (GradientResolution - 1)
+    local rect = Drawing.new("Square")
+    rect.Visible = false
+    rect.Filled = true
+    rect.Thickness = 0
+    rect.Transparency = 1
+    rect.Color = lerpColor(GradientColorStart, GradientColorEnd, t)
+    rect.Size = Vector2.new(GradientSize.X / GradientResolution + 1, GradientSize.Y)
+    rect.Position = Vector2.new(
+        GradientPosition.X + (GradientSize.X / GradientResolution) * i,
+        GradientPosition.Y
+    )
+    table.insert(GradientRects, rect)
+end
+
+-- Rainbow color function using gradient system
+local function getRainbowColor(offset)
+    offset = offset or 0
+    local idx = math.floor(((RainbowHue + offset) % 1) * GradientResolution)
+    idx = math.clamp(idx, 1, #GradientRects)
+    return GradientRects[idx].Color
 end
 
 local function getHealthColor(ratio)
