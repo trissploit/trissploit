@@ -480,47 +480,37 @@ local function hideESP(espObj)
     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
 end
 
-local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset)
-    local segments = espObj.GradientSegments
+local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset, segmentArray)
+    local segments = segmentArray or espObj.GradientSegments
     local maxSegs = #segments
-    
-    -- Dynamic segment count: scale with box height but cap at reasonable limits
-    -- Fewer segments = better performance, but need enough for smooth gradients
-    local segCount = math.clamp(math.floor(rect.h / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.floor(rect.h)))
-    
-    -- Pre-calculate integer-aligned segment positions to guarantee continuous coverage
-    local positions = {}
-    local baseY = math.floor(rect.y)
-    local totalH = math.max(0, math.floor(rect.h))
-    if totalH <= 0 then
-        -- nothing to draw
+
+    -- Ensure exact pixel alignment
+    local startX = math.floor(rect.x)
+    local startY = math.floor(rect.y)
+    local totalW = math.max(1, math.floor(rect.w))
+    local totalH = math.max(1, math.floor(rect.h))
+
+    if totalW <= 0 or totalH <= 0 then
         for i = 1, maxSegs do segments[i].Visible = false end
         return
     end
 
-    local baseSegH = math.floor(totalH / segCount)
-    local rem = totalH - baseSegH * segCount
-    local used = 0
-    for i = 1, segCount do
-        local h = baseSegH + (i <= rem and 1 or 0)
-        positions[i] = { y = baseY + used, h = math.max(1, h) }
-        used = used + positions[i].h
+    -- Determine gradient direction - assume vertical unless specified otherwise
+    local isVertical = true
+    if rotation and rotation == 90 then
+        isVertical = false
     end
-    
-    -- Handle overlaps based on transparency to prevent artifacts
-    local hasTransparency = transparency and transparency > 0
-    if not hasTransparency then
-        -- Add tiny 1px overlap between segments to avoid hairline gaps when fully opaque
-        for i = 1, segCount - 1 do
-            positions[i].h = positions[i].h + 1
-            positions[i + 1].y = positions[i + 1].y - 1
-            positions[i + 1].h = positions[i + 1].h + 1
-        end
-        -- Recalculate last segment height to exactly fill remaining pixels
-        positions[segCount].h = math.max(1, (baseY + totalH) - positions[segCount].y)
+
+    local segCount
+    if isVertical then
+        -- Vertical gradient: distribute along height
+        segCount = math.clamp(math.floor(totalH / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalH))
+    else
+        -- Horizontal gradient: distribute along width
+        segCount = math.clamp(math.floor(totalW / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, totalW))
     end
-    
-    -- Render segments with precise positioning
+
+    -- Calculate exact segment positions and sizes to cover the rectangle perfectly
     for i = 1, segCount do
         local t = (i - 0.5) / segCount
         local segColor
@@ -529,22 +519,49 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         else
             segColor = lerpColor(color1, color2, t)
         end
-        
-        segments[i].Size = Vector2.new(math.max(1, math.floor(rect.w)), positions[i].h)
-        segments[i].Position = Vector2.new(math.floor(rect.x), positions[i].y)
+
+        if isVertical then
+            -- Vertical gradient: each segment spans full width, partial height
+            local segY = startY + math.floor((i - 1) * totalH / segCount)
+            local nextSegY = startY + math.floor(i * totalH / segCount)
+            local segH = math.max(1, nextSegY - segY)
+
+            -- Ensure last segment reaches the bottom
+            if i == segCount then
+                segH = math.max(1, (startY + totalH) - segY)
+            end
+
+            segments[i].Size = Vector2.new(totalW, segH)
+            segments[i].Position = Vector2.new(startX, segY)
+        else
+            -- Horizontal gradient: each segment spans full height, partial width
+            local segX = startX + math.floor((i - 1) * totalW / segCount)
+            local nextSegX = startX + math.floor(i * totalW / segCount)
+            local segW = math.max(1, nextSegX - segX)
+
+            -- Ensure last segment reaches the right edge
+            if i == segCount then
+                segW = math.max(1, (startX + totalW) - segX)
+            end
+
+            segments[i].Size = Vector2.new(segW, totalH)
+            segments[i].Position = Vector2.new(segX, startY)
+        end
+
         segments[i].Color = segColor
         segments[i].Transparency = transparency or 0
         segments[i].Visible = true
     end
-    
+
     -- Hide unused segments
     for i = segCount + 1, maxSegs do
         segments[i].Visible = false
     end
 end
 
-local function hideGradient(espObj)
-    for _, seg in ipairs(espObj.GradientSegments or {}) do seg.Visible = false end
+local function hideGradient(espObj, segmentArray)
+    local segments = segmentArray or espObj.GradientSegments
+    for _, seg in ipairs(segments or {}) do seg.Visible = false end
 end
 
 local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, baseOffset)
@@ -854,15 +871,8 @@ local function updateESP()
                     if ESPSettings.BoxRainbow then
                         -- Use segmented lines for smooth vertical rainbow gradient
                         drawBoxWithGradient(espObj, x, y, w, h, true, boxColor, baseOffset)
-                        -- Draw outline above the rainbow segments
-                        if espObj.OutlineSquare then
-                            local thickness = ESPSettings.Thickness or 1
-                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
-                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
-                            espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
-                            espObj.OutlineSquare.Thickness = thickness
-                            espObj.OutlineSquare.Visible = true
-                        end
+                        -- hide crisp outline when using gradient segments
+                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     else
                         -- Use a single square outline for crisp, sharp edges when not rainbow
                         hideBoxLines(espObj)
@@ -983,92 +993,13 @@ local function updateESP()
                     if ESPSettings.HealthBarRainbow then
                         -- Use gradient segments for smooth rainbow blend
                         espObj.HealthBar.Visible = false
-                        local segs = espObj.HealthBarGradient
-                        local maxSegs = #segs
-                        local isVertical = (pos == "Left" or pos == "Right")
-                        
-                        if isVertical then
-                            -- Vertical health bar - gradient goes down
-                            local segCount = math.clamp(math.floor(fillH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillH))
-
-                            -- Integer-distributed positions to guarantee continuous coverage
-                            local positions = {}
-                            local baseY = math.floor(fillY)
-                            local totalH = math.max(0, math.floor(fillH))
-                            if totalH <= 0 then
-                                for i = 1, maxSegs do segs[i].Visible = false end
-                                segCount = 0
-                            else
-                                local baseSegH = math.floor(totalH / segCount)
-                                local rem = totalH - baseSegH * segCount
-                                local used = 0
-                                for i = 1, segCount do
-                                    local h = baseSegH + (i <= rem and 1 or 0)
-                                    positions[i] = { y = baseY + used, h = math.max(1, h) }
-                                    used = used + positions[i].h
-                                end
-                                -- No overlap for health bar gradients (they're always fully opaque)
-                                -- positions are already perfectly abutted
-                            end
-
-                            if segCount > 0 then
-                                for i = 1, segCount do
-                                    local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                    segs[i].Size = Vector2.new(math.max(1, math.floor(fillW)), positions[i].h)
-                                    segs[i].Position = Vector2.new(math.floor(fillX), positions[i].y)
-                                    segs[i].Color = segColor
-                                    segs[i].Transparency = 1
-                                    segs[i].Visible = true
-                                end
-                            end
-
-                            for i = segCount + 1, maxSegs do
-                                segs[i].Visible = false
-                            end
-                        else
-                            -- Horizontal health bar - gradient goes across
-                            local segCount = math.clamp(math.floor(fillW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, fillW))
-
-                            -- Integer-distributed positions to guarantee continuous coverage
-                            local positions = {}
-                            local baseX = math.floor(fillX)
-                            local totalW = math.max(0, math.floor(fillW))
-                            if totalW <= 0 then
-                                for i = 1, maxSegs do segs[i].Visible = false end
-                                segCount = 0
-                            else
-                                local baseSegW = math.floor(totalW / segCount)
-                                local rem = totalW - baseSegW * segCount
-                                local used = 0
-                                for i = 1, segCount do
-                                    local w = baseSegW + (i <= rem and 1 or 0)
-                                    positions[i] = { x = baseX + used, w = math.max(1, w) }
-                                    used = used + positions[i].w
-                                end
-                                -- No overlap for health bar gradients (they're always fully opaque)
-                                -- positions are already perfectly abutted
-                            end
-
-                            if segCount > 0 then
-                                for i = 1, segCount do
-                                    local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5)
-                                    segs[i].Size = Vector2.new(positions[i].w, math.max(1, math.floor(fillH)))
-                                    segs[i].Position = Vector2.new(positions[i].x, math.floor(fillY))
-                                    segs[i].Color = segColor
-                                    segs[i].Transparency = 1
-                                    segs[i].Visible = true
-                                end
-                            end
-
-                            for i = segCount + 1, maxSegs do
-                                segs[i].Visible = false
-                            end
-                        end
+                        -- Determine rotation based on health bar position
+                        local gradientRotation = (pos == "Left" or pos == "Right") and 0 or 90 -- 0 = vertical, 90 = horizontal
+                        drawGradient(espObj, {x = fillX, y = fillY, w = fillW, h = fillH}, 
+                            Color3.new(1, 0, 0), Color3.new(0, 1, 0), gradientRotation, 1, true, baseOffset, espObj.HealthBarGradient)
                     else
                         -- Normal health color based on ratio
-                        for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
+                        hideGradient(espObj, espObj.HealthBarGradient)
                         espObj.HealthBar.Size = Vector2.new(fillW, fillH)
                         espObj.HealthBar.Position = Vector2.new(fillX, fillY)
                         espObj.HealthBar.Color = getHealthColor(ratio)
@@ -1077,7 +1008,7 @@ local function updateESP()
             else
                 espObj.HealthBar.Visible = false
                     espObj.HealthBarOutline.Visible = false
-                    for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
+                    hideGradient(espObj, espObj.HealthBarGradient)
                 end
 
             -- Chams/Highlight
