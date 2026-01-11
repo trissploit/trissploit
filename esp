@@ -169,24 +169,21 @@ local function getRainbowColor(offset, useCustom)
             ESPSettings.CustomGradientColor5,
             ESPSettings.CustomGradientColor6
         }
-        
+
         -- Use absolute time for camera-independent gradient
         local t = ((RainbowHue + offset) % 1) * stops
         local idx = math.floor(t) % stops
         local frac = t - math.floor(t)
-        
+
+        -- Smooth interpolation (smoothstep) to reduce banding
+        frac = frac * frac * (3 - 2 * frac)
+
         local c1 = colors[idx + 1]
         -- Wrap to first color after last color for seamless loop
         local c2 = colors[(idx + 1) % stops + 1]
-        
-        -- Smooth interpolation with cosine for less choppy transitions
-        frac = (1 - math.cos(frac * math.pi)) / 2
-        
-        return Color3.new(
-            c1.R + (c2.R - c1.R) * frac,
-            c1.G + (c2.G - c1.G) * frac,
-            c1.B + (c2.B - c1.B) * frac
-        )
+
+        -- Use gamma-corrected interpolation for perceptual smoothness
+        return lerpColorGamma(c1, c2, frac)
     end
     
     -- Default HSV rainbow
@@ -210,6 +207,18 @@ local function lerpColor(c1, c2, t)
         c1.G + (c2.G - c1.G) * t,
         c1.B + (c2.B - c1.B) * t
     )
+end
+
+-- Gamma-corrected color interpolation for smoother perceived blending
+local function lerpColorGamma(c1, c2, t)
+    t = math.clamp(t, 0, 1)
+    local g = 2.2
+    local r1, g1, b1 = math.max(c1.R, 0), math.max(c1.G, 0), math.max(c1.B, 0)
+    local r2, g2, b2 = math.max(c2.R, 0), math.max(c2.G, 0), math.max(c2.B, 0)
+    local R = (r1 ^ g + (r2 ^ g - r1 ^ g) * t) ^ (1 / g)
+    local G = (g1 ^ g + (g2 ^ g - g1 ^ g) * t) ^ (1 / g)
+    local B = (b1 ^ g + (b2 ^ g - b1 ^ g) * t) ^ (1 / g)
+    return Color3.new(math.clamp(R, 0, 1), math.clamp(G, 0, 1), math.clamp(B, 0, 1))
 end
 
 local function getHealthColor(ratio)
@@ -717,11 +726,16 @@ local function updateESP()
                 return
             end
 
-            -- Calculate colors with individual rainbow settings (vertical gradient synced)
-            local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
-            -- baseOffset based on top of box (Y position normalized 0-1)
+            -- Calculate colors with individual rainbow settings (WORLD-anchored vertical gradient)
+            -- Use world Y (HumanoidRootPart.Position.Y) to anchor gradient to world space
             local baseOffset = 0
-            if rect and vh and vh > 0 then baseOffset = rect.y / vh end
+            if hrp and hrp.Position then
+                -- Use a repeating scale so gradients wrap every 50 studs (adjustable)
+                baseOffset = (hrp.Position.Y / 50) % 1
+            else
+                local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
+                if rect and vh and vh > 0 then baseOffset = rect.y / vh end
+            end
             
             -- For non-box elements, use their Y position relative to box
             local topColor = getRainbowColor(baseOffset, ESPSettings.BoxUseCustomGradient)                    -- Top of box
@@ -1291,9 +1305,20 @@ local function updateObjectESP()
                     return
                 end
                 
-                local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                 local baseOffset = 0
-                if rect and vh and vh > 0 then baseOffset = (rect.cy / vh) end
+                -- Try to anchor object gradient to world Y if possible
+                local worldY = nil
+                if obj and obj:IsA and obj:IsA("BasePart") and obj.Position then
+                    worldY = obj.Position.Y
+                elseif obj and obj.PrimaryPart and obj.PrimaryPart.Position then
+                    worldY = obj.PrimaryPart.Position.Y
+                end
+                if worldY then
+                    baseOffset = (worldY / 50) % 1
+                else
+                    local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
+                    if rect and vh and vh > 0 then baseOffset = (rect.cy / vh) end
+                end
                 local color = config.Rainbow and getRainbowColor(baseOffset) or config.Color
                 
                 -- Name
