@@ -90,6 +90,10 @@ local ESPSettings = {
     NameCustomColor1 = Color3.fromRGB(255, 0, 0), NameCustomColor2 = Color3.fromRGB(255, 165, 0), NameCustomColor3 = Color3.fromRGB(0, 0, 255),
     FOVCustomColor1 = Color3.fromRGB(255, 0, 0), FOVCustomColor2 = Color3.fromRGB(255, 165, 0), FOVCustomColor3 = Color3.fromRGB(0, 0, 255),
     ObjectCustomColor1 = Color3.fromRGB(255, 0, 0), ObjectCustomColor2 = Color3.fromRGB(255, 165, 0), ObjectCustomColor3 = Color3.fromRGB(0, 0, 255),
+
+    -- Text-specific custom gradients (for Name/Health/Distance separate gradients)
+    HealthTextCustomColor1 = Color3.fromRGB(255, 255, 255), HealthTextCustomColor2 = Color3.fromRGB(255, 255, 255), HealthTextCustomColor3 = Color3.fromRGB(255, 255, 255),
+    DistanceCustomColor1 = Color3.fromRGB(255, 255, 255), DistanceCustomColor2 = Color3.fromRGB(255, 255, 255), DistanceCustomColor3 = Color3.fromRGB(255, 255, 255),
     
     -- FOV Circle settings
     FOVCircleEnabled = false,
@@ -176,12 +180,16 @@ local function getRainbowColor(offset, element)
             return {ESPSettings.TracerCustomColor1, ESPSettings.TracerCustomColor2, ESPSettings.TracerCustomColor3}
         elseif el == "HealthBar" then
             return {ESPSettings.HealthBarCustomColor1, ESPSettings.HealthBarCustomColor2, ESPSettings.HealthBarCustomColor3}
+        elseif el == "HealthText" or el == "Health" then
+            return {ESPSettings.HealthTextCustomColor1, ESPSettings.HealthTextCustomColor2, ESPSettings.HealthTextCustomColor3}
         elseif el == "Chams" then
             return {ESPSettings.ChamsCustomColor1, ESPSettings.ChamsCustomColor2, ESPSettings.ChamsCustomColor3}
         elseif el == "Name" then
             return {ESPSettings.NameCustomColor1, ESPSettings.NameCustomColor2, ESPSettings.NameCustomColor3}
         elseif el == "FOV" then
             return {ESPSettings.FOVCustomColor1, ESPSettings.FOVCustomColor2, ESPSettings.FOVCustomColor3}
+        elseif el == "Distance" then
+            return {ESPSettings.DistanceCustomColor1, ESPSettings.DistanceCustomColor2, ESPSettings.DistanceCustomColor3}
         elseif el == "Object" then
             return {ESPSettings.ObjectCustomColor1, ESPSettings.ObjectCustomColor2, ESPSettings.ObjectCustomColor3}
         else
@@ -660,21 +668,26 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
     
     for sideIdx, side in ipairs(sides) do
         local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
+        -- Align to pixel boundaries to ensure rainbow segments match the exact
+        -- outline square positioning used for non-rainbow rendering.
+        local ax_sx, ax_sy = math.floor(sx + 0.5), math.floor(sy + 0.5)
+        local ax_ex, ax_ey = math.floor(ex + 0.5), math.floor(ey + 0.5)
         local segCount = #espObj.BoxLines[sideIdx]
         
         -- Calculate line length for this side
         local lineLength = math.sqrt((ex - sx)^2 + (ey - sy)^2)
-        local dynamicSegCount = math.clamp(math.floor(lineLength / 3), 5, segCount)
+        -- Use one segment per pixel length when possible (clamped to available pool)
+        local dynamicSegCount = math.clamp(math.max(1, math.floor(lineLength)), 1, segCount)
         
         for seg = 1, dynamicSegCount do
             -- Precise positioning with NO overlap to prevent transparency artifacts
             local t1 = (seg - 1) / dynamicSegCount
             local t2 = seg / dynamicSegCount
             
-            local lx1 = sx + (ex - sx) * t1
-            local ly1 = sy + (ey - sy) * t1
-            local lx2 = sx + (ex - sx) * t2
-            local ly2 = sy + (ey - sy) * t2
+            local lx1 = ax_sx + (ax_ex - ax_sx) * t1
+            local ly1 = ax_sy + (ax_ey - ax_sy) * t1
+            local lx2 = ax_sx + (ax_ex - ax_sx) * t2
+            local ly2 = ax_sy + (ax_ey - ax_sy) * t2
             
             -- Round to nearest pixel for crisp rendering
             local line = espObj.BoxLines[sideIdx][seg]
@@ -756,10 +769,10 @@ local function updateESP()
             -- Calculate colors with individual rainbow settings
             -- Use world-space Y position for camera-independent gradient (doesn't shift when camera moves)
             local worldY = 0
-            if character and character.PrimaryPart then
-                worldY = character.PrimaryPart.Position.Y
-            elseif character and character:FindFirstChild("HumanoidRootPart") then
-                worldY = character.HumanoidRootPart.Position.Y
+            if char and char.PrimaryPart then
+                worldY = char.PrimaryPart.Position.Y
+            elseif char and char:FindFirstChild("HumanoidRootPart") then
+                worldY = char.HumanoidRootPart.Position.Y
             end
             
             -- Normalize world Y to 0-1 range (assuming typical world height 0-500)
@@ -770,13 +783,13 @@ local function updateESP()
             local centerColor = getRainbowColor(baseOffset + 0.25, "Chams")          -- Center of box
             local bottomColor = getRainbowColor(baseOffset + 0.5, "Tracer")           -- Bottom of box
             
-            local boxColor = ESPSettings.BoxRainbow and topColor or ESPSettings.BoxColor
+            local boxColor = ESPSettings.BoxRainbow and topColor or (ESPSettings.BoxCustomColor1 or ESPSettings.BoxColor)
             -- Tracer ends at bottom of box, so use bottom color
-            local tracerColor = ESPSettings.TracerRainbow and bottomColor or ESPSettings.TracerColor
+            local tracerColor = ESPSettings.TracerRainbow and bottomColor or (ESPSettings.TracerCustomColor1 or ESPSettings.TracerColor)
             -- Chams use center color
-            local chamColor = ESPSettings.ChamsRainbow and centerColor or ESPSettings.GlobalChamColor
+            local chamColor = ESPSettings.ChamsRainbow and centerColor or (ESPSettings.ChamsCustomColor1 or ESPSettings.GlobalChamColor)
             -- Name is above box; when using rainbow, use Name element colors
-            local nameColor = ESPSettings.NameRainbow and getRainbowColor(baseOffset, "Name") or ESPSettings.NameColor
+            local nameColor = ESPSettings.NameRainbow and getRainbowColor(baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
 
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
@@ -809,20 +822,64 @@ local function updateESP()
 
                 -- Positioning helpers
                 local lineHeight = (ESPSettings.TextSize or 14) + 4
+
+                -- Helper to detect collisions of multiple items in same anchor; when multiple
+                -- items (eg Name+Health) share the same anchor we fall back to the old combined
+                -- single-line behavior to preserve spacing and avoid overlap.
+                local function shouldCombine(list)
+                    return list and #list > 1
+                end
+
+                local function renderCombined(list, anchor)
+                    if not list or #list == 0 then return end
+                    local texts = {}
+                    for _, item in ipairs(list) do table.insert(texts, item.text) end
+                    local combined = table.concat(texts, " | ")
+                    local x = math.floor(rect.cx)
+                    local y
+                    if anchor == "Top" then
+                        y = math.floor(rect.y - 18)
+                        if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
+                            y = y - ESPSettings.HealthBarThickness - 4
+                        end
+                    elseif anchor == "Bottom" then
+                        y = math.floor(rect.y + rect.h + 12)
+                    elseif anchor == "Left" then
+                        y = math.floor(rect.cy)
+                        x = math.floor(rect.x - 6)
+                    else
+                        y = math.floor(rect.cy)
+                        x = math.floor(rect.x + rect.w + 6)
+                    end
+                    espObj.Name.Center = (anchor == "Top" or anchor == "Bottom")
+                    espObj.Name.Size = ESPSettings.TextSize
+                    espObj.Name.Text = combined
+                    espObj.Name.Position = Vector2.new(x, y)
+                    espObj.Name.Color = ESPSettings.NameColor
+                    espObj.Name.Visible = true
+                    -- hide individual texts when combined
+                    if espObj.HealthText then espObj.HealthText.Visible = false end
+                    if espObj.DistanceText then espObj.DistanceText.Visible = false end
+                end
+
                 local function renderList(list, anchor)
                     if not list or #list == 0 then return end
-                    if anchor == "Top" or anchor == "Bottom" then
+                    if shouldCombine(list) then
+                        renderCombined(list, anchor)
+                        return
+                    end
+
+                    if anchor == "Top" then
+                        -- stack upward: first item just above box (matching previous default)
                         for i, item in ipairs(list) do
-                            local y
-                            if anchor == "Top" then
-                                y = math.floor(rect.y - 6 - (i - 1) * lineHeight)
-                            else
-                                y = math.floor(rect.y + rect.h + 6 + (i - 1) * lineHeight)
+                            local y = math.floor(rect.y - 18 - (i - 1) * lineHeight)
+                            if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
+                                y = y - ESPSettings.HealthBarThickness - 4
                             end
                             local x = math.floor(rect.cx)
                             local col
                             if item.key == "Name" then
-                                col = ESPSettings.NameRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Name") or ESPSettings.NameColor
+                                col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = true
                                 espObj.Name.Size = ESPSettings.TextSize
                                 espObj.Name.Text = item.text
@@ -830,7 +887,7 @@ local function updateESP()
                                 espObj.Name.Color = col
                                 espObj.Name.Visible = true
                             elseif item.key == "Health" then
-                                col = ESPSettings.HealthTextRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "HealthBar") or Color3.fromRGB(255,255,255)
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = true
                                 espObj.HealthText.Size = ESPSettings.TextSize
                                 espObj.HealthText.Text = item.text
@@ -838,7 +895,38 @@ local function updateESP()
                                 espObj.HealthText.Color = col
                                 espObj.HealthText.Visible = true
                             elseif item.key == "Distance" then
-                                col = ESPSettings.DistanceRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Tracer") or Color3.fromRGB(255,255,255)
+                                col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
+                                espObj.DistanceText.Center = true
+                                espObj.DistanceText.Size = ESPSettings.TextSize
+                                espObj.DistanceText.Text = item.text
+                                espObj.DistanceText.Position = Vector2.new(x, y)
+                                espObj.DistanceText.Color = col
+                                espObj.DistanceText.Visible = true
+                            end
+                        end
+                    elseif anchor == "Bottom" then
+                        for i, item in ipairs(list) do
+                            local y = math.floor(rect.y + rect.h + 12 + (i - 1) * lineHeight)
+                            local x = math.floor(rect.cx)
+                            local col
+                            if item.key == "Name" then
+                                col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
+                                espObj.Name.Center = true
+                                espObj.Name.Size = ESPSettings.TextSize
+                                espObj.Name.Text = item.text
+                                espObj.Name.Position = Vector2.new(x, y)
+                                espObj.Name.Color = col
+                                espObj.Name.Visible = true
+                            elseif item.key == "Health" then
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
+                                espObj.HealthText.Center = true
+                                espObj.HealthText.Size = ESPSettings.TextSize
+                                espObj.HealthText.Text = item.text
+                                espObj.HealthText.Position = Vector2.new(x, y)
+                                espObj.HealthText.Color = col
+                                espObj.HealthText.Visible = true
+                            elseif item.key == "Distance" then
+                                col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = true
                                 espObj.DistanceText.Size = ESPSettings.TextSize
                                 espObj.DistanceText.Text = item.text
@@ -856,7 +944,7 @@ local function updateESP()
                             if anchor == "Left" then x = math.floor(rect.x - 6) else x = math.floor(rect.x + rect.w + 6) end
                             local col
                             if item.key == "Name" then
-                                col = ESPSettings.NameRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Name") or ESPSettings.NameColor
+                                col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = false
                                 espObj.Name.Size = ESPSettings.TextSize
                                 espObj.Name.Text = item.text
@@ -864,7 +952,7 @@ local function updateESP()
                                 espObj.Name.Color = col
                                 espObj.Name.Visible = true
                             elseif item.key == "Health" then
-                                col = ESPSettings.HealthTextRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "HealthBar") or Color3.fromRGB(255,255,255)
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = false
                                 espObj.HealthText.Size = ESPSettings.TextSize
                                 espObj.HealthText.Text = item.text
@@ -872,7 +960,7 @@ local function updateESP()
                                 espObj.HealthText.Color = col
                                 espObj.HealthText.Visible = true
                             elseif item.key == "Distance" then
-                                col = ESPSettings.DistanceRainbow and getRainbowColor((i-1)/math.max(1,#list) * 0.5 + baseOffset, "Tracer") or Color3.fromRGB(255,255,255)
+                                col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = false
                                 espObj.DistanceText.Size = ESPSettings.TextSize
                                 espObj.DistanceText.Text = item.text
@@ -891,7 +979,10 @@ local function updateESP()
 
                 -- Render any collected custom text entries as a single top line (if present)
                 if customTopConcat and customTopConcat ~= "" then
-                    local y = math.floor(rect.y - 6 - (#topList) * lineHeight)
+                    local y = math.floor(rect.y - 18 - (#topList) * lineHeight)
+                    if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
+                        y = y - ESPSettings.HealthBarThickness - 4
+                    end
                     espObj.Name.Center = true
                     espObj.Name.Size = ESPSettings.TextSize
                     espObj.Name.Text = customTopConcat
@@ -987,7 +1078,7 @@ local function updateESP()
                         local innerW = math.max(0, w - inset * 2)
                         local innerH = math.max(0, h - inset * 2)
 
-                        drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillColor, ESPSettings.BoxFillColor, 
+                        drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillCustomColor1, ESPSettings.BoxFillCustomColor3, 
                             0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "BoxFill")
                         espObj.BoxFill.Visible = false
 
@@ -1001,7 +1092,7 @@ local function updateESP()
                         end
                     else
                         hideGradient(espObj)
-                        local fillColor = ESPSettings.BoxFillColor
+                        local fillColor = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxFillColor
                         espObj.BoxFill.Size = Vector2.new(math.max(1, w), math.max(1, h))
                         espObj.BoxFill.Position = Vector2.new(x, y)
                         espObj.BoxFill.Color = fillColor
