@@ -501,7 +501,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
     gradientMode = gradientMode or "Vertical"
     
 
-    -- Vertical mode: smooth gradient with pixel-perfect blending
+    -- Vertical mode: spinning gradient colors (vertical bars that rotate through color spectrum)
     if gradientMode == "Vertical" then
         local totalH = math.max(0, math.floor(rectH))
         if totalH <= 0 then
@@ -514,6 +514,9 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         local segHeight = totalH / segCount
         
         local baseAlpha = transparency or 0
+        -- Animation offset that spins colors through the gradient
+        local animOffset = RainbowHue * 0.6
+        
         for i = 1, segCount do
             -- Calculate exact floating-point position for smooth gradients
             local startY = rectY + (i - 1) * segHeight
@@ -523,13 +526,17 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
             -- Progress based on center position (0 to 1)
             local progress = (centerY - rectY) / rectH
             
+            -- Spin the colors by offsetting progress continuously
+            -- Use smooth wrapping to avoid visible resets
+            local spinProgress = (progress + animOffset) % 1.0
+            
             local segColor
             if useRainbow then
-                -- Rainbow animates smoothly
-                segColor = getRainbowColor((baseOffset or 0) + progress * 0.5 + RainbowHue * 0.5)
+                -- Rainbow spins through the gradient
+                segColor = getRainbowColor((baseOffset or 0) + spinProgress * 0.5)
             else
-                -- Custom gradient: NO animation, just interpolate between colors
-                segColor = lerpColor(color1, color2, progress)
+                -- Custom gradient also spins/animates
+                segColor = lerpColor(color1, color2, spinProgress)
             end
             
             -- Round to pixel boundaries for clean rendering
@@ -568,19 +575,22 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
 
         local baseAlpha = transparency or 0
         -- Spin animation: rotate the color offset over time
-        local spinOffset = (baseOffset or 0) + RainbowHue
+        local animOffset = RainbowHue * 0.6
         
         for i = 1, segCount do
             local layerIndex = i - 1
             local t = layerIndex / math.max(1, segCount - 1)
             
+            -- Spin the colors continuously
+            local spinT = (t + animOffset) % 1.0
+            
             local segColor
             if useRainbow then
                 -- Rainbow spins through layers
-                segColor = getRainbowColor(spinOffset + t * 0.5)
+                segColor = getRainbowColor((baseOffset or 0) + spinT * 0.5)
             else
-                -- Custom gradient: NO animation for static effect
-                segColor = lerpColor(color1, color2, t)
+                -- Custom gradient also spins/animates
+                segColor = lerpColor(color1, color2, spinT)
             end
 
             -- Integer-based inset/size for pixel-perfect rendering
