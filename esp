@@ -1457,25 +1457,27 @@ local function updateFOVCircle()
             -- Use triangle segments for rainbow fill with perfect blending
             FOVCircleFill.Visible = false
             
+            -- Improved triangle coverage: small angular overlap and slight outer radius expansion
+            local overlap = 0.01 -- radians overlap to avoid antialias seams
+            local outerR = radius + 1 -- expand slightly so edges overlap cleanly
             for i = 1, segments do
-                -- Perfect triangle coverage with no gaps or overlaps
-                local angle1 = ((i - 1) / segments) * math.pi * 2
-                local angle2 = (i / segments) * math.pi * 2
-                
-                local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
-                local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
-                
+                local angle1 = ((i - 1) / segments) * math.pi * 2 - overlap
+                local angle2 = (i / segments) * math.pi * 2 + overlap
+
+                local p1 = center + Vector2.new(math.cos(angle1) * outerR, math.sin(angle1) * outerR)
+                local p2 = center + Vector2.new(math.cos(angle2) * outerR, math.sin(angle2) * outerR)
+
                 local seg = FOVFillGradientSegments[i]
                 seg.PointA = center
                 seg.PointB = p1
                 seg.PointC = p2
+                seg.Filled = true
                 seg.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
-                
-                -- Use time-based gradient with smoothstep
-                local t = i / segments
+
+                -- center-based t gives even circular distribution; use mid-angle for color
+                local t = (i - 0.5) / segments
                 seg.Color = getRainbowColor(t)
                 seg.Visible = true
-                seg.Filled = true
             end
             
             -- Hide unused
