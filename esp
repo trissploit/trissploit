@@ -84,16 +84,10 @@ local ESPSettings = {
     FOVCircleThickness = 1,
     FOVCircleTransparency = 0,
     FOVCircleRainbow = false,
-    FOVCircleGradient = false,
-    FOVCircleGradientColor1 = Color3.fromRGB(255, 0, 0),
-    FOVCircleGradientColor2 = Color3.fromRGB(0, 0, 255),
     FOVCircleFilled = false,
     FOVCircleFillColor = Color3.fromRGB(255, 255, 255),
     FOVCircleFillTransparency = 0.8,
     FOVCircleFillRainbow = false,
-    FOVCircleFillGradient = false,
-    FOVCircleFillGradientColor1 = Color3.fromRGB(255, 0, 0),
-    FOVCircleFillGradientColor2 = Color3.fromRGB(0, 0, 255),
     FOVCircleSegments = 64,
     
     -- Box settings
@@ -173,13 +167,14 @@ local function getRainbowColor(offset)
             ESPSettings.CustomGradientColor6
         }
         
-        -- Normalize offset to 0-1 range with wrapping
-        local t = ((RainbowHue + offset) % 1) * (stops - 1)
-        local idx = math.floor(t)
-        local frac = t - idx
+        -- Normalize offset to 0-1 range with wrapping, multiplied by stops to loop
+        local t = ((RainbowHue + offset) % 1) * stops
+        local idx = math.floor(t) % stops
+        local frac = t - math.floor(t)
         
-        local c1 = colors[idx + 1] or colors[1]
-        local c2 = colors[math.min(idx + 2, stops)] or colors[stops]
+        local c1 = colors[idx + 1]
+        -- Wrap to first color after last color for seamless loop
+        local c2 = colors[(idx + 1) % stops + 1]
         
         return Color3.new(
             c1.R + (c2.R - c1.R) * frac,
@@ -1398,11 +1393,11 @@ local function updateFOVCircle()
     local segments = ESPSettings.FOVCircleSegments or 64
     local thickness = ESPSettings.FOVCircleThickness or 1
     
-    -- Determine if we need gradient/rainbow for outline
-    local useGradientOutline = ESPSettings.FOVCircleGradient or ESPSettings.FOVCircleRainbow
+    -- Determine if we need rainbow for outline
+    local useRainbowOutline = ESPSettings.FOVCircleRainbow
     
-    if useGradientOutline then
-        -- Hide solid circle, use gradient segments
+    if useRainbowOutline then
+        -- Hide solid circle, use rainbow segments
         FOVCircle.Visible = false
         FOVCircleOutline.Visible = false
         
@@ -1420,12 +1415,9 @@ local function updateFOVCircle()
             seg.Thickness = thickness
             seg.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
             
-            local t = (i - 0.5) / segCount
-            if ESPSettings.FOVCircleRainbow then
-                seg.Color = getRainbowColor(t * 0.5)
-            else
-                seg.Color = getCustomGradientColor(t, ESPSettings.FOVCircleGradientColor1, ESPSettings.FOVCircleGradientColor2)
-            end
+            -- Use angle-based offset for smooth circular gradient
+            local t = (i - 1) / segCount
+            seg.Color = getRainbowColor(t * 0.5)
             seg.Visible = true
         end
         
@@ -1458,16 +1450,15 @@ local function updateFOVCircle()
     
     -- Fill circle
     if ESPSettings.FOVCircleFilled then
-        local useFillGradient = ESPSettings.FOVCircleFillGradient or ESPSettings.FOVCircleFillRainbow
-        
-        if useFillGradient then
-            -- Use triangle segments for gradient fill
+        if ESPSettings.FOVCircleFillRainbow then
+            -- Use triangle segments for rainbow fill with no gaps
             FOVCircleFill.Visible = false
             
             local segCount = math.min(segments, FOV_GRADIENT_SEGMENTS)
             for i = 1, segCount do
-                local angle1 = (i - 1) / segCount * math.pi * 2
-                local angle2 = i / segCount * math.pi * 2
+                -- Add tiny overlap to prevent gaps
+                local angle1 = (i - 1) / segCount * math.pi * 2 - 0.001
+                local angle2 = i / segCount * math.pi * 2 + 0.001
                 
                 local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
                 local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
@@ -1478,12 +1469,9 @@ local function updateFOVCircle()
                 seg.PointC = p2
                 seg.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
                 
-                local t = (i - 0.5) / segCount
-                if ESPSettings.FOVCircleFillRainbow then
-                    seg.Color = getRainbowColor(t * 0.5)
-                else
-                    seg.Color = getCustomGradientColor(t, ESPSettings.FOVCircleFillGradientColor1, ESPSettings.FOVCircleFillGradientColor2)
-                end
+                -- Use angle-based offset for smooth circular gradient
+                local t = (i - 1) / segCount
+                seg.Color = getRainbowColor(t * 0.5)
                 seg.Visible = true
             end
             
