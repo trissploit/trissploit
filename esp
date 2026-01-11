@@ -503,7 +503,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
     gradientMode = gradientMode or "Vertical"
     
 
-    -- Vertical mode: spinning gradient colors (vertical bars that rotate through color spectrum)
+    -- Vertical mode: top-to-bottom gradient
     if gradientMode == "Vertical" then
         local totalH = math.max(0, math.floor(rectH))
         if totalH <= 0 then
@@ -516,8 +516,6 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         local segHeight = totalH / segCount
         
         local baseAlpha = transparency or 0
-        -- Animation offset that spins colors through the gradient
-        local animOffset = RainbowHue * 0.7
         
         for i = 1, segCount do
             -- Calculate exact floating-point position for smooth gradients
@@ -528,16 +526,14 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
             -- Progress based on center position (0 to 1)
             local progress = (centerY - rectY) / rectH
             
-            -- Spin the colors by offsetting progress continuously
-            -- Use frac for smooth wrapping to avoid visible resets
-            local spinProgress = (progress + animOffset) - math.floor(progress + animOffset)
-            
             local segColor
             if useRainbow then
-                -- Rainbow spins through the gradient - simple offset, no extra multiplication
-                segColor = getRainbowColor(spinProgress * 0.3)
+                -- Rainbow: OLD SYSTEM - static position-based gradient
+                segColor = getRainbowColor((baseOffset or 0) + progress * 0.5)
             else
-                -- Custom gradient animates identically to rainbow
+                -- Custom gradient: animated spinning
+                local animOffset = RainbowHue * 0.7
+                local spinProgress = (progress + animOffset) - math.floor(progress + animOffset)
                 segColor = lerpColor(color1, color2, spinProgress)
             end
             
@@ -561,13 +557,12 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
     
     -- Spin mode: rotating linear gradient (angle rotates continuously)
     if gradientMode == "Spin" then
-        local totalArea = math.max(1, math.floor(rectW * rectH))
-        if totalArea <= 0 then
+        if rectW <= 0 or rectH <= 0 then
             for i = 1, maxSegs do segments[i].Visible = false end
             return
         end
 
-        -- Calculate rotating angle based on time
+        -- Calculate rotating angle based on time (smooth continuous rotation)
         local angle = RainbowHue * math.pi * 2 -- 0 to 360 degrees rotation
         local cosAngle = math.cos(angle)
         local sinAngle = math.sin(angle)
@@ -576,7 +571,7 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         local maxDist = math.sqrt(rectW * rectW + rectH * rectH)
         
         -- Use grid-based segments for smooth rotating gradient
-        local segSize = 3 -- pixel size of each segment
+        local segSize = 4 -- Fixed pixel size for consistent scaling
         local segCountW = math.max(1, math.ceil(rectW / segSize))
         local segCountH = math.max(1, math.ceil(rectH / segSize))
         local totalSegs = math.min(segCountW * segCountH, maxSegs)
@@ -592,32 +587,37 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
                 -- Calculate segment position and size
                 local segX = rectX + ix * segSize
                 local segY = rectY + iy * segSize
-                local segW = math.min(segSize, rectW - ix * segSize)
-                local segH = math.min(segSize, rectH - iy * segSize)
+                local segW = math.min(segSize, math.floor(rectW - ix * segSize))
+                local segH = math.min(segSize, math.floor(rectH - iy * segSize))
                 
-                -- Calculate center of segment relative to rect center
-                local centerX = (segX + segW * 0.5) - (rectX + rectW * 0.5)
-                local centerY = (segY + segH * 0.5) - (rectY + rectH * 0.5)
-                
-                -- Project position onto rotating gradient direction
-                local projected = (centerX * cosAngle + centerY * sinAngle) / maxDist
-                
-                -- Map projection to 0-1 range and add color cycling
-                local progress = (projected + 0.5 + RainbowHue * 0.5) - math.floor(projected + 0.5 + RainbowHue * 0.5)
-                
-                local segColor
-                if useRainbow then
-                    segColor = getRainbowColor(progress * 0.3)
+                if segW < 1 or segH < 1 then
+                    segments[segIndex].Visible = false
                 else
-                    -- Custom gradient matches rainbow behavior
-                    segColor = lerpColor(color1, color2, progress)
+                    -- Calculate center of segment relative to rect center
+                    local centerX = (segX + segW * 0.5) - (rectX + rectW * 0.5)
+                    local centerY = (segY + segH * 0.5) - (rectY + rectH * 0.5)
+                    
+                    -- Project position onto rotating gradient direction
+                    local projected = (centerX * cosAngle + centerY * sinAngle) / maxDist
+                    
+                    -- Map projection to 0-1 range (NO additional animation offset to prevent wobbling)
+                    local progress = (projected + 0.5) - math.floor(projected + 0.5)
+                    
+                    local segColor
+                    if useRainbow then
+                        segColor = getRainbowColor(progress * 0.3)
+                    else
+                        -- Custom gradient with animation
+                        local animProgress = (progress + RainbowHue * 0.5) - math.floor(progress + RainbowHue * 0.5)
+                        segColor = lerpColor(color1, color2, animProgress)
+                    end
+                    
+                    segments[segIndex].Size = Vector2.new(math.max(1, segW), math.max(1, segH))
+                    segments[segIndex].Position = Vector2.new(math.floor(segX), math.floor(segY))
+                    segments[segIndex].Color = segColor
+                    segments[segIndex].Transparency = baseAlpha
+                    segments[segIndex].Visible = true
                 end
-                
-                segments[segIndex].Size = Vector2.new(math.max(1, math.floor(segW)), math.max(1, math.floor(segH)))
-                segments[segIndex].Position = Vector2.new(math.floor(segX), math.floor(segY))
-                segments[segIndex].Color = segColor
-                segments[segIndex].Transparency = baseAlpha
-                segments[segIndex].Visible = true
             end
             if segIndex > maxSegs then break end
         end
