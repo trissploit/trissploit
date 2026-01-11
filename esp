@@ -972,23 +972,14 @@ local function updateESP()
                         espObj.HealthBarOutline.Visible = false
                     end
 
-                    -- Health bar rendering with optimized gradient for rainbow
+                    -- Health bar rendering with rainbow color
                     if ESPSettings.HealthBarRainbow then
-                        -- Use single gradient segment for exact size/position match with normal health bar
-                        espObj.HealthBar.Visible = false
-                        local segs = espObj.HealthBarGradient
-                        
-                        -- Hide all segments first
-                        for i = 1, #segs do
-                            segs[i].Visible = false
-                        end
-                        
-                        -- Use first segment to cover exact same area as normal health bar
-                        segs[1].Size = Vector2.new(fillW, fillH)
-                        segs[1].Position = Vector2.new(fillX, fillY)
-                        segs[1].Color = getRainbowColor(baseOffset + 0.25) -- Use middle of rainbow range
-                        segs[1].Transparency = 1
-                        segs[1].Visible = true
+                        -- Use normal health bar object with rainbow color for exact match
+                        for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
+                        espObj.HealthBar.Size = Vector2.new(fillW, fillH)
+                        espObj.HealthBar.Position = Vector2.new(fillX, fillY)
+                        espObj.HealthBar.Color = getRainbowColor(baseOffset + 0.25)
+                        espObj.HealthBar.Visible = true
                     else
                         -- Normal health color based on ratio
                         for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
