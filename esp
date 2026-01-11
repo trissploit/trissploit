@@ -84,7 +84,7 @@ local ESPSettings = {
     -- Gradient settings
     BoxFillGradient = false,
     GradientType = "Custom", -- "Rainbow" or "Custom"
-    GradientMode = "Vertical", -- "Static", "Vertical", "Spiral"
+    GradientMode = "Vertical", -- "Vertical", "Spiral"
     BoxFillGradientColor1 = Color3.fromRGB(255, 0, 0),
     BoxFillGradientColor2 = Color3.fromRGB(0, 0, 255),
     GradientSteps = 8,
@@ -500,21 +500,8 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
     
     gradientMode = gradientMode or "Vertical"
     
-    -- Static mode: solid color, no gradient
-    if gradientMode == "Static" then
-        local staticColor = useRainbow and getRainbowColor(baseOffset or 0) or color1
-        segments[1].Size = Vector2.new(rectW, rectH)
-        segments[1].Position = Vector2.new(rectX, rectY)
-        segments[1].Color = staticColor
-        segments[1].Transparency = transparency or 0
-        segments[1].Visible = true
-        for i = 2, maxSegs do
-            segments[i].Visible = false
-        end
-        return
-    end
-    
-    -- Vertical mode: gradient goes top to bottom
+
+    -- Vertical mode: gradient goes top to bottom and animates
     if gradientMode == "Vertical" then
         local segCount = math.clamp(math.floor(rectH / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.max(1, math.floor(rectH))))
         
@@ -531,13 +518,15 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
             if positions[segCount].h < 0 then positions[segCount].h = 0 end
         end
         
+        -- use RainbowHue for smooth animation; for custom gradients, scroll the lerp position
         for i = 1, segCount do
-            local t = (i - 0.5) / segCount
+            local baseT = (i - 0.5) / segCount
+            local animT = (baseT + RainbowHue * 0.5) % 1
             local segColor
             if useRainbow then
-                segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
+                segColor = getRainbowColor((baseOffset or 0) + baseT * 0.5 + RainbowHue * 0.25)
             else
-                segColor = lerpColor(color1, color2, t)
+                segColor = lerpColor(color1, color2, animT)
             end
             
             segments[i].Size = Vector2.new(rectW, positions[i].h)
@@ -553,37 +542,43 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         return
     end
     
-    -- Spiral mode: gradient spirals from outside to inside
+    -- Spiral mode: concentric layers with clean spacing and animation
     if gradientMode == "Spiral" then
-        -- Create concentric rectangles from outside to inside
         local minDim = math.min(rectW, rectH)
-        local maxLayers = math.min(20, math.floor(minDim / 4))
-        local segCount = math.clamp(maxLayers, 3, math.min(maxSegs, 20))
+        local maxLayers = math.clamp(math.floor(minDim / 6), 4, math.min(40, maxSegs))
+        local segCount = maxLayers
+        
+        -- Determine uniform layer thickness so layers are evenly spaced and fill to center
+        local totalRadius = minDim / 2
+        local layerThickness = totalRadius / segCount
         
         for i = 1, segCount do
-            local t = (i - 1) / math.max(1, segCount - 1)
+            local layerIndex = i - 1
+            local t = layerIndex / math.max(1, segCount - 1)
+            local animT = (t + RainbowHue * 0.5) % 1
             local segColor
             if useRainbow then
-                segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
+                segColor = getRainbowColor((baseOffset or 0) + t * 0.5 + RainbowHue * 0.5)
             else
-                segColor = lerpColor(color1, color2, t)
+                segColor = lerpColor(color1, color2, animT)
             end
-            
-            -- Calculate shrink amount for this layer
-            local shrink = (i - 1) * (minDim / (segCount * 2))
+
+            -- Compute precise inset and size for layer i
+            local shrink = layerIndex * layerThickness
             local layerX = rectX + shrink
             local layerY = rectY + shrink
-            local layerW = math.max(1, rectW - shrink * 2)
-            local layerH = math.max(1, rectH - shrink * 2)
-            
-            -- Draw layer as filled square
+            local layerW = math.max(0.5, rectW - shrink * 2)
+            local layerH = math.max(0.5, rectH - shrink * 2)
+
+            -- Use inner-most layers with smooth alpha to blend
+            local alpha = transparency or 0
             segments[i].Size = Vector2.new(layerW, layerH)
             segments[i].Position = Vector2.new(layerX, layerY)
             segments[i].Color = segColor
-            segments[i].Transparency = transparency or 0
+            segments[i].Transparency = alpha
             segments[i].Visible = true
         end
-        
+
         for i = segCount + 1, maxSegs do
             segments[i].Visible = false
         end
@@ -860,7 +855,7 @@ local function updateESP()
                 -- Box fill first (behind lines) - works for BOTH square and corner
                 if ESPSettings.BoxFill then
                     if ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow then
-                        -- Use new gradient system: GradientType (Rainbow/Custom) and GradientMode (Static/Vertical/Spiral)
+                        -- Use new gradient system: GradientType (Rainbow/Custom) and GradientMode (Vertical/Spiral)
                         local useRainbow = (ESPSettings.GradientType == "Rainbow")
                         local gradientMode = ESPSettings.GradientMode or "Vertical"
                         
