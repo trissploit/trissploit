@@ -83,6 +83,8 @@ local ESPSettings = {
     
     -- Gradient settings
     BoxFillGradient = false,
+    GradientType = "Custom", -- "Rainbow" or "Custom"
+    GradientMode = "Vertical", -- "Static", "Vertical", "Spiral"
     BoxFillGradientColor1 = Color3.fromRGB(255, 0, 0),
     BoxFillGradientColor2 = Color3.fromRGB(0, 0, 255),
     GradientSteps = 8,
@@ -480,7 +482,7 @@ local function hideESP(espObj)
     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
 end
 
-local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset)
+local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset, gradientMode)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
     
@@ -496,46 +498,96 @@ local function drawGradient(espObj, rect, color1, color2, rotation, transparency
         return
     end
     
-    -- Dynamic segment count: scale with box height but cap at reasonable limits
-    local segCount = math.clamp(math.floor(rectH / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.max(1, math.floor(rectH))))
+    gradientMode = gradientMode or "Vertical"
     
-    -- Pre-calculate float-based segment positions that EXACTLY cover the rect area
-    local positions = {}
-    local baseSegH = rectH / segCount
-    local used = 0.0
-    for i = 1, segCount do
-        local h = baseSegH
-        positions[i] = { y = rectY + used, h = math.max(0.0001, h) }
-        used = used + positions[i].h
+    -- Static mode: solid color, no gradient
+    if gradientMode == "Static" then
+        local staticColor = useRainbow and getRainbowColor(baseOffset or 0) or color1
+        segments[1].Size = Vector2.new(rectW, rectH)
+        segments[1].Position = Vector2.new(rectX, rectY)
+        segments[1].Color = staticColor
+        segments[1].Transparency = transparency or 0
+        segments[1].Visible = true
+        for i = 2, maxSegs do
+            segments[i].Visible = false
+        end
+        return
     end
-    -- Fix any floating point drift so last segment ends exactly at rectY + rectH
-    if segCount > 0 then
-        positions[segCount].h = (rectY + rectH) - positions[segCount].y
-        if positions[segCount].h < 0 then positions[segCount].h = 0 end
-    end
-
-    -- Do NOT add integer overlaps here - we rely on float segmentation for exact coverage
     
-    -- Render segments with exact positioning
-    for i = 1, segCount do
-        local t = (i - 0.5) / segCount
-        local segColor
-        if useRainbow then
-            segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
-        else
-            segColor = lerpColor(color1, color2, t)
+    -- Vertical mode: gradient goes top to bottom
+    if gradientMode == "Vertical" then
+        local segCount = math.clamp(math.floor(rectH / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, math.max(1, math.floor(rectH))))
+        
+        local positions = {}
+        local baseSegH = rectH / segCount
+        local used = 0.0
+        for i = 1, segCount do
+            local h = baseSegH
+            positions[i] = { y = rectY + used, h = math.max(0.0001, h) }
+            used = used + positions[i].h
+        end
+        if segCount > 0 then
+            positions[segCount].h = (rectY + rectH) - positions[segCount].y
+            if positions[segCount].h < 0 then positions[segCount].h = 0 end
         end
         
-        segments[i].Size = Vector2.new(rectW, positions[i].h)
-        segments[i].Position = Vector2.new(rectX, positions[i].y)
-        segments[i].Color = segColor
-        segments[i].Transparency = transparency or 0
-        segments[i].Visible = true
+        for i = 1, segCount do
+            local t = (i - 0.5) / segCount
+            local segColor
+            if useRainbow then
+                segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
+            else
+                segColor = lerpColor(color1, color2, t)
+            end
+            
+            segments[i].Size = Vector2.new(rectW, positions[i].h)
+            segments[i].Position = Vector2.new(rectX, positions[i].y)
+            segments[i].Color = segColor
+            segments[i].Transparency = transparency or 0
+            segments[i].Visible = true
+        end
+        
+        for i = segCount + 1, maxSegs do
+            segments[i].Visible = false
+        end
+        return
     end
     
-    -- Hide unused segments
-    for i = segCount + 1, maxSegs do
-        segments[i].Visible = false
+    -- Spiral mode: gradient spirals from outside to inside
+    if gradientMode == "Spiral" then
+        -- Create concentric rectangles from outside to inside
+        local minDim = math.min(rectW, rectH)
+        local maxLayers = math.min(20, math.floor(minDim / 4))
+        local segCount = math.clamp(maxLayers, 3, math.min(maxSegs, 20))
+        
+        for i = 1, segCount do
+            local t = (i - 1) / math.max(1, segCount - 1)
+            local segColor
+            if useRainbow then
+                segColor = getRainbowColor((baseOffset or 0) + t * 0.5)
+            else
+                segColor = lerpColor(color1, color2, t)
+            end
+            
+            -- Calculate shrink amount for this layer
+            local shrink = (i - 1) * (minDim / (segCount * 2))
+            local layerX = rectX + shrink
+            local layerY = rectY + shrink
+            local layerW = math.max(1, rectW - shrink * 2)
+            local layerH = math.max(1, rectH - shrink * 2)
+            
+            -- Draw layer as filled square
+            segments[i].Size = Vector2.new(layerW, layerH)
+            segments[i].Position = Vector2.new(layerX, layerY)
+            segments[i].Color = segColor
+            segments[i].Transparency = transparency or 0
+            segments[i].Visible = true
+        end
+        
+        for i = segCount + 1, maxSegs do
+            segments[i].Visible = false
+        end
+        return
     end
 end
 
@@ -808,7 +860,10 @@ local function updateESP()
                 -- Box fill first (behind lines) - works for BOTH square and corner
                 if ESPSettings.BoxFill then
                     if ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow then
-                        local useRainbow = ESPSettings.BoxFillRainbow
+                        -- Use new gradient system: GradientType (Rainbow/Custom) and GradientMode (Static/Vertical/Spiral)
+                        local useRainbow = (ESPSettings.GradientType == "Rainbow")
+                        local gradientMode = ESPSettings.GradientMode or "Vertical"
+                        
                         -- Inset gradient so it stays fully inside the outline stroke
                         local thickness = ESPSettings.Thickness or 1
                         local inset = thickness / 2
@@ -818,7 +873,7 @@ local function updateESP()
                         local innerH = math.max(0, h - inset * 2)
 
                         drawGradient(espObj, {x = innerX, y = innerY, w = innerW, h = innerH}, ESPSettings.BoxFillGradientColor1, ESPSettings.BoxFillGradientColor2, 
-                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset)
+                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, gradientMode)
                         espObj.BoxFill.Visible = false
 
                         -- Draw outline around gradient fill for proper bounding using exact positions
