@@ -1661,162 +1661,342 @@ local function updateObjectESP()
 end
 
 -- Main render loop
--- Per-FOV system (supports multiple named FOV circles)
+-- FOV Circle drawing objects
+local FOVCircleOutline = Drawing.new("Circle")
+FOVCircleOutline.Thickness = 1
+FOVCircleOutline.NumSides = 64
+FOVCircleOutline.Filled = false
+FOVCircleOutline.Transparency = 1
+FOVCircleOutline.Color = Color3.new(0, 0, 0)
+FOVCircleOutline.Visible = false
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.NumSides = 64
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Visible = false
+
+local FOVCircleFill = Drawing.new("Circle")
+FOVCircleFill.Thickness = 1
+FOVCircleFill.NumSides = 64
+FOVCircleFill.Filled = true
+FOVCircleFill.Transparency = 0.2
+FOVCircleFill.Color = Color3.fromRGB(255, 255, 255)
+FOVCircleFill.Visible = false
+
+-- Gradient circle segments for FOV (for gradient/rainbow circle outline)
 local FOV_GRADIENT_SEGMENTS = 128
-local FOVInstances = {}
+local FOVGradientSegments = {}
+for i = 1, FOV_GRADIENT_SEGMENTS do
+    local seg = Drawing.new("Line")
+    seg.Thickness = 1
+    seg.Visible = false
+    FOVGradientSegments[i] = seg
+end
 
-local function createFOVInstance(name)
-    if FOVInstances[name] then return FOVInstances[name] end
-    local inst = {}
+-- Gradient fill segments for FOV circle fill
+local FOVFillGradientSegments = {}
+for i = 1, FOV_GRADIENT_SEGMENTS do
+    local seg = Drawing.new("Triangle")
+    seg.Filled = true
+    seg.Visible = false
+    FOVFillGradientSegments[i] = seg
+end
 
-    inst.Outline = Drawing.new("Circle")
-    inst.Outline.Thickness = 1
-    inst.Outline.NumSides = 64
-    inst.Outline.Filled = false
-    inst.Outline.Transparency = 1
-    inst.Outline.Color = Color3.new(0, 0, 0)
-    inst.Outline.Visible = false
+-- Multi-FOV support: store multiple named FOV circle configs and their drawing objects
+local FOVCircles = {}
 
-    inst.Circle = Drawing.new("Circle")
-    inst.Circle.Thickness = 1
-    inst.Circle.NumSides = 64
-    inst.Circle.Filled = false
-    inst.Circle.Transparency = 1
-    inst.Circle.Color = Color3.fromRGB(255, 255, 255)
-    inst.Circle.Visible = false
+local function createFOVDrawings()
+    local outline = Drawing.new("Circle")
+    outline.Thickness = 1
+    outline.NumSides = 64
+    outline.Filled = false
+    outline.Transparency = 1
+    outline.Color = Color3.new(0, 0, 0)
+    outline.Visible = false
 
-    inst.Fill = Drawing.new("Circle")
-    inst.Fill.Thickness = 1
-    inst.Fill.NumSides = 64
-    inst.Fill.Filled = true
-    inst.Fill.Transparency = 0.2
-    inst.Fill.Color = Color3.fromRGB(255, 255, 255)
-    inst.Fill.Visible = false
+    local circle = Drawing.new("Circle")
+    circle.Thickness = 1
+    circle.NumSides = 64
+    circle.Filled = false
+    circle.Transparency = 1
+    circle.Color = Color3.fromRGB(255, 255, 255)
+    circle.Visible = false
 
-    inst.Gradient = {}
+    local fill = Drawing.new("Circle")
+    fill.Thickness = 1
+    fill.NumSides = 64
+    fill.Filled = true
+    fill.Transparency = 0.2
+    fill.Color = Color3.fromRGB(255, 255, 255)
+    fill.Visible = false
+
+    local segs = {}
     for i = 1, FOV_GRADIENT_SEGMENTS do
         local seg = Drawing.new("Line")
         seg.Thickness = 1
         seg.Visible = false
-        inst.Gradient[i] = seg
+        segs[i] = seg
     end
 
-    inst.FillGradient = {}
+    local fillSegs = {}
     for i = 1, FOV_GRADIENT_SEGMENTS do
         local seg = Drawing.new("Triangle")
         seg.Filled = true
         seg.Visible = false
-        inst.FillGradient[i] = seg
+        fillSegs[i] = seg
     end
 
-    FOVInstances[name] = inst
-    return inst
+    return {
+        Outline = outline,
+        Circle = circle,
+        Fill = fill,
+        Segments = segs,
+        FillSegments = fillSegs
+    }
 end
 
-local function removeFOVInstance(name)
-    local inst = FOVInstances[name]
-    if not inst then return end
-    pcall(function() inst.Outline:Remove() end)
-    pcall(function() inst.Circle:Remove() end)
-    pcall(function() inst.Fill:Remove() end)
-    for _, s in ipairs(inst.Gradient) do pcall(function() s:Remove() end) end
-    for _, s in ipairs(inst.FillGradient) do pcall(function() s:Remove() end) end
-    FOVInstances[name] = nil
+local function destroyFOVDrawings(draws)
+    if not draws then return end
+    local function safeRemove(o)
+        pcall(function()
+            if o.Remove then o:Remove() elseif o.Destroy then o:Destroy() end
+        end)
+    end
+    safeRemove(draws.Outline)
+    safeRemove(draws.Circle)
+    safeRemove(draws.Fill)
+    for _, s in ipairs(draws.Segments or {}) do safeRemove(s) end
+    for _, s in ipairs(draws.FillSegments or {}) do safeRemove(s) end
 end
 
--- Draw all configured FOVs
-local function updateFOVs()
+-- Render a single named FOV using its config and drawing objects
+local function renderFOV(name, cfg)
+    if not cfg or not cfg.Drawings then return end
+    local draws = cfg.Drawings
+    if not cfg.Enabled then
+        draws.Outline.Visible = false
+        draws.Circle.Visible = false
+        draws.Fill.Visible = false
+        for _, s in ipairs(draws.Segments) do s.Visible = false end
+        for _, s in ipairs(draws.FillSegments) do s.Visible = false end
+        return
+    end
+
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    local radius = cfg.Radius or 100
+    local segments = math.min(cfg.Segments or 128, FOV_GRADIENT_SEGMENTS)
+    local thickness = cfg.Thickness or 1
 
-    for name, cfg in pairs(ESPSettings.FOVConfigs or {}) do
-        local inst = createFOVInstance(name)
-        if not cfg.Enabled then
-            inst.Circle.Visible = false
-            inst.Outline.Visible = false
-            inst.Fill.Visible = false
-            for _, s in ipairs(inst.Gradient) do s.Visible = false end
-            for _, s in ipairs(inst.FillGradient) do s.Visible = false end
-            goto continue_fov
+    -- Outline rainbow
+    if cfg.Rainbow then
+        draws.Circle.Visible = false
+        draws.Outline.Visible = false
+        for i = 1, segments do
+            local angle1 = ((i - 1) / segments) * math.pi * 2
+            local angle2 = (i / segments) * math.pi * 2
+            local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
+            local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
+            local seg = draws.Segments[i]
+            seg.From = p1
+            seg.To = p2
+            seg.Thickness = thickness + 0.5
+            seg.Transparency = 1 - (cfg.Transparency or 0)
+            local t = i / segments
+            seg.Color = getRainbowColor(t, cfg.ColorElement or "FOV")
+            seg.Visible = true
         end
+        for i = segments + 1, FOV_GRADIENT_SEGMENTS do draws.Segments[i].Visible = false end
+    else
+        for _, seg in ipairs(draws.Segments) do seg.Visible = false end
+        draws.Outline.Position = center
+        draws.Outline.Radius = radius + 1
+        draws.Outline.Thickness = thickness + 2
+        draws.Outline.NumSides = segments
+        draws.Outline.Color = Color3.new(0,0,0)
+        draws.Outline.Transparency = 1 - (cfg.Transparency or 0)
+        draws.Outline.Visible = true
 
-        -- Config values with defaults
-        local radius = cfg.Radius or 100
-        local segments = math.min(cfg.Segments or 128, FOV_GRADIENT_SEGMENTS)
-        local thickness = cfg.Thickness or 1
-        local outlineTransparency = 1 - (cfg.Transparency or 0)
-        local useRainbowOutline = cfg.Rainbow or false
-        local useRainbowFill = cfg.FillRainbow or false
+        draws.Circle.Position = center
+        draws.Circle.Radius = radius
+        draws.Circle.Thickness = thickness
+        draws.Circle.NumSides = segments
+        draws.Circle.Color = cfg.Color or ESPSettings.FOVCircleColor
+        draws.Circle.Transparency = 1 - (cfg.Transparency or 0)
+        draws.Circle.Visible = true
+    end
 
-        -- Outline / ring
-        if useRainbowOutline then
-            inst.Circle.Visible = false
-            inst.Outline.Visible = false
-            for i = 1, segments do
-                local angle1 = ((i - 1) / segments) * math.pi * 2
-                local angle2 = (i / segments) * math.pi * 2
-                local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
-                local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
-                local seg = inst.Gradient[i]
-                seg.From = p1
-                seg.To = p2
-                seg.Thickness = thickness + 0.5
-                seg.Transparency = outlineTransparency
-                local t = i / segments
-                seg.Color = getRainbowColor(t + (cfg.Offset or 0), "FOV")
+    -- Fill
+    if cfg.Filled then
+        if cfg.FillRainbow then
+            draws.Fill.Visible = false
+            local fillSegs = math.min(segments * 2, FOV_GRADIENT_SEGMENTS)
+            local overlap = 0.02
+            local outerR = radius + 2
+            for i = 1, fillSegs do
+                local angle1 = ((i - 1) / fillSegs) * math.pi * 2 - overlap
+                local angle2 = (i / fillSegs) * math.pi * 2 + overlap
+                local p1 = center + Vector2.new(math.cos(angle1) * outerR, math.sin(angle1) * outerR)
+                local p2 = center + Vector2.new(math.cos(angle2) * outerR, math.sin(angle2) * outerR)
+                local seg = draws.FillSegments[i]
+                seg.PointA = center
+                seg.PointB = p1
+                seg.PointC = p2
+                seg.Filled = true
+                seg.Transparency = 1 - (cfg.FillTransparency or 0.8)
+                seg.Thickness = 0
+                local t = (i - 0.5) / fillSegs
+                seg.Color = getRainbowColor(t, cfg.ColorElement or "FOV")
                 seg.Visible = true
             end
-            for i = segments + 1, FOV_GRADIENT_SEGMENTS do inst.Gradient[i].Visible = false end
+            for i = fillSegs + 1, FOV_GRADIENT_SEGMENTS do draws.FillSegments[i].Visible = false end
         else
-            for _, s in ipairs(inst.Gradient) do s.Visible = false end
-            inst.Outline.Position = center
-            inst.Outline.Radius = radius + 1
-            inst.Outline.Thickness = thickness + 2
-            inst.Outline.NumSides = segments
-            inst.Outline.Color = cfg.OutlineColor or Color3.new(0,0,0)
-            inst.Outline.Transparency = outlineTransparency
-            inst.Outline.Visible = true
-
-            inst.Circle.Position = center
-            inst.Circle.Radius = radius
-            inst.Circle.Thickness = thickness
-            inst.Circle.NumSides = segments
-            inst.Circle.Color = cfg.Color or Color3.fromRGB(255,255,255)
-            inst.Circle.Transparency = outlineTransparency
-            inst.Circle.Visible = true
+            for _, seg in ipairs(draws.FillSegments) do seg.Visible = false end
+            draws.Fill.Position = center
+            draws.Fill.Radius = radius
+            draws.Fill.NumSides = segments
+            draws.Fill.Color = cfg.FillColor or ESPSettings.FOVCircleFillColor
+            draws.Fill.Transparency = 1 - (cfg.FillTransparency or 0.8)
+            draws.Fill.Filled = true
+            draws.Fill.Visible = true
         end
+    else
+        draws.Fill.Visible = false
+        for _, seg in ipairs(draws.FillSegments) do seg.Visible = false end
+    end
+end
 
-        -- Fill
-        if cfg.Filled then
-            if useRainbowFill then
-                inst.Fill.Visible = false
-                local fillSegs = math.min(segments * 2, FOV_GRADIENT_SEGMENTS)
-                local overlap = cfg.FillOverlap or 0.02
-                local outerR = radius + (cfg.FillOuter or 2)
-                for i = 1, fillSegs do
-                    local angle1 = ((i - 1) / fillSegs) * math.pi * 2 - overlap
-                    local angle2 = (i / fillSegs) * math.pi * 2 + overlap
-                    local p1 = center + Vector2.new(math.cos(angle1) * outerR, math.sin(angle1) * outerR)
-                    local p2 = center + Vector2.new(math.cos(angle2) * outerR, math.sin(angle2) * outerR)
-                    local seg = inst.FillGradient[i]
-                    seg.PointA = center
-                    seg.PointB = p1
-                    seg.PointC = p2
-                    seg.Filled = true
-                    seg.Transparency = 1 - (cfg.FillTransparency or 0.8)
-                    seg.Thickness = 0
-                    local t = (i - 0.5) / fillSegs
-                    seg.Color = getRainbowColor(t + (cfg.Offset or 0), "FOV")
-                    seg.Visible = true
-                end
-                for i = fillSegs + 1, FOV_GRADIENT_SEGMENTS do inst.FillGradient[i].Visible = false end
-            else
-                for _, s in ipairs(inst.FillGradient) do s.Visible = false end
-                inst.Fill.Position = center
-                inst.Fill.Radius = radius
-                inst.Fill.NumSides = segments
-                inst.Fill.Color = cfg.FillColor or cfg.Color or Color3.fromRGB(255,255,255)
-                inst.Fill.Transparency = 1 - (cfg.FillTransparency or 0.8)
-*** End Patch
+local function updateFOVs()
+    if next(FOVCircles) == nil then
+        -- no custom FOVs, keep legacy behaviour
+        updateFOVCircle()
+        return
+    end
+    for name, cfg in pairs(FOVCircles) do
+        pcall(function() renderFOV(name, cfg) end)
+    end
+end
+
+local function updateFOVCircle()
+    if not ESPSettings.FOVCircleEnabled then
+        FOVCircle.Visible = false
+        FOVCircleOutline.Visible = false
+        FOVCircleFill.Visible = false
+        for _, seg in ipairs(FOVGradientSegments) do seg.Visible = false end
+        for _, seg in ipairs(FOVFillGradientSegments) do seg.Visible = false end
+        return
+    end
+    
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    local radius = ESPSettings.FOVCircleRadius or 100
+    local segments = math.min(ESPSettings.FOVCircleSegments or 128, FOV_GRADIENT_SEGMENTS)
+    local thickness = ESPSettings.FOVCircleThickness or 1
+    
+    -- Determine if we need rainbow for outline
+    local useRainbowOutline = ESPSettings.FOVCircleRainbow
+    
+    if useRainbowOutline then
+        -- Hide solid circle, use rainbow segments with improved blending
+        FOVCircle.Visible = false
+        FOVCircleOutline.Visible = false
+        
+        for i = 1, segments do
+            -- Smooth angle transitions with slight overlap for perfect blending
+            local angle1 = ((i - 1) / segments) * math.pi * 2
+            local angle2 = (i / segments) * math.pi * 2
+            
+            local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
+            local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
+            
+            local seg = FOVGradientSegments[i]
+            seg.From = p1
+            seg.To = p2
+            seg.Thickness = thickness + 0.5  -- Slight thickness increase for better blending
+            seg.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
+            
+            -- Use time-based gradient with smoothstep for clean blending
+            local t = i / segments
+            seg.Color = getRainbowColor(t, "FOV")
+            seg.Visible = true
+        end
+        
+        -- Hide unused segments
+        for i = segments + 1, FOV_GRADIENT_SEGMENTS do
+            FOVGradientSegments[i].Visible = false
+        end
+    else
+        -- Use solid circle
+        for _, seg in ipairs(FOVGradientSegments) do seg.Visible = false end
+        
+        -- Outline
+        FOVCircleOutline.Position = center
+        FOVCircleOutline.Radius = radius + 1
+        FOVCircleOutline.Thickness = thickness + 2
+        FOVCircleOutline.NumSides = segments
+        FOVCircleOutline.Color = Color3.new(0, 0, 0)
+        FOVCircleOutline.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
+        FOVCircleOutline.Visible = true
+        
+        -- Main circle
+        FOVCircle.Position = center
+        FOVCircle.Radius = radius
+        FOVCircle.Thickness = thickness
+        FOVCircle.NumSides = segments
+        FOVCircle.Color = ESPSettings.FOVCircleColor
+        FOVCircle.Transparency = 1 - (ESPSettings.FOVCircleTransparency or 0)
+        FOVCircle.Visible = true
+    end
+    
+    -- Fill circle with improved rendering
+    if ESPSettings.FOVCircleFilled then
+        if ESPSettings.FOVCircleFillRainbow then
+            -- Use triangle segments for rainbow fill
+            -- Key fix: use more segments and larger overlap to eliminate the "cross" artifact
+            FOVCircleFill.Visible = false
+            
+            -- More segments = smoother fill, minimal visible seams
+            local fillSegs = math.min(segments * 2, FOV_GRADIENT_SEGMENTS) -- Double segments for fill
+            local overlap = 0.02 -- More overlap in radians to eliminate gaps
+            local outerR = radius + 2 -- Expand further to cover edge seams
+            
+            for i = 1, fillSegs do
+                -- Spread triangles evenly around the circle
+                local angle1 = ((i - 1) / fillSegs) * math.pi * 2 - overlap
+                local angle2 = (i / fillSegs) * math.pi * 2 + overlap
+
+                local p1 = center + Vector2.new(math.cos(angle1) * outerR, math.sin(angle1) * outerR)
+                local p2 = center + Vector2.new(math.cos(angle2) * outerR, math.sin(angle2) * outerR)
+
+                local seg = FOVFillGradientSegments[i]
+                seg.PointA = center
+                seg.PointB = p1
+                seg.PointC = p2
+                seg.Filled = true
+                seg.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
+                seg.Thickness = 0 -- No outline on triangles
+
+                -- Use mid-angle for smooth color distribution
+                local t = (i - 0.5) / fillSegs
+                seg.Color = getRainbowColor(t, "FOV")
+                seg.Visible = true
+            end
+            
+            -- Hide unused
+            for i = fillSegs + 1, FOV_GRADIENT_SEGMENTS do
+                FOVFillGradientSegments[i].Visible = false
+            end
+        else
+            -- Solid fill
+            for _, seg in ipairs(FOVFillGradientSegments) do seg.Visible = false end
+            
+            FOVCircleFill.Position = center
+            FOVCircleFill.Radius = radius
+            FOVCircleFill.NumSides = segments
+            FOVCircleFill.Color = ESPSettings.FOVCircleFillColor
+            FOVCircleFill.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
+            FOVCircleFill.Filled = true
             FOVCircleFill.Visible = true
         end
     else
@@ -1865,37 +2045,6 @@ getgenv().TrisESP = {
     
     -- Enable/disable all ESP immediately
     SetEnabled = setGlobalESPEnabled,
-
-    -- === FOV API ===
-    -- Create a named FOV: TrisESP.CreateFOV("Name", {Enabled=true, Radius=100, ...})
-    CreateFOV = function(name, opts)
-        if not name then return end
-        ESPSettings.FOVConfigs = ESPSettings.FOVConfigs or {}
-        ESPSettings.FOVConfigs[name] = ESPSettings.FOVConfigs[name] or {}
-        for k,v in pairs(opts or {}) do ESPSettings.FOVConfigs[name][k] = v end
-        createFOVInstance(name)
-    end,
-
-    RemoveFOV = function(name)
-        if not name then return end
-        ESPSettings.FOVConfigs[name] = nil
-        removeFOVInstance(name)
-    end,
-
-    SetFOVSetting = function(name, key, value)
-        if not name or not key then return end
-        ESPSettings.FOVConfigs = ESPSettings.FOVConfigs or {}
-        ESPSettings.FOVConfigs[name] = ESPSettings.FOVConfigs[name] or {}
-        ESPSettings.FOVConfigs[name][key] = value
-    end,
-
-    GetFOV = function(name)
-        return ESPSettings.FOVConfigs and ESPSettings.FOVConfigs[name]
-    end,
-
-    GetFOVs = function()
-        return ESPSettings.FOVConfigs
-    end,
     
     -- === PER-PLAYER ESP CUSTOMIZATION ===
     -- Set custom ESP settings for a specific player
@@ -1953,6 +2102,59 @@ getgenv().TrisESP = {
                 ChamsRainbow = rainbow or false
             }
         end
+    end,
+    
+    -- === MULTI-FOV API ===
+    -- Create a named FOV with customizable options
+    -- Options: Enabled, Radius, Segments, Thickness, Color, Transparency, Rainbow, Filled, FillColor, FillTransparency, FillRainbow
+    CreateFOV = function(name, options)
+        if type(name) ~= "string" then return end
+        options = options or {}
+        if FOVCircles[name] then
+            for k, v in pairs(options) do FOVCircles[name][k] = v end
+            return
+        end
+        local draws = createFOVDrawings()
+        local cfg = {
+            Enabled = options.Enabled or false,
+            Radius = options.Radius or ESPSettings.FOVCircleRadius,
+            Segments = options.Segments or ESPSettings.FOVCircleSegments,
+            Thickness = options.Thickness or ESPSettings.FOVCircleThickness,
+            Color = options.Color or ESPSettings.FOVCircleColor,
+            Transparency = options.Transparency or ESPSettings.FOVCircleTransparency,
+            Rainbow = options.Rainbow or ESPSettings.FOVCircleRainbow,
+            Filled = options.Filled or ESPSettings.FOVCircleFilled,
+            FillColor = options.FillColor or ESPSettings.FOVCircleFillColor,
+            FillTransparency = options.FillTransparency or ESPSettings.FOVCircleFillTransparency,
+            FillRainbow = options.FillRainbow or ESPSettings.FOVCircleFillRainbow,
+            ColorElement = options.ColorElement or "FOV",
+            Drawings = draws
+        }
+        FOVCircles[name] = cfg
+    end,
+
+    RemoveFOV = function(name)
+        if type(name) ~= "string" then return end
+        local cfg = FOVCircles[name]
+        if not cfg then return end
+        destroyFOVDrawings(cfg.Drawings)
+        FOVCircles[name] = nil
+    end,
+
+    SetFOVEnabled = function(name, enabled)
+        if type(name) ~= "string" then return end
+        if FOVCircles[name] then FOVCircles[name].Enabled = enabled end
+    end,
+
+    SetFOVConfig = function(name, options)
+        if type(name) ~= "string" or type(options) ~= "table" then return end
+        if not FOVCircles[name] then return end
+        for k, v in pairs(options) do FOVCircles[name][k] = v end
+    end,
+
+    GetFOV = function(name)
+        if type(name) ~= "string" then return nil end
+        return FOVCircles[name]
     end,
     
     -- === PLAYER FILTERING ===
