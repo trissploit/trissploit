@@ -413,9 +413,7 @@ local function getScreenRectForCharacter(char)
                 local padX = math.max(2, math.floor(w * 0.06))
                 h = math.min(vh * 0.95, h + padY * 2)
                 w = math.min(vw * 0.95, w + padX * 2)
-                -- Prefer centering on HumanoidRootPart X to keep box positioned on root
-                local spHrp = Camera:WorldToViewportPoint(hrp.Position)
-                local cx = (spHrp and spHrp.Z > 0) and spHrp.X or ((spTop.X + spBottom.X) / 2)
+                local cx = (spTop.X + spBottom.X) / 2
                 local x = cx - w / 2
                 local y = topY - padY
                 return { x = x, y = y, w = w, h = h, cx = cx, cy = y + h/2 }
@@ -598,8 +596,6 @@ local function createESPObject()
     espObj.BoxOutline.Thickness = 1
     espObj.BoxOutline.Color = Color3.new(0,0,0)
     espObj.BoxOutline.ZIndex = 2
-    -- Ensure the legacy BoxFill drawing is hidden (we use segmented gradients)
-    espObj.BoxFill.Visible = false
     
     -- Outline square for gradient box rendering (2px thickness)
     espObj.OutlineSquare = Drawing.new("Square")
@@ -852,7 +848,12 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
-                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    -- Interpolate between explicit top/bottom colors for a true vertical gradient
+                    if topColor and bottomColor then
+                        lineSegs[i].Color = lerpColor(topColor, bottomColor, math.clamp(t, 0, 1))
+                    else
+                        lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    end
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
@@ -877,8 +878,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
                     local segCenter = (segLeft + segRight) * 0.5
-                        -- Horizontal gradient should vary across width; compute t from X
-                        local t = (segCenter - ix) / math.max(1, iw)
+                    local t = (sy - iy) / math.max(1, ih)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
@@ -886,7 +886,14 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(fromX, sy)
                     lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
-                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    -- Use the vertical progress (t) to derive the correct gradient color
+                    local vertCenter = sy -- horizontal segment Y is constant
+                    local tVert = (vertCenter - iy) / math.max(1, ih)
+                    if topColor and bottomColor then
+                        lineSegs[i].Color = lerpColor(topColor, bottomColor, math.clamp(tVert, 0, 1))
+                    else
+                        lineSegs[i].Color = getRainbowColor(baseOffset + tVert * 0.5, "Box")
+                    end
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
@@ -1381,21 +1388,18 @@ local function updateESP()
                     
                     if ESPSettings.BoxType == "Square" then
                         -- Always draw gradient box with black outline
+                        -- Draw black 1px outline and then gradient edges inside it
                         if espObj.BoxOutline then
-                            -- Outer black outline slightly larger so inner colored outline doesn't fully cover it
-                            espObj.BoxOutline.Size = Vector2.new(iw + 4, ih + 4)
-                            espObj.BoxOutline.Position = Vector2.new(ix - 2, iy - 2)
+                            espObj.BoxOutline.Size = Vector2.new(iw + 2, ih + 2)
+                            espObj.BoxOutline.Position = Vector2.new(ix - 1, iy - 1)
+                            espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or Color3.new(0,0,0)
+                            espObj.BoxOutline.Thickness = 1
                             espObj.BoxOutline.Visible = true
                         end
+                        -- Draw gradient box edges (true vertical gradient between topColor and bottomColor)
                         drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, topColor, bottomColor)
-                        if espObj.OutlineSquare then
-                            -- Inner colored outline (drawn atop the black outer outline)
-                            espObj.OutlineSquare.Size = Vector2.new(iw + 2, ih + 2)
-                            espObj.OutlineSquare.Position = Vector2.new(ix - 1, iy - 1)
-                            espObj.OutlineSquare.Color = boxColor or (ESPSettings.BoxColor or Color3.fromRGB(0,170,255))
-                            espObj.OutlineSquare.Thickness = 2
-                            espObj.OutlineSquare.Visible = true
-                        end
+                        -- Hide the old single-color outline square (it covered the gradient)
+                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                     else
                         -- Corner box - always gradient
@@ -1712,13 +1716,12 @@ local function updateObjectESP()
                 
                 -- Box
                 if config.ShowBox then
-                    -- Outer black outline slightly larger
-                    espObj.BoxOutline.Size = Vector2.new(rect.w + 4, rect.h + 4)
-                    espObj.BoxOutline.Position = Vector2.new(rect.x - 2, rect.y - 2)
+                    espObj.BoxOutline.Size = Vector2.new(rect.w + 2, rect.h + 2)
+                    espObj.BoxOutline.Position = Vector2.new(rect.x - 1, rect.y - 1)
                     espObj.BoxOutline.Visible = true
                     
-                    espObj.Box.Size = Vector2.new(rect.w + 2, rect.h + 2)
-                    espObj.Box.Position = Vector2.new(rect.x - 1, rect.y - 1)
+                    espObj.Box.Size = Vector2.new(rect.w, rect.h)
+                    espObj.Box.Position = Vector2.new(rect.x, rect.y)
                     espObj.Box.Color = color
                     espObj.Box.Visible = true
                 else
