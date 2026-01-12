@@ -127,6 +127,9 @@ local ESPSettings = {
     BoxColor = Color3.fromRGB(0, 170, 255),
     Thickness = 2,
     BoxOutlineColor = Color3.new(0, 0, 0),
+    -- When false, ESP objects will NOT be auto-created for every player on join/startup.
+    -- Call `getgenv().TrisESP.AddPlayer(player)` or set this to true to enable auto-creation.
+    AutoAddPlayers = false,
     
     -- Box fill settings
     BoxFill = false,
@@ -1073,6 +1076,16 @@ local function updateESP()
             
             -- Apply per-player overrides if set
             local playerOverride = ESPSettings.PlayerOverrides[player.Name]
+            -- Create a per-player settings proxy `S` that falls back to global ESPSettings
+            local S = setmetatable({}, {
+                __index = function(_, k)
+                    if playerOverride and playerOverride[k] ~= nil then
+                        return playerOverride[k]
+                    end
+                    return ESPSettings[k]
+                end
+            })
+
             if playerOverride then
                 if playerOverride.BoxColor then
                     boxColor = playerOverride.BoxColor
@@ -1091,7 +1104,7 @@ local function updateESP()
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
 
-            if ESPSettings.Enabled then
+            if S.Enabled then
                 -- Hide all text objects first to prevent leftover visibility
                 espObj.Name.Visible = false
                 espObj.HealthText.Visible = false
@@ -1101,13 +1114,13 @@ local function updateESP()
                 -- each can be positioned independently and receive per-element rainbow colors.
                 local topList, bottomList, leftList, rightList = {}, {}, {}, {}
 
-                if ESPSettings.ShowName then
-                    local nameText = ESPSettings.UseDisplayName and player.DisplayName or player.Name
-                    table.insert((ESPSettings.NamePosition or "Top") == "Top" and topList or (ESPSettings.NamePosition == "Bottom" and bottomList or (ESPSettings.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = nameText})
+                if S.ShowName then
+                    local nameText = S.UseDisplayName and player.DisplayName or player.Name
+                    table.insert((S.NamePosition or "Top") == "Top" and topList or (S.NamePosition == "Bottom" and bottomList or (S.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = nameText})
                 end
                 -- Health text is now positioned relative to the health bar (handled below)
-                if ESPSettings.ShowDistance then
-                    table.insert((ESPSettings.DistancePosition or "Top") == "Top" and topList or (ESPSettings.DistancePosition == "Bottom" and bottomList or (ESPSettings.DistancePosition == "Left" and leftList or rightList)), {key = "Distance", text = math.floor(distance) .. "m"})
+                if S.ShowDistance then
+                    table.insert((S.DistancePosition or "Top") == "Top" and topList or (S.DistancePosition == "Bottom" and bottomList or (S.DistancePosition == "Left" and leftList or rightList)), {key = "Distance", text = math.floor(distance) .. "m"})
                 end
 
                 -- Collect simple custom text entries and append to top by default
@@ -1140,7 +1153,7 @@ local function updateESP()
                     local y
                     if anchor == "Top" then
                         y = math.floor(rect.y - 18)
-                        if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
+                        if S.HealthBarEnabled and S.HealthBarPosition == "Top" then
                             y = y - 2 - 3
                         end
                     elseif anchor == "Bottom" then
@@ -1154,10 +1167,10 @@ local function updateESP()
                     end
                     espObj.Name.Center = (anchor == "Top" or anchor == "Bottom")
                     espObj.Name.Size = 13
-                    espObj.Name.Font = ESPSettings.TextFont or 2
+                    espObj.Name.Font = S.TextFont or 2
                     espObj.Name.Text = combined
                     espObj.Name.Position = Vector2.new(x, y)
-                    espObj.Name.Color = ESPSettings.NameColor
+                    espObj.Name.Color = S.NameColor
                     espObj.Name.Visible = true
                     -- hide individual texts when combined
                     if espObj.HealthText then espObj.HealthText.Visible = false end
@@ -1175,7 +1188,7 @@ local function updateESP()
                         -- stack upward: first item just above box (matching previous default)
                         for i, item in ipairs(list) do
                             local y = math.floor(rect.y - 18 - (i - 1) * lineHeight)
-                            if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
+                            if S.HealthBarEnabled and S.HealthBarPosition == "Top" then
                                 y = y - 2 - 3
                             end
                             local x = math.floor(rect.cx)
@@ -1184,7 +1197,7 @@ local function updateESP()
                                 col = getRainbowColor(0.1 + baseOffset, "Name")
                                 espObj.Name.Center = true
                                 espObj.Name.Size = 13
-                                espObj.Name.Font = ESPSettings.TextFont or 2
+                                espObj.Name.Font = S.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -1193,7 +1206,7 @@ local function updateESP()
                                 col = getRainbowColor(0.3 + baseOffset, "HealthText")
                                 espObj.HealthText.Center = true
                                 espObj.HealthText.Size = 13
-                                espObj.HealthText.Font = ESPSettings.TextFont or 2
+                                espObj.HealthText.Font = S.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -1202,7 +1215,7 @@ local function updateESP()
                                 col = getRainbowColor(0.6 + baseOffset, "Distance")
                                 espObj.DistanceText.Center = true
                                 espObj.DistanceText.Size = 13
-                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
+                                espObj.DistanceText.Font = S.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -1218,7 +1231,7 @@ local function updateESP()
                                 col = getRainbowColor(0.1 + baseOffset, "Name")
                                 espObj.Name.Center = true
                                 espObj.Name.Size = 13
-                                espObj.Name.Font = ESPSettings.TextFont or 2
+                                espObj.Name.Font = S.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -1227,7 +1240,7 @@ local function updateESP()
                                 col = getRainbowColor(0.3 + baseOffset, "HealthText")
                                 espObj.HealthText.Center = true
                                 espObj.HealthText.Size = 13
-                                espObj.HealthText.Font = ESPSettings.TextFont or 2
+                                espObj.HealthText.Font = S.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -1236,7 +1249,7 @@ local function updateESP()
                                 col = getRainbowColor(0.6 + baseOffset, "Distance")
                                 espObj.DistanceText.Center = true
                                 espObj.DistanceText.Size = 13
-                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
+                                espObj.DistanceText.Font = S.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -1255,7 +1268,7 @@ local function updateESP()
                                 col = getRainbowColor(0.1 + baseOffset, "Name")
                                 espObj.Name.Center = false
                                 espObj.Name.Size = 13
-                                espObj.Name.Font = ESPSettings.TextFont or 2
+                                espObj.Name.Font = S.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -1264,7 +1277,7 @@ local function updateESP()
                                 col = getRainbowColor(0.3 + baseOffset, "HealthText")
                                 espObj.HealthText.Center = false
                                 espObj.HealthText.Size = 13
-                                espObj.HealthText.Font = ESPSettings.TextFont or 2
+                                espObj.HealthText.Font = S.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -1273,7 +1286,7 @@ local function updateESP()
                                 col = getRainbowColor(0.6 + baseOffset, "Distance")
                                 espObj.DistanceText.Center = false
                                 espObj.DistanceText.Size = 13
-                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
+                                espObj.DistanceText.Font = S.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -1296,15 +1309,15 @@ local function updateESP()
                     end
                     espObj.Name.Center = true
                     espObj.Name.Size = 13
-                    espObj.Name.Font = ESPSettings.TextFont or 2
+                    espObj.Name.Font = S.TextFont or 2
                     espObj.Name.Text = customTopConcat
                     espObj.Name.Position = Vector2.new(math.floor(rect.cx), y)
-                    espObj.Name.Color = ESPSettings.NameColor
+                    espObj.Name.Color = S.NameColor
                     espObj.Name.Visible = true
                 end
 
                 -- Equipped display (Bottom / Image handling)
-                if ESPSettings.EquippedEnabled then
+                if S.EquippedEnabled then
                     -- If image mode and image support exists, try to show image; otherwise fall back to text showing tool name or 'None'
                     local showImage = (ESPSettings.EquippedMode == "Image") and espObj.EquippedImage ~= nil
                     local mappedImage = nil
@@ -1322,15 +1335,15 @@ local function updateESP()
                             end
                         end
                         -- fallback to global EquippedImage setting
-                        if not mappedImage and ESPSettings.EquippedImage and ESPSettings.EquippedImage ~= "" then mappedImage = ESPSettings.EquippedImage end
+                        if not mappedImage and S.EquippedImage and S.EquippedImage ~= "" then mappedImage = S.EquippedImage end
                     end
 
-                    if ESPSettings.EquippedMode == "Image" and showImage and mappedImage then
+                    if S.EquippedMode == "Image" and showImage and mappedImage then
                         -- Hide text and show image
                         espObj.EquippedText.Visible = false
                         espObj.EquippedImage.Data = mappedImage
                         espObj.EquippedImage.Size = Vector2.new(32, 32)
-                        if ESPSettings.EquippedPosition == "Inline" then
+                        if S.EquippedPosition == "Inline" then
                             espObj.EquippedImage.Position = Vector2.new(rect.cx, rect.y - 32)
                         else
                             espObj.EquippedImage.Position = Vector2.new(rect.cx, rect.y + rect.h + 6)
@@ -1341,14 +1354,14 @@ local function updateESP()
                         espObj.EquippedImage.Visible = false
                         local txt = equippedName or "None"
                         espObj.EquippedText.Text = txt
-                        if ESPSettings.EquippedPosition == "Inline" then
+                        if S.EquippedPosition == "Inline" then
                             -- inline already included in name, hide separate equipped text
                             espObj.EquippedText.Visible = false
                         else
                             espObj.EquippedText.Position = Vector2.new(math.floor(rect.cx), math.floor(rect.y + rect.h + 12))
                             espObj.EquippedText.Color = nameColor
                             espObj.EquippedText.Size = 13
-                            espObj.EquippedText.Font = ESPSettings.TextFont or 2
+                            espObj.EquippedText.Font = S.TextFont or 2
                             espObj.EquippedText.Visible = true
                         end
                     end
@@ -1358,14 +1371,14 @@ local function updateESP()
                 end
 
                 -- Tracers
-                if ESPSettings.Tracers then
+                if S.Tracers then
                     local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                     local fromPos
-                    if ESPSettings.TracerFrom == "Bottom" then
+                    if S.TracerFrom == "Bottom" then
                         fromPos = Vector2.new(vw/2, vh)
-                    elseif ESPSettings.TracerFrom == "Top" then
+                    elseif S.TracerFrom == "Top" then
                         fromPos = Vector2.new(vw/2, 0)
-                    elseif ESPSettings.TracerFrom == "Mouse" then
+                    elseif S.TracerFrom == "Mouse" then
                         fromPos = UserInputService:GetMouseLocation()
                     else
                         fromPos = Vector2.new(vw/2, vh/2)
@@ -1373,19 +1386,19 @@ local function updateESP()
                     espObj.Tracer.From = fromPos
                     espObj.Tracer.To = Vector2.new(rect.cx, rect.y + rect.h)
                     espObj.Tracer.Color = tracerColor
-                    espObj.Tracer.Thickness = ESPSettings.TracerThickness
+                    espObj.Tracer.Thickness = S.TracerThickness
                     espObj.Tracer.Visible = true
                 else
                     espObj.Tracer.Visible = false
                 end
 
                 -- Box fill (independent from Box ESP) - always use gradients
-                if ESPSettings.BoxFill then
+                if S.BoxFill then
                     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
                     
                     -- Always draw gradient fill
                     -- Use the configured transparency directly (0 = opaque, 1 = fully transparent)
-                    drawGradientFill(espObj, ix, iy, iw, ih, ESPSettings.BoxFillTransparency, baseOffset, "BoxFill")
+                    drawGradientFill(espObj, ix, iy, iw, ih, S.BoxFillTransparency, baseOffset, "BoxFill")
                     espObj.BoxFill.Visible = false
                 else
                     espObj.BoxFill.Visible = false
@@ -1393,15 +1406,15 @@ local function updateESP()
                 end
 
                 -- Boxes (outline) - always use gradients
-                if ESPSettings.Boxes then
+                if S.Boxes then
                     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
                     
-                    if ESPSettings.BoxType == "Square" then
+                    if S.BoxType == "Square" then
                         -- Draw crisp 1px outline using explicit lines (drawn above gradients)
                         local right = ix + iw - 1
                         local bottom = iy + ih - 1
                         if espObj.OutlineLines then
-                            local col = ESPSettings.BoxOutlineColor or Color3.new(0,0,0)
+                            local col = S.BoxOutlineColor or Color3.new(0,0,0)
                             -- top
                             espObj.OutlineLines[1].From = Vector2.new(ix - 1, iy - 1)
                             espObj.OutlineLines[1].To = Vector2.new(right + 1, iy - 1)
@@ -1490,11 +1503,11 @@ local function updateESP()
             end
 
             -- Health bar
-            if ESPSettings.Enabled and ESPSettings.HealthBarEnabled and rect then
+            if S.Enabled and S.HealthBarEnabled and rect then
                 local maxHealth = math.max(1, hum.MaxHealth or 100)
                 local ratio = math.clamp(hum.Health / maxHealth, 0, 1)
                 local thickness = 2
-                local pos = ESPSettings.HealthBarPosition
+                local pos = S.HealthBarPosition
                 local isVertical = (pos == "Left" or pos == "Right")
                 
                 -- Calculate bar and fill dimensions
@@ -1529,14 +1542,14 @@ local function updateESP()
                 fillW, fillH = math.floor(fillW), math.floor(fillH)
 
                 -- Outline (1px): follow the filled portion so it moves with health
-                if ESPSettings.HealthBarOutline then
+                if S.HealthBarOutline then
                     local outlineX = fillX - 1
                     local outlineY = fillY - 1
                     local outlineW = math.max(1, fillW + 2)
                     local outlineH = math.max(1, fillH + 2)
                     espObj.HealthBarOutline.Size = Vector2.new(outlineW, outlineH)
                     espObj.HealthBarOutline.Position = Vector2.new(outlineX, outlineY)
-                    espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
+                    espObj.HealthBarOutline.Color = S.HealthBarOutlineColor
                     espObj.HealthBarOutline.Visible = true
                 else
                     espObj.HealthBarOutline.Visible = false
@@ -1547,14 +1560,14 @@ local function updateESP()
                 drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVertical, baseOffset)
 
                 -- Health text: positioned above the filled portion and moves with health - gradient
-                if ESPSettings.ShowHealthText and espObj.HealthText then
+                if S.ShowHealthText and espObj.HealthText then
                     local txt = tostring(math.floor(hum.Health))
                     espObj.HealthText.Text = txt
                     local tx = math.floor(fillX + (fillW / 2))
                     local ty = math.floor(fillY - 6)
                     espObj.HealthText.Center = true
                     espObj.HealthText.Size = 13
-                    espObj.HealthText.Font = ESPSettings.TextFont or 2
+                    espObj.HealthText.Font = S.TextFont or 2
                     espObj.HealthText.Position = Vector2.new(tx, ty)
                     espObj.HealthText.Color = getRainbowColor(baseOffset + 0.3, "HealthText")
                     espObj.HealthText.Visible = true
@@ -1566,10 +1579,10 @@ local function updateESP()
                 espObj.HealthBarOutline.Visible = false
                 for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
                 if espObj.HealthText then espObj.HealthText.Visible = false end
-            end
+                end
 
             -- Chams/Highlight
-            if ESPSettings.Enabled and ESPSettings.Highlight then
+            if S.Enabled and S.Highlight then
                 if not espObj.Highlight or espObj.Highlight.Parent ~= char then
                     if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
                     espObj.Highlight = Instance.new("Highlight")
@@ -1578,8 +1591,8 @@ local function updateESP()
                 end
                 espObj.Highlight.FillColor = chamColor
                 espObj.Highlight.OutlineColor = chamColor
-                espObj.Highlight.FillTransparency = ESPSettings.FillTransparency
-                espObj.Highlight.OutlineTransparency = ESPSettings.OutlineTransparency
+                espObj.Highlight.FillTransparency = S.FillTransparency
+                espObj.Highlight.OutlineTransparency = S.OutlineTransparency
                 espObj.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 espObj.Highlight.Enabled = true
             elseif espObj.Highlight then
@@ -1611,7 +1624,27 @@ local function addESP(player)
     
     espObj._connections.charConn = player.CharacterAdded:Connect(onCharAdded)
     if player.Character then onCharAdded(player.Character) end
+    -- Also listen for player ancestry changes (some environments remove player objects differently)
+    if player and player.AncestryChanged then
+        espObj._connections.ancestryPlayerConn = player.AncestryChanged:Connect(function(child, parent)
+            if not player:IsDescendantOf(game) then
+                pcall(function() removePlayerESP(player) end)
+            end
+        end)
+    end
 end
+
+-- Ensure player ESP is removed if the player object is removed from the game (additional safety)
+Players.PlayerRemoving:Connect(function(p)
+    -- Prefer exact object key removal
+    removePlayerESP(p)
+    -- Also remove any ESP entries matching by name (fallback)
+    for pl, _ in pairs(ESPObjects) do
+        if pl and pl.Name == p.Name then
+            removePlayerESP(pl)
+        end
+    end
+end)
 
 local function removePlayerESP(player)
     local espObj = ESPObjects[player]
@@ -1676,6 +1709,23 @@ local function addObjectToESP(configName, obj, displayName)
     espObj.Tracer.Thickness = 2
     espObj.Tracer.Visible = false
     
+    -- store for cleanup and add removal listeners so ESP is removed immediately
+    espObj._connections = {}
+    -- Destroying event fires when instance is removed/destroyed
+    if obj and obj.Destroying then
+        espObj._connections.destroyConn = obj.Destroying:Connect(function()
+            pcall(function() removeObjectFromESP(configName, obj) end)
+        end)
+    end
+    -- AncestryChanged covers cases where instance is removed from Workspace (parent becomes nil)
+    if obj and obj.AncestryChanged then
+        espObj._connections.ancestryConn = obj.AncestryChanged:Connect(function(child, parent)
+            if not obj:IsDescendantOf(game) then
+                pcall(function() removeObjectFromESP(configName, obj) end)
+            end
+        end)
+    end
+
     config.ESPInstances[obj] = espObj
 end
 
@@ -1686,6 +1736,13 @@ local function removeObjectFromESP(configName, obj)
     config.Objects[obj] = nil
     local espObj = config.ESPInstances[obj]
     if espObj then
+        -- disconnect any attached connections
+        if espObj._connections then
+            for _, conn in pairs(espObj._connections) do
+                pcall(function() if conn and conn.Disconnect then conn:Disconnect() end end)
+            end
+            espObj._connections = nil
+        end
         pcall(function() espObj.Name:Remove() end)
         pcall(function() espObj.Box:Remove() end)
         pcall(function() espObj.BoxOutline:Remove() end)
@@ -2077,8 +2134,12 @@ end
 if renderConn then renderConn:Disconnect() end
 renderConn = RunService.RenderStepped:Connect(mainUpdate)
 
-for _, p in ipairs(Players:GetPlayers()) do addESP(p) end
-Players.PlayerAdded:Connect(addESP)
+for _, p in ipairs(Players:GetPlayers()) do
+    if ESPSettings.AutoAddPlayers then addESP(p) end
+end
+Players.PlayerAdded:Connect(function(p)
+    if ESPSettings.AutoAddPlayers then addESP(p) end
+end)
 Players.PlayerRemoving:Connect(removePlayerESP)
 
 -- ==================== HELPER FUNCTIONS ====================
