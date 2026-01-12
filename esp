@@ -668,100 +668,85 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
     
     for sideIdx, side in ipairs(sides) do
         local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
-        -- Snap endpoints to the integer pixel grid for exact coverage
-        local ax_sx, ax_sy = math.floor(sx + 0.5), math.floor(sy + 0.5)
-        local ax_ex, ax_ey = math.floor(ex + 0.5), math.floor(ey + 0.5)
+        -- Align to integer pixel boundaries so segments exactly cover the outline
+        local ax_sx, ax_sy = math.floor(sx), math.floor(sy)
+        local ax_ex, ax_ey = math.floor(ex), math.floor(ey)
         local segCount = #espObj.BoxLines[sideIdx]
-
-        -- Determine orientation and total integer span in pixels
-        local horizontal = math.abs(ax_ex - ax_sx) >= math.abs(ax_ey - ax_sy)
-        local totalLen = horizontal and math.abs(ax_ex - ax_sx) or math.abs(ax_ey - ax_sy)
-
-        if totalLen <= 0 then
-            -- Nothing to draw; hide pool
-            for i = 1, segCount do
-                espObj.BoxLines[sideIdx][i].Visible = false
-                if espObj.BoxOutlineLines[sideIdx][i] then espObj.BoxOutlineLines[sideIdx][i].Visible = false end
-            end
-        else
-            -- Use at most one segment per pixel where possible, clamped to pool size
-            local dynamicSegCount = math.clamp(math.min(segCount, totalLen), 1, segCount)
-
-            -- Distribute integer pixels across segments so they exactly tile the side
-            local base = math.floor(totalLen / dynamicSegCount)
-            local rem = totalLen - base * dynamicSegCount
-            local acc = 0
-
-            for seg = 1, dynamicSegCount do
+        
+        -- Calculate line length for this side
+        local lineLength = math.sqrt((ex - sx)^2 + (ey - sy)^2)
+        -- Use one segment per pixel length when possible (clamped to available pool)
+        local dynamicSegCount = math.clamp(math.max(1, math.floor(lineLength)), 1, segCount)
+        
+        for seg = 1, dynamicSegCount do
+            -- Compute integer-aligned segment endpoints so the rainbow segments
+            -- exactly cover the same pixel-aligned rectangle as the non-rainbow outline.
+            local dx = ax_ex - ax_sx
+            local dy = ax_ey - ax_sy
+            local lx1, ly1, lx2, ly2
+            if math.abs(dx) >= math.abs(dy) then
+                -- Horizontal side (or mostly horizontal) - compute integer pixel coverage
+                local absLen = math.abs(dx)
+                local base = math.floor(absLen / dynamicSegCount)
+                local rem = absLen - base * dynamicSegCount
+                local sign = dx >= 0 and 1 or -1
+                local cur = ax_sx
+                for k = 1, seg - 1 do
+                    cur = cur + sign * (base + (k <= rem and 1 or 0))
+                end
                 local segLen = base + (seg <= rem and 1 or 0)
-                local startOff = acc
-                local endOff = acc + segLen
-                acc = acc + segLen
-
-                local line = espObj.BoxLines[sideIdx][seg]
-                local outLine = espObj.BoxOutlineLines[sideIdx][seg]
-
-                if horizontal then
-                    local sx_i = (ax_sx <= ax_ex) and (ax_sx + startOff) or (ax_sx - startOff)
-                    local ex_i = (ax_sx <= ax_ex) and (ax_sx + endOff) or (ax_sx - endOff)
-                    local y_i = ax_sy
-
-                    line.From = Vector2.new(sx_i, y_i)
-                    line.To = Vector2.new(ex_i, y_i)
-                    outLine.From = Vector2.new(sx_i, y_i)
-                    outLine.To = Vector2.new(ex_i, y_i)
-
-                    local avgY = y_i
-                    local yProgress = (avgY - y) / math.max(1, h)
-
-                    if useRainbow then
-                        line.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
-                        if outLine then outLine.Visible = false end
-                    else
-                        line.Color = baseColor
-                        if outLine then
-                            outLine.Color = ESPSettings.BoxOutlineColor
-                            outLine.Thickness = ESPSettings.Thickness or 3
-                            outLine.Visible = true
-                        end
-                    end
-
-                    line.Thickness = ESPSettings.Thickness or 1
-                    line.Visible = true
-                else
-                    local sy_i = (ax_sy <= ax_ey) and (ax_sy + startOff) or (ax_sy - startOff)
-                    local ey_i = (ax_sy <= ax_ey) and (ax_sy + endOff) or (ax_sy - endOff)
-                    local x_i = ax_sx
-
-                    line.From = Vector2.new(x_i, sy_i)
-                    line.To = Vector2.new(x_i, ey_i)
-                    outLine.From = Vector2.new(x_i, sy_i)
-                    outLine.To = Vector2.new(x_i, ey_i)
-
-                    local avgY = (sy_i + ey_i) / 2
-                    local yProgress = (avgY - y) / math.max(1, h)
-
-                    if useRainbow then
-                        line.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
-                        if outLine then outLine.Visible = false end
-                    else
-                        line.Color = baseColor
-                        if outLine then
-                            outLine.Color = ESPSettings.BoxOutlineColor
-                            outLine.Thickness = ESPSettings.Thickness or 3
-                            outLine.Visible = true
-                        end
-                    end
-
-                    line.Thickness = ESPSettings.Thickness or 1
-                    line.Visible = true
+                local nextPos = cur + sign * segLen
+                lx1, ly1 = cur, ax_sy
+                lx2, ly2 = nextPos, ax_sy
+            else
+                -- Vertical side - compute integer pixel coverage
+                local absLen = math.abs(dy)
+                local base = math.floor(absLen / dynamicSegCount)
+                local rem = absLen - base * dynamicSegCount
+                local sign = dy >= 0 and 1 or -1
+                local cur = ax_sy
+                for k = 1, seg - 1 do
+                    cur = cur + sign * (base + (k <= rem and 1 or 0))
+                end
+                local segLen = base + (seg <= rem and 1 or 0)
+                local nextPos = cur + sign * segLen
+                lx1, ly1 = ax_sx, cur
+                lx2, ly2 = ax_sx, nextPos
+            end
+            -- Round to nearest pixel for crisp rendering
+            local line = espObj.BoxLines[sideIdx][seg]
+            local outLine = espObj.BoxOutlineLines[sideIdx][seg]
+            line.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
+            line.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
+            line.Thickness = ESPSettings.Thickness or 1
+            
+            outLine.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
+            outLine.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
+            
+            if useRainbow then
+                -- Color based on Y position (vertical gradient going down)
+                local avgY = (ly1 + ly2) / 2
+                local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
+                line.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
+                -- Hide outline when rainbow to prevent color interference
+                if outLine then outLine.Visible = false end
+            else
+                line.Color = baseColor
+                -- Show outline for non-rainbow
+                if outLine then
+                    outLine.Color = ESPSettings.BoxOutlineColor
+                    outLine.Thickness = ESPSettings.Thickness or 3
+                    outLine.Visible = true
                 end
             end
-
-            -- Hide unused segments
-            for seg = dynamicSegCount + 1, segCount do
-                espObj.BoxLines[sideIdx][seg].Visible = false
-                if espObj.BoxOutlineLines[sideIdx][seg] then espObj.BoxOutlineLines[sideIdx][seg].Visible = false end
+            line.Visible = true
+        end
+        
+        -- Hide unused segments
+        for seg = dynamicSegCount + 1, segCount do
+            espObj.BoxLines[sideIdx][seg].Visible = false
+            if espObj.BoxOutlineLines[sideIdx][seg] then
+                espObj.BoxOutlineLines[sideIdx][seg].Visible = false
             end
         end
     end
@@ -1128,8 +1113,6 @@ local function updateESP()
                             espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
                             espObj.OutlineSquare.Thickness = thickness
                             espObj.OutlineSquare.Visible = true
-                        else
-                            if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         end
                     else
                         hideGradient(espObj)
@@ -1139,7 +1122,7 @@ local function updateESP()
                         espObj.BoxFill.Color = fillColor
                         espObj.BoxFill.Transparency = 1 - ESPSettings.BoxFillTransparency
                         espObj.BoxFill.Visible = true
-                        -- Draw outline around solid fill for proper bounding (only when box outlines enabled)
+                        -- Draw outline around solid fill for proper bounding
                         if espObj.OutlineSquare and ESPSettings.BoxType == "Square" and ESPSettings.Boxes then
                             local thickness = ESPSettings.Thickness or 1
                             espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
@@ -1147,8 +1130,6 @@ local function updateESP()
                             espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
                             espObj.OutlineSquare.Thickness = thickness
                             espObj.OutlineSquare.Visible = true
-                        else
-                            if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         end
                     end
                 else
@@ -1187,46 +1168,26 @@ local function updateESP()
                     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     hideBoxLines(espObj)
                     
-                    -- If BoxFill gradient is active we used an inset inner rect for the fill;
-                    -- align corner lines to the visible filled rect so corners and fills match.
-                    local bx, by, bw, bh = x, y, w, h
-                    if ESPSettings.BoxFill and (ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow) then
-                        local thickness = ESPSettings.Thickness or 1
-                        local inset = thickness / 2
-                        bx = x + inset
-                        by = y + inset
-                        bw = math.max(0, w - inset * 2)
-                        bh = math.max(0, h - inset * 2)
-                    end
-
-                    -- Snap corners to integer pixel grid so they meet segmented sides exactly
-                    local left = math.floor(bx + 0.5)
-                    local top = math.floor(by + 0.5)
-                    local right = math.floor(bx + bw + 0.5)
-                    local bottom = math.floor(by + bh + 0.5)
-
-                    local L = math.clamp(math.floor((math.min(right - left, bottom - top) * 0.25) + 0.5), 2, 50)
+                    local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
                     local corners = {
-                        {left, top, left + L, top, left, top + L},                     -- top-left
-                        {right, top, right - L, top, right, top + L},                 -- top-right
-                        {left, bottom, left + L, bottom, left, bottom - L},           -- bottom-left
-                        {right, bottom, right - L, bottom, right, bottom - L}        -- bottom-right
+                        {x, y, x + L, y, x, y + L},                     -- top-left
+                        {x + w, y, x + w - L, y, x + w, y + L},         -- top-right
+                        {x, y + h, x + L, y + h, x, y + h - L},         -- bottom-left
+                        {x + w, y + h, x + w - L, y + h, x + w, y + h - L} -- bottom-right
                     }
-
+                    
                     -- Y positions for vertical rainbow gradient
                     local cornerYs = {0, 0, 1, 1}  -- top corners = 0, bottom corners = 1
-
+                    
                     for i, corner in ipairs(corners) do
                         local c = espObj.Corners[i]
-                        local x1, y1 = corner[1], corner[2]
-                        local x2, y2 = corner[3], corner[4]
+                        -- Pixel-align corner endpoints for crisp edges matching outline
+                        local x1, y1, x2, y2 = corner[1], corner[2], corner[3], corner[4]
                         local x3, y3 = corner[5], corner[6]
-
-                        c.Line1.From = Vector2.new(x1, y1)
-                        c.Line1.To = Vector2.new(x2, y2)
-                        c.Line2.From = Vector2.new(x1, y1)
-                        c.Line2.To = Vector2.new(x3, y3)
-
+                        c.Line1.From = Vector2.new(math.floor(x1 + 0.5), math.floor(y1 + 0.5))
+                        c.Line1.To = Vector2.new(math.floor(x2 + 0.5), math.floor(y2 + 0.5))
+                        c.Line2.From = Vector2.new(math.floor(x1 + 0.5), math.floor(y1 + 0.5))
+                        c.Line2.To = Vector2.new(math.floor(x3 + 0.5), math.floor(y3 + 0.5))
                         if ESPSettings.BoxRainbow then
                             -- Vertical gradient: top corners share one color, bottom corners share another
                             local yProgress = cornerYs[i]
@@ -1235,7 +1196,6 @@ local function updateESP()
                         else
                             c.Line1.Color, c.Line2.Color = boxColor, boxColor
                         end
-
                         c.Line1.Thickness = ESPSettings.Thickness or 1
                         c.Line2.Thickness = ESPSettings.Thickness or 1
                         c.Line1.Visible, c.Line2.Visible = true, true
