@@ -613,7 +613,8 @@ local function removeESP(espObj)
     pcall(function() if espObj.DistanceText then espObj.DistanceText:Remove() end end)
     pcall(function() espObj.Tracer:Remove() end)
     for side = 1, 4 do
-        for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
+        local sideLines = (espObj.BoxLines and espObj.BoxLines[side]) or {}
+        for _, line in ipairs(sideLines) do pcall(function() line:Remove() end) end
     end
     pcall(function() espObj.BoxFill:Remove() end)
     for _, seg in ipairs(espObj.GradientSegments or {}) do
@@ -624,9 +625,11 @@ local function removeESP(espObj)
     for _, seg in ipairs(espObj.HealthBarGradient or {}) do
         pcall(function() seg:Remove() end)
     end
-    for _, c in ipairs(espObj.Corners) do
-        pcall(function() c.Line1:Remove() end)
-        pcall(function() c.Line2:Remove() end)
+    if espObj.Corners then
+        for _, c in ipairs(espObj.Corners) do
+            pcall(function() if c.Line1 then c.Line1:Remove() end end)
+            pcall(function() if c.Line2 then c.Line2:Remove() end end)
+        end
     end
     if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
     pcall(function() if espObj.EquippedText then espObj.EquippedText:Remove() end end)
