@@ -689,20 +689,33 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
         if segTrans == nil then segTrans = transparency or 0.5 end
 
-        -- Force symmetric 1px overlap for every segment, including edges.
-        -- Allow segments to extend one pixel beyond the rect so edge pixels receive
-        -- the same coverage count as interior pixels (avoids top/bottom alpha mismatch).
-        local overlapTop = 1
-        local overlapBottom = 1
+        -- Decide overlap strategy: if segment is semi-transparent, avoid overlap (no double-draw)
+        local overlapTop, overlapBottom
+        if segTrans < 0.999 then
+            overlapTop = 0
+            overlapBottom = 0
+        else
+            overlapTop = (i > 1) and 1 or 0
+            overlapBottom = (i < segCount) and 1 or 0
+        end
+
         local fromY = segTop - overlapTop
         local toY = segBottom + overlapBottom
-        local finalH = (toY - fromY) + 1
 
-        segments[i].Size = Vector2.new(iw, finalH)
-        segments[i].Position = Vector2.new(ix, fromY)
-        segments[i].Color = segColor
-        segments[i].Transparency = segTrans
-        segments[i].Visible = true
+        -- Clamp to the fill area to avoid drawing outside and causing partial-alpha artifacts
+        local clampTop = math.max(iy, fromY)
+        local clampBottom = math.min(iy + ih - 1, toY)
+        local finalH = clampBottom - clampTop + 1
+
+        if finalH > 0 then
+            segments[i].Size = Vector2.new(iw, finalH)
+            segments[i].Position = Vector2.new(ix, clampTop)
+            segments[i].Color = segColor
+            segments[i].Transparency = segTrans
+            segments[i].Visible = true
+        else
+            segments[i].Visible = false
+        end
 
         curY = curY + thisH
     end
