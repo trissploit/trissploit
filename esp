@@ -610,7 +610,7 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
     local remainder = totalRows - baseH * segCount
 
     local curY = iy
-    for i = 1, segCount do
+        for i = 1, segCount do
         local thisH = baseH + (i <= remainder and 1 or 0)
         local segTop = curY
         local segBottom = curY + thisH - 1
@@ -618,8 +618,13 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
         local segColor = getRainbowColor(baseOffset + t * 0.5, element)
 
-        segments[i].Size = Vector2.new(iw, segBottom - segTop + 1)
-        segments[i].Position = Vector2.new(ix, segTop)
+        -- Add 1px overlap between adjacent segments to avoid seams
+        local overlapTop = (i > 1) and 1 or 0
+        local posY = segTop - overlapTop
+        local height = (segBottom - segTop + 1) + overlapTop
+
+        segments[i].Size = Vector2.new(iw, height)
+        segments[i].Position = Vector2.new(ix, posY)
         segments[i].Color = segColor
         segments[i].Transparency = transparency or 0.5
         segments[i].Visible = true
@@ -673,10 +678,15 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
                     local segCenter = (segTop + segBottom) * 0.5
                     local t = (segCenter - iy) / math.max(1, ih)
 
-                    lineSegs[i].From = Vector2.new(sx, segTop)
-                    lineSegs[i].To = Vector2.new(sx, segBottom)
+                    -- overlap vertically to avoid 1px gaps
+                    local fromY = segTop - (i > 1 and 1 or 0)
+                    local toY = segBottom + (i < actualSegs and 1 or 0)
+
+                    lineSegs[i].From = Vector2.new(sx, fromY)
+                    lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
                     cur = cur + thisLen
@@ -702,10 +712,14 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
                     local segCenter = (segLeft + segRight) * 0.5
                     local t = (sy - iy) / math.max(1, ih)
 
-                    lineSegs[i].From = Vector2.new(segLeft, sy)
-                    lineSegs[i].To = Vector2.new(segRight, sy)
+                    local fromX = segLeft - (i > 1 and 1 or 0)
+                    local toX = segRight + (i < actualSegs and 1 or 0)
+
+                    lineSegs[i].From = Vector2.new(fromX, sy)
+                    lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
                     cur = cur + thisLen
