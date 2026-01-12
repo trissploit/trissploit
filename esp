@@ -1890,14 +1890,9 @@ end
 local function renderFOVs()
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     for name, c in pairs(FOVSystem.circles) do
-        if not c.Enabled then
-            for _, seg in ipairs(c.outlineLines or {}) do seg.Visible = false end
-            for _, tri in ipairs(c.fillTris or {}) do tri.Visible = false end
-            goto continue
-        end
-
-        local radius = c.Radius or 100
-        local segments = math.min(c.Segments or 32, #c.outlineLines)
+        if c.Enabled then
+            local radius = c.Radius or 100
+            local segments = math.min(c.Segments or 32, #c.outlineLines)
 
         -- Outline: only show when Rainbow is true (user requested no static outline)
         if c.Rainbow then
@@ -1965,7 +1960,10 @@ local function renderFOVs()
             for _, tri in ipairs(c.fillTris or {}) do tri.Visible = false end
         end
 
-        ::continue::
+        else
+            for _, seg in ipairs(c.outlineLines or {}) do seg.Visible = false end
+            for _, tri in ipairs(c.fillTris or {}) do tri.Visible = false end
+        end
     end
 end
 
