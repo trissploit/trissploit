@@ -1389,6 +1389,9 @@ local function updateESP()
                         if espObj.BoxOutline then
                             espObj.BoxOutline.Size = Vector2.new(iw + 2, ih + 2)
                             espObj.BoxOutline.Position = Vector2.new(ix - 1, iy - 1)
+                            -- Respect configured outline color and thickness
+                            espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or espObj.BoxOutline.Color
+                            espObj.BoxOutline.Thickness = math.max(1, tonumber(ESPSettings.Thickness) or espObj.BoxOutline.Thickness)
                             espObj.BoxOutline.Visible = true
                         end
                         -- Let drawGradientBox use the shared rainbow/custom gradient system
