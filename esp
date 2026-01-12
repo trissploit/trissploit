@@ -678,35 +678,33 @@ end
 local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, element)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
-    
+
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
     if ih <= 0 or iw <= 0 then
         for i = 1, maxSegs do segments[i].Visible = false end
         return
     end
 
-    -- Use as many segments as available when close (up to MAX_GRADIENT_SEGMENTS)
-    -- This prevents the gradient from collapsing into very few large bands
-    local desiredSegs = math.min(maxSegs, ih)
-    local segCount = math.max(1, desiredSegs)
+    -- Adaptive segmentation: prefer one segment per pixel up to the pool size
+    local segCount = math.min(maxSegs, ih)
+    if segCount < 1 then segCount = 1 end
 
-    -- Calculate segment heights - distribute evenly with 2px overlap
-    local baseH = math.max(1, math.floor(ih / segCount))
-    if baseH <= 0 then baseH = 1 end
-    segCount = math.min(maxSegs, math.ceil(ih / baseH))
-
+    -- Build each segment using exact integer bounds to avoid rounding drift
     for i = 1, segCount do
-        local segTop = iy + (i - 1) * baseH
-        local segBottom = math.min(iy + ih, segTop + baseH + 2) -- 2px overlap
-        local segHeight = math.max(1, segBottom - segTop)
-        
-        -- Color based on segment center position
+        local startY = math.floor(iy + (i - 1) * (ih / segCount))
+        local endY = math.floor(iy + (i) * (ih / segCount)) - 1
+        if i == segCount then endY = iy + ih - 1 end
+
+        -- Add small overlap to hide seams (2px works well)
+        local overlap = 2
+        local segTop = math.max(iy, startY - (i > 1 and overlap or 0))
+        local segBottom = math.min(iy + ih - 1, endY + (i < segCount and overlap or 0))
+        local segHeight = math.max(1, segBottom - segTop + 1)
+
         local segCenter = segTop + segHeight * 0.5
         local t = (segCenter - iy) / math.max(1, ih)
         local segColor = getRainbowColor(baseOffset + t * 0.5, element)
-        
-        -- Get interpolated transparency for this position
-        local segTransparency = getGradientTransparency(t, element)
+        local segTransparency = (transparency ~= nil) and transparency or getGradientTransparency(t, element)
 
         segments[i].Size = Vector2.new(iw, segHeight)
         segments[i].Position = Vector2.new(ix, segTop)
