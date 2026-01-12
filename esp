@@ -635,13 +635,11 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
         local segColor = getRainbowColor(baseOffset + t * 0.5, element)
 
-        -- Add small overlap on both edges to avoid seams when colors change between segments
-        local overlapTop = (i > 1) and 1 or 0
-        local overlapBottom = (i < segCount) and 1 or 0
-        local posY = segTop - overlapTop
-        local height = (segBottom - segTop + 1) + overlapTop + overlapBottom
+        -- Contiguous segments (no overlap) to avoid double-alpha zones at close range
+        local posY = segTop
+        local height = segBottom - segTop + 1
 
-        segments[i].Size = Vector2.new(iw + 0, height)
+        segments[i].Size = Vector2.new(iw, height)
         segments[i].Position = Vector2.new(ix, posY)
         segments[i].Color = segColor
         segments[i].Transparency = transparency or 0.5
@@ -698,15 +696,15 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
                     local segCenter = (segTop + segBottom) * 0.5
                     local t = (segCenter - iy) / math.max(1, ih)
 
-                    -- overlap vertically to avoid 1px gaps and ensure smooth blending
-                    local fromY = segTop - (i > 1 and 1 or 0)
-                    local toY = segBottom + (i < actualSegs and 1 or 0)
+                    -- Use contiguous segments (no overlap) to keep transparency consistent
+                    local fromY = segTop
+                    local toY = segBottom
 
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                    lineSegs[i].Transparency = 0.98
+                    lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
                     cur = cur + thisLen
@@ -733,14 +731,14 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
                     local segCenter = (segLeft + segRight) * 0.5
                     local t = (sy - iy) / math.max(1, ih)
 
-                    local fromX = segLeft - (i > 1 and 1 or 0)
-                    local toX = segRight + (i < actualSegs and 1 or 0)
+                    local fromX = segLeft
+                    local toX = segRight
 
                     lineSegs[i].From = Vector2.new(fromX, sy)
                     lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                    lineSegs[i].Transparency = 0.98
+                    lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
                     cur = cur + thisLen
@@ -782,16 +780,14 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local segCenter = (segTop + segBottom) * 0.5
             local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
 
-            -- Add overlap to prevent seams between segments
-            local overlapTop = (i > 1) and 1 or 0
-            local overlapBottom = (i < segCount) and 1 or 0
-            local posY = segTop - overlapTop
-            local height = (segBottom - segTop + 1) + overlapTop + overlapBottom
+            -- Contiguous segments for healthbar (no overlap) to keep transparency uniform
+            local posY = segTop
+            local height = segBottom - segTop + 1
 
             segs[i].Size = Vector2.new(iw, height)
             segs[i].Position = Vector2.new(ix, posY)
             segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-            segs[i].Transparency = 0.98
+            segs[i].Transparency = 1
             segs[i].Visible = true
 
             curY = curY + thisH
@@ -814,15 +810,13 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local segCenter = (segLeft + segRight) * 0.5
             local t = ((segCenter - ix) + 0.5) / math.max(1, totalCols)
 
-            local overlapLeft = (i > 1) and 1 or 0
-            local overlapRight = (i < segCount) and 1 or 0
-            local posX = segLeft - overlapLeft
-            local width = (segRight - segLeft + 1) + overlapLeft + overlapRight
+            local posX = segLeft
+            local width = segRight - segLeft + 1
 
             segs[i].Size = Vector2.new(width, ih)
             segs[i].Position = Vector2.new(posX, iy)
             segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-            segs[i].Transparency = 0.98
+            segs[i].Transparency = 1
             segs[i].Visible = true
 
             curX = curX + thisW
