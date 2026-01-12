@@ -877,9 +877,7 @@ local function updateESP()
                     local nameText = ESPSettings.UseDisplayName and player.DisplayName or player.Name
                     table.insert((ESPSettings.NamePosition or "Top") == "Top" and topList or (ESPSettings.NamePosition == "Bottom" and bottomList or (ESPSettings.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = nameText})
                 end
-                if ESPSettings.ShowHealthText then
-                    table.insert((ESPSettings.HealthTextPosition or "Top") == "Top" and topList or (ESPSettings.HealthTextPosition == "Bottom" and bottomList or (ESPSettings.HealthTextPosition == "Left" and leftList or rightList)), {key = "Health", text = math.floor(hum.Health) .. "HP"})
-                end
+                -- Health text is now positioned relative to the health bar (handled below)
                 if ESPSettings.ShowDistance then
                     table.insert((ESPSettings.DistancePosition or "Top") == "Top" and topList or (ESPSettings.DistancePosition == "Bottom" and bottomList or (ESPSettings.DistancePosition == "Left" and leftList or rightList)), {key = "Distance", text = math.floor(distance) .. "m"})
                 end
@@ -1291,10 +1289,14 @@ local function updateESP()
                 fillX, fillY = math.floor(fillX), math.floor(fillY)
                 fillW, fillH = math.floor(fillW), math.floor(fillH)
 
-                -- Outline
+                -- Outline: follow the filled portion so it moves with health
                 if ESPSettings.HealthBarOutline then
-                    espObj.HealthBarOutline.Size = Vector2.new(barW + 2, barH + 2)
-                    espObj.HealthBarOutline.Position = Vector2.new(barX - 1, barY - 1)
+                    local outlineX = fillX - 1
+                    local outlineY = fillY - 1
+                    local outlineW = math.max(1, fillW + 2)
+                    local outlineH = math.max(1, fillH + 2)
+                    espObj.HealthBarOutline.Size = Vector2.new(outlineW, outlineH)
+                    espObj.HealthBarOutline.Position = Vector2.new(outlineX, outlineY)
                     espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
                     espObj.HealthBarOutline.Visible = true
                 else
@@ -1313,6 +1315,23 @@ local function updateESP()
                     espObj.HealthBar.Position = Vector2.new(fillX, fillY)
                     espObj.HealthBar.Color = getHealthColor(ratio)
                     espObj.HealthBar.Visible = true
+                end
+
+                -- Health text: positioned above the filled portion and moves with health
+                if ESPSettings.ShowHealthText and espObj.HealthText then
+                    local txt = math.floor(hum.Health) .. "HP"
+                    espObj.HealthText.Text = txt
+                    local tx = math.floor(fillX + (fillW / 2))
+                    local ty = math.floor(fillY - 6)
+                    espObj.HealthText.Center = true
+                    espObj.HealthText.Size = 13
+                    espObj.HealthText.Font = ESPSettings.TextFont or 2
+                    espObj.HealthText.Position = Vector2.new(tx, ty)
+                    local col = ESPSettings.HealthTextRainbow and getRainbowColor(baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
+                    espObj.HealthText.Color = col
+                    espObj.HealthText.Visible = true
+                else
+                    if espObj.HealthText then espObj.HealthText.Visible = false end
                 end
             else
                 espObj.HealthBar.Visible = false
