@@ -1392,7 +1392,8 @@ local function updateESP()
                             espObj.BoxOutline.Position = Vector2.new(ix - 1, iy - 1)
                             -- Respect configured outline color and thickness
                             espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or espObj.BoxOutline.Color
-                            espObj.BoxOutline.Thickness = math.max(1, tonumber(ESPSettings.Thickness) or espObj.BoxOutline.Thickness)
+                            -- Outline should always be a thin 1px border for crisp visuals
+                            espObj.BoxOutline.Thickness = 1
                             espObj.BoxOutline.ZIndex = 8
                             espObj.BoxOutline.Visible = true
                         end
