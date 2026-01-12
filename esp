@@ -597,13 +597,7 @@ local function createESPObject()
     espObj.BoxOutline.Color = Color3.new(0,0,0)
     espObj.BoxOutline.ZIndex = 2
     
-    -- Outline square for gradient box rendering (2px thickness)
-    espObj.OutlineSquare = Drawing.new("Square")
-    espObj.OutlineSquare.Filled = false
-    espObj.OutlineSquare.Visible = false
-    espObj.OutlineSquare.Thickness = 2
-    espObj.OutlineSquare.Color = ESPSettings.BoxColor or Color3.fromRGB(0,170,255)
-    espObj.OutlineSquare.ZIndex = 3
+    -- (Removed duplicated colored outline square - gradient edges are authoritative)
     -- Corner filler squares to ensure no missing pixels at corners
     espObj.CornerSquares = {}
     for i = 1, 4 do
@@ -703,7 +697,7 @@ local function removeESP(espObj)
     if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
     pcall(function() if espObj.EquippedText then espObj.EquippedText:Remove() end end)
     pcall(function() if espObj.EquippedImage then espObj.EquippedImage:Remove() end end)
-    pcall(function() if espObj.OutlineSquare then espObj.OutlineSquare:Remove() end end)
+    -- OutlineSquare removed earlier; no action needed
 end
 
 local function hideESP(espObj)
@@ -723,7 +717,7 @@ local function hideESP(espObj)
     if espObj.Highlight then espObj.Highlight.Enabled = false end
     if espObj.EquippedText then espObj.EquippedText.Visible = false end
     if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
-    if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+    -- OutlineSquare removed earlier; ensure nothing tries to show it
     if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
 end
 
@@ -839,6 +833,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     local segTop = cur
                     local segBottom = cur + thisLen - 1
                     local segCenter = (segTop + segBottom) * 0.5
+                    -- vertical fraction (0=top,1=bottom)
                     local t = (segCenter - iy) / math.max(1, ih)
 
                     -- overlap vertically to avoid 1px gaps
@@ -848,7 +843,12 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
-                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    -- interpolate between provided topColor and bottomColor for true vertical gradient
+                    if topColor and bottomColor then
+                        lineSegs[i].Color = lerpColor(topColor, bottomColor, math.clamp(t, 0, 1))
+                    else
+                        lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    end
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
@@ -872,8 +872,9 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     local thisLen = baseLen + (i <= rem and 1 or 0)
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
-                    local segCenter = (segLeft + segRight) * 0.5
-                    local t = (sy - iy) / math.max(1, ih)
+                    -- use the vertical position of this horizontal side to compute gradient t
+                    local segCenterY = sy
+                    local t = (segCenterY - iy) / math.max(1, ih)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
@@ -881,7 +882,11 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(fromX, sy)
                     lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
-                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    if topColor and bottomColor then
+                        lineSegs[i].Color = lerpColor(topColor, bottomColor, math.clamp(t, 0, 1))
+                    else
+                        lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    end
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
@@ -1023,6 +1028,15 @@ local function updateESP()
             if not rect then
                 hideESP(espObj)
                 return
+            end
+
+            -- Force horizontal centering on HumanoidRootPart so box X aligns with HRP
+            if hrp then
+                local sp = Camera:WorldToViewportPoint(hrp.Position)
+                if sp and sp.Z > 0 then
+                    rect.cx = sp.X
+                    rect.x = rect.cx - (rect.w or 0) / 2
+                end
             end
 
             -- Calculate colors with individual rainbow settings
@@ -1382,17 +1396,10 @@ local function updateESP()
                             espObj.BoxOutline.Visible = true
                         end
                         drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, topColor, bottomColor)
-                        if espObj.OutlineSquare then
-                            espObj.OutlineSquare.Size = Vector2.new(iw, ih)
-                            espObj.OutlineSquare.Position = Vector2.new(ix, iy)
-                            espObj.OutlineSquare.Color = boxColor or (ESPSettings.BoxColor or Color3.fromRGB(0,170,255))
-                            espObj.OutlineSquare.Thickness = 2
-                            espObj.OutlineSquare.Visible = true
-                        end
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                     else
                         -- Corner box - always gradient
-                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                        -- ensure any removed outline square remains hidden
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                         if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
                         hideBoxLines(espObj)
@@ -1425,7 +1432,7 @@ local function updateESP()
                 else
                     -- Hide box outlines when Boxes disabled
                     hideBoxLines(espObj)
-                    if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                    -- OutlineSquare removed earlier; nothing to toggle
                     if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
                     if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                     for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
@@ -1439,7 +1446,7 @@ local function updateESP()
                 espObj.BoxFill.Visible = false
                 hideGradient(espObj)
                 for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
-                if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                -- OutlineSquare removed earlier; nothing to toggle
                 if espObj.EquippedText then espObj.EquippedText.Visible = false end
                 if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
             end
