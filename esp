@@ -29,6 +29,10 @@ local ESPSettings = {
     Enabled = true,
     MaxDistance = 1500,
     
+    -- Per-player/object overrides (keyed by player name or Instance)
+    -- Allows custom ESP settings per target
+    PlayerOverrides = {}, -- { ["PlayerName"] = { BoxColor = Color3.new(1,0,0), BoxRainbow = true, ... }, ... }
+    
     -- Filtering settings
     FilterMode = "All", -- "All", "Whitelist", "Blacklist"
     WhitelistedPlayers = {}, -- Player names to show when FilterMode = "Whitelist"
@@ -75,8 +79,8 @@ local ESPSettings = {
     
     -- Rainbow settings (per element)
     RainbowSpeed = 1,
-    GradientBlending = 0.5, -- 0 = sharp transitions, 1 = smooth blending
-
+    GradientBlending = 1, -- 0 = sharp transitions, 1 = smooth (default), 2 = extra smooth
+    
     -- Custom gradient colors for rainbow (instead of HSV rainbow)
     -- Global toggle: when true, use per-element custom 3-color gradients
     UseCustomGradient = false,
@@ -88,7 +92,7 @@ local ESPSettings = {
     BoxCustomColor1 = Color3.fromRGB(255, 0, 0), BoxCustomColor2 = Color3.fromRGB(255, 165, 0), BoxCustomColor3 = Color3.fromRGB(0, 0, 255),
     BoxFillCustomColor1 = Color3.fromRGB(255, 0, 0), BoxFillCustomColor2 = Color3.fromRGB(255, 165, 0), BoxFillCustomColor3 = Color3.fromRGB(0, 0, 255),
     -- Per-color transparency for box fill gradient
-    BoxFillTransparency1 = 0.5, BoxFillTransparency2 = 0.5, BoxFillTransparency3 = 0.5,
+    BoxFillColor1Trans = 0.5, BoxFillColor2Trans = 0.5, BoxFillColor3Trans = 0.5,
     TracerCustomColor1 = Color3.fromRGB(255, 0, 0), TracerCustomColor2 = Color3.fromRGB(255, 165, 0), TracerCustomColor3 = Color3.fromRGB(0, 0, 255),
     HealthBarCustomColor1 = Color3.fromRGB(255, 0, 0), HealthBarCustomColor2 = Color3.fromRGB(255, 165, 0), HealthBarCustomColor3 = Color3.fromRGB(0, 0, 255),
     ChamsCustomColor1 = Color3.fromRGB(255, 0, 0), ChamsCustomColor2 = Color3.fromRGB(255, 165, 0), ChamsCustomColor3 = Color3.fromRGB(0, 0, 255),
@@ -216,20 +220,58 @@ local function getRainbowColor(offset, element)
     local c1 = colors[idx + 1]
     local c2 = colors[(idx + 1) % stops + 1]
 
-    -- Gradient blending: 0 = sharp bands (linear), 1 = smooth (smoothstep)
-    local blend = math.clamp(ESPSettings.GradientBlending or 0.5, 0, 1)
-    if blend > 0.01 then
-        -- Apply smoothstep interpolation
-        local smooth = frac * frac * (3 - 2 * frac)
-        -- Lerp between linear and smoothstep based on blend value
-        frac = frac * (1 - blend) + smooth * blend
+    -- Apply blending based on GradientBlending setting
+    -- 0 = linear (sharp), 1 = smoothstep (default), 2+ = extra smooth
+    local blending = ESPSettings.GradientBlending or 1
+    if blending >= 1 then
+        -- Apply smoothstep for each level of blending
+        for _ = 1, math.floor(blending) do
+            frac = frac * frac * (3 - 2 * frac)
+        end
     end
+    -- If blending is 0, keep frac linear (no smoothstep)
 
     return Color3.new(
         c1.R + (c2.R - c1.R) * frac,
         c1.G + (c2.G - c1.G) * frac,
         c1.B + (c2.B - c1.B) * frac
     )
+end
+
+-- Get interpolated transparency for gradient elements (returns transparency value 0-1)
+local function getGradientTransparency(offset, element)
+    offset = offset or 0
+    local stops = 3
+    
+    local function pickTransparenciesForElement(el)
+        if el == "BoxFill" then
+            return {
+                ESPSettings.BoxFillColor1Trans or 0.5,
+                ESPSettings.BoxFillColor2Trans or 0.5,
+                ESPSettings.BoxFillColor3Trans or 0.5
+            }
+        else
+            -- Default to single transparency value
+            return nil
+        end
+    end
+    
+    local transparencies = pickTransparenciesForElement(element)
+    if not transparencies then
+        return nil -- Signal to use default transparency
+    end
+    
+    local t = ((RainbowHue + offset) % 1) * stops
+    local idx = math.floor(t) % stops
+    local frac = t - math.floor(t)
+    
+    local t1 = transparencies[idx + 1]
+    local t2 = transparencies[(idx + 1) % stops + 1]
+    
+    -- Smoothstep interpolation
+    frac = frac * frac * (3 - 2 * frac)
+    
+    return t1 + (t2 - t1) * frac
 end
 
 -- Get custom gradient color (for non-rainbow gradients with custom colors)
@@ -248,51 +290,6 @@ local function lerpColor(c1, c2, t)
         c1.R + (c2.R - c1.R) * t,
         c1.G + (c2.G - c1.G) * t,
         c1.B + (c2.B - c1.B) * t
-    )
-end
-
--- Get static gradient color for text (not time-based, uses baseOffset for per-player uniqueness)
--- This creates a smooth gradient across the 3 colors without animation
-local function getStaticGradientColor(baseOffset, element)
-    local stops = 3
-    
-    local function pickColorsForElement(el)
-        if el == "Name" then
-            return {ESPSettings.NameCustomColor1, ESPSettings.NameCustomColor2, ESPSettings.NameCustomColor3}
-        elseif el == "HealthText" or el == "Health" or el == "HealthBar" then
-            return {ESPSettings.HealthTextCustomColor1, ESPSettings.HealthTextCustomColor2, ESPSettings.HealthTextCustomColor3}
-        elseif el == "Distance" then
-            return {ESPSettings.DistanceCustomColor1, ESPSettings.DistanceCustomColor2, ESPSettings.DistanceCustomColor3}
-        else
-            return {ESPSettings.CustomGradientColor1, ESPSettings.CustomGradientColor2, ESPSettings.CustomGradientColor3}
-        end
-    end
-    
-    local colors = pickColorsForElement(element)
-    
-    -- Use baseOffset to pick a color from the gradient
-    -- Map baseOffset (0-1) across all 3 colors
-    local t = (baseOffset % 1) * (stops - 1)
-    local idx = math.floor(t)
-    local frac = t - idx
-    
-    -- Clamp idx to valid range
-    idx = math.max(0, math.min(idx, stops - 2))
-    
-    local c1 = colors[idx + 1]
-    local c2 = colors[idx + 2]
-    
-    -- Apply gradient blending
-    local blend = math.clamp(ESPSettings.GradientBlending or 0.5, 0, 1)
-    if blend > 0.01 then
-        local smooth = frac * frac * (3 - 2 * frac)
-        frac = frac * (1 - blend) + smooth * blend
-    end
-    
-    return Color3.new(
-        c1.R + (c2.R - c1.R) * frac,
-        c1.G + (c2.G - c1.G) * frac,
-        c1.B + (c2.B - c1.B) * frac
     )
 end
 
@@ -660,24 +657,6 @@ end
 -- SIMPLIFIED GRADIENT SYSTEM
 -- Principle: Gradients are IDENTICAL to normal ESP, just with color variation
 
--- Helper to interpolate transparency across 3 stops for box fill
-local function getGradientTransparency(t, element)
-    if element == "BoxFill" then
-        local t1 = ESPSettings.BoxFillTransparency1 or 0.5
-        local t2 = ESPSettings.BoxFillTransparency2 or 0.5
-        local t3 = ESPSettings.BoxFillTransparency3 or 0.5
-        -- 3-stop interpolation: 0-0.5 = t1->t2, 0.5-1 = t2->t3
-        if t < 0.5 then
-            local frac = t * 2
-            return t1 + (t2 - t1) * frac
-        else
-            local frac = (t - 0.5) * 2
-            return t2 + (t3 - t2) * frac
-        end
-    end
-    return ESPSettings.BoxFillTransparency or 0.5
-end
-
 -- Draw a filled rectangle with vertical gradient (same size/position as normal fill)
 local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, element)
     local segments = espObj.GradientSegments
@@ -689,35 +668,35 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         return
     end
 
-    -- Use more segments for smoother gradients (32 is enough for smooth blending)
-    local segCount = math.min(32, math.max(8, ih))
-    segCount = math.min(segCount, maxSegs)
-    
-    -- Evenly distribute segments with proper overlap
-    local segHeight = ih / segCount
+    -- Always use all available segments for smoother gradients
+    -- Each segment covers an equal portion of the gradient, with overlap to prevent seams
+    local segCount = maxSegs
+    local segHeight = math.max(2, math.ceil(ih / segCount) + 2) -- Minimum 2px height with extra for overlap
     
     for i = 1, segCount do
-        local segStart = (i - 1) / segCount
-        local segEnd = i / segCount
-        local segMid = (segStart + segEnd) * 0.5
+        -- Calculate this segment's logical position in the gradient (0 to 1)
+        local t = (i - 0.5) / segCount
+        local segColor = getRainbowColor(baseOffset + t * 0.5, element)
         
-        -- Position with 1px overlap
-        local yPos = iy + math.floor(segStart * ih)
-        local height = math.ceil(segEnd * ih) - math.floor(segStart * ih) + 1
+        -- Get per-color transparency if available, otherwise use default
+        local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
+        if segTrans == nil then
+            segTrans = transparency or 0.5
+        end
         
-        -- Color and transparency based on segment center
-        local segColor = getRainbowColor(baseOffset + segMid * 0.5, element)
-        local segTransparency = getGradientTransparency(segMid, element)
+        -- Position segment with overlap - each segment slightly overlaps neighbors
+        local segCenterY = iy + (ih * (i - 0.5) / segCount)
+        local posY = math.floor(segCenterY - segHeight / 2)
+        
+        -- Clamp to bounds but keep overlap within the fill area
+        local clampedY = math.max(iy - 1, math.min(iy + ih - 1, posY))
+        local clampedHeight = math.max(1, math.min(segHeight, (iy + ih) - clampedY + 1))
 
-        segments[i].Size = Vector2.new(iw, height)
-        segments[i].Position = Vector2.new(ix, yPos)
+        segments[i].Size = Vector2.new(iw, clampedHeight)
+        segments[i].Position = Vector2.new(ix, clampedY)
         segments[i].Color = segColor
-        segments[i].Transparency = segTransparency
+        segments[i].Transparency = segTrans
         segments[i].Visible = true
-    end
-
-    for i = segCount + 1, maxSegs do
-        segments[i].Visible = false
     end
 end
 
@@ -943,6 +922,31 @@ local function updateESP()
             local chamColor = ESPSettings.ChamsRainbow and centerColor or (ESPSettings.ChamsCustomColor1 or ESPSettings.GlobalChamColor)
             -- Name is above box; when using rainbow, use Name element colors
             local nameColor = ESPSettings.NameRainbow and getRainbowColor(baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
+            
+            -- Apply per-player overrides if set
+            local playerOverride = ESPSettings.PlayerOverrides[player.Name]
+            if playerOverride then
+                if playerOverride.BoxRainbow then
+                    boxColor = topColor
+                elseif playerOverride.BoxColor then
+                    boxColor = playerOverride.BoxColor
+                end
+                if playerOverride.TracerRainbow then
+                    tracerColor = bottomColor
+                elseif playerOverride.TracerColor then
+                    tracerColor = playerOverride.TracerColor
+                end
+                if playerOverride.ChamsRainbow then
+                    chamColor = centerColor
+                elseif playerOverride.ChamsColor then
+                    chamColor = playerOverride.ChamsColor
+                end
+                if playerOverride.NameRainbow then
+                    nameColor = getRainbowColor(baseOffset, "Name")
+                elseif playerOverride.NameColor then
+                    nameColor = playerOverride.NameColor
+                end
+            end
 
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
@@ -950,8 +954,8 @@ local function updateESP()
             if ESPSettings.Enabled then
                 -- Hide all text objects first to prevent leftover visibility
                 espObj.Name.Visible = false
-                if espObj.HealthText then espObj.HealthText.Visible = false end
-                if espObj.DistanceText then espObj.DistanceText.Visible = false end
+                espObj.HealthText.Visible = false
+                espObj.DistanceText.Visible = false
                 
                 -- Text: render Name, Health and Distance as separate Drawing.Text objects so
                 -- each can be positioned independently and receive per-element rainbow colors.
@@ -1037,7 +1041,7 @@ local function updateESP()
                             local x = math.floor(rect.cx)
                             local col
                             if item.key == "Name" then
-                                col = ESPSettings.NameRainbow and getStaticGradientColor(baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
+                                col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = true
                                 espObj.Name.Size = 13
                                 espObj.Name.Font = ESPSettings.TextFont or 2
@@ -1046,7 +1050,7 @@ local function updateESP()
                                 espObj.Name.Color = col
                                 espObj.Name.Visible = true
                             elseif item.key == "Health" then
-                                col = ESPSettings.HealthTextRainbow and getStaticGradientColor(baseOffset, "HealthText") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = true
                                 espObj.HealthText.Size = 13
                                 espObj.HealthText.Font = ESPSettings.TextFont or 2
@@ -1055,7 +1059,7 @@ local function updateESP()
                                 espObj.HealthText.Color = col
                                 espObj.HealthText.Visible = true
                             elseif item.key == "Distance" then
-                                col = ESPSettings.DistanceRainbow and getStaticGradientColor(baseOffset, "Distance") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
+                                col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = true
                                 espObj.DistanceText.Size = 13
                                 espObj.DistanceText.Font = ESPSettings.TextFont or 2
@@ -1071,7 +1075,7 @@ local function updateESP()
                             local x = math.floor(rect.cx)
                             local col
                             if item.key == "Name" then
-                                col = ESPSettings.NameRainbow and getStaticGradientColor(baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
+                                col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = true
                                 espObj.Name.Size = 13
                                 espObj.Name.Font = ESPSettings.TextFont or 2
@@ -1080,7 +1084,7 @@ local function updateESP()
                                 espObj.Name.Color = col
                                 espObj.Name.Visible = true
                             elseif item.key == "Health" then
-                                col = ESPSettings.HealthTextRainbow and getStaticGradientColor(baseOffset, "HealthText") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = true
                                 espObj.HealthText.Size = 13
                                 espObj.HealthText.Font = ESPSettings.TextFont or 2
@@ -1089,7 +1093,7 @@ local function updateESP()
                                 espObj.HealthText.Color = col
                                 espObj.HealthText.Visible = true
                             elseif item.key == "Distance" then
-                                col = ESPSettings.DistanceRainbow and getStaticGradientColor(baseOffset, "Distance") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
+                                col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = true
                                 espObj.DistanceText.Size = 13
                                 espObj.DistanceText.Font = ESPSettings.TextFont or 2
@@ -1108,7 +1112,7 @@ local function updateESP()
                             if anchor == "Left" then x = math.floor(rect.x - 6) else x = math.floor(rect.x + rect.w + 6) end
                             local col
                             if item.key == "Name" then
-                                col = ESPSettings.NameRainbow and getStaticGradientColor(baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
+                                col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = false
                                 espObj.Name.Size = 13
                                 espObj.Name.Font = ESPSettings.TextFont or 2
@@ -1117,7 +1121,7 @@ local function updateESP()
                                 espObj.Name.Color = col
                                 espObj.Name.Visible = true
                             elseif item.key == "Health" then
-                                col = ESPSettings.HealthTextRainbow and getStaticGradientColor(baseOffset, "HealthText") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
+                                col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = false
                                 espObj.HealthText.Size = 13
                                 espObj.HealthText.Font = ESPSettings.TextFont or 2
@@ -1126,7 +1130,7 @@ local function updateESP()
                                 espObj.HealthText.Color = col
                                 espObj.HealthText.Visible = true
                             elseif item.key == "Distance" then
-                                col = ESPSettings.DistanceRainbow and getStaticGradientColor(baseOffset, "Distance") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
+                                col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = false
                                 espObj.DistanceText.Size = 13
                                 espObj.DistanceText.Font = ESPSettings.TextFont or 2
@@ -1411,7 +1415,7 @@ local function updateESP()
                     espObj.HealthText.Size = 13
                     espObj.HealthText.Font = ESPSettings.TextFont or 2
                     espObj.HealthText.Position = Vector2.new(tx, ty)
-                    local col = ESPSettings.HealthTextRainbow and getStaticGradientColor(baseOffset, "HealthText") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
+                    local col = ESPSettings.HealthTextRainbow and getRainbowColor(baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                     espObj.HealthText.Color = col
                     espObj.HealthText.Visible = true
                 else
@@ -1749,17 +1753,22 @@ local function updateFOVCircle()
     -- Fill circle with improved rendering
     if ESPSettings.FOVCircleFilled then
         if ESPSettings.FOVCircleFillRainbow then
-            -- Use triangle segments for rainbow fill - properly overlapped
+            -- Use triangle segments for rainbow fill
+            -- Key fix: use more segments and larger overlap to eliminate the "cross" artifact
             FOVCircleFill.Visible = false
             
-            -- Use larger overlap to eliminate gaps
-            local overlapAngle = 0.015 -- Small angle overlap
-            for i = 1, segments do
-                local angle1 = ((i - 1) / segments) * math.pi * 2 - overlapAngle
-                local angle2 = (i / segments) * math.pi * 2 + overlapAngle
+            -- More segments = smoother fill, minimal visible seams
+            local fillSegs = math.min(segments * 2, FOV_GRADIENT_SEGMENTS) -- Double segments for fill
+            local overlap = 0.02 -- More overlap in radians to eliminate gaps
+            local outerR = radius + 2 -- Expand further to cover edge seams
+            
+            for i = 1, fillSegs do
+                -- Spread triangles evenly around the circle
+                local angle1 = ((i - 1) / fillSegs) * math.pi * 2 - overlap
+                local angle2 = (i / fillSegs) * math.pi * 2 + overlap
 
-                local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
-                local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
+                local p1 = center + Vector2.new(math.cos(angle1) * outerR, math.sin(angle1) * outerR)
+                local p2 = center + Vector2.new(math.cos(angle2) * outerR, math.sin(angle2) * outerR)
 
                 local seg = FOVFillGradientSegments[i]
                 seg.PointA = center
@@ -1767,15 +1776,16 @@ local function updateFOVCircle()
                 seg.PointC = p2
                 seg.Filled = true
                 seg.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
+                seg.Thickness = 0 -- No outline on triangles
 
                 -- Use mid-angle for smooth color distribution
-                local t = (i - 0.5) / segments
+                local t = (i - 0.5) / fillSegs
                 seg.Color = getRainbowColor(t, "FOV")
                 seg.Visible = true
             end
             
             -- Hide unused
-            for i = segments + 1, FOV_GRADIENT_SEGMENTS do
+            for i = fillSegs + 1, FOV_GRADIENT_SEGMENTS do
                 FOVFillGradientSegments[i].Visible = false
             end
         else
@@ -1836,6 +1846,64 @@ getgenv().TrisESP = {
     
     -- Enable/disable all ESP immediately
     SetEnabled = setGlobalESPEnabled,
+    
+    -- === PER-PLAYER ESP CUSTOMIZATION ===
+    -- Set custom ESP settings for a specific player
+    -- Usage: TrisESP.SetPlayerESP("PlayerName", { BoxColor = Color3.new(1,0,0), BoxRainbow = true })
+    -- Available overrides: BoxColor, BoxRainbow, TracerColor, TracerRainbow, NameColor, NameRainbow, ChamsColor, ChamsRainbow
+    SetPlayerESP = function(playerNameOrInstance, overrides)
+        local key = playerNameOrInstance
+        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
+            key = playerNameOrInstance.Name
+        end
+        if type(key) == "string" then
+            ESPSettings.PlayerOverrides[key] = ESPSettings.PlayerOverrides[key] or {}
+            for k, v in pairs(overrides or {}) do
+                ESPSettings.PlayerOverrides[key][k] = v
+            end
+        end
+    end,
+    
+    -- Remove all custom ESP settings for a player
+    ClearPlayerESP = function(playerNameOrInstance)
+        local key = playerNameOrInstance
+        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
+            key = playerNameOrInstance.Name
+        end
+        if type(key) == "string" then
+            ESPSettings.PlayerOverrides[key] = nil
+        end
+    end,
+    
+    -- Get a player's override settings (or nil if none)
+    GetPlayerESP = function(playerNameOrInstance)
+        local key = playerNameOrInstance
+        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
+            key = playerNameOrInstance.Name
+        end
+        return ESPSettings.PlayerOverrides[key]
+    end,
+    
+    -- Quick helper: Highlight a specific player with custom color
+    -- Usage: TrisESP.HighlightPlayer("PlayerName", Color3.new(1,0,0))
+    HighlightPlayer = function(playerNameOrInstance, color, rainbow)
+        local key = playerNameOrInstance
+        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
+            key = playerNameOrInstance.Name
+        end
+        if type(key) == "string" then
+            ESPSettings.PlayerOverrides[key] = {
+                BoxColor = color or Color3.fromRGB(255, 0, 0),
+                TracerColor = color or Color3.fromRGB(255, 0, 0),
+                NameColor = color or Color3.fromRGB(255, 0, 0),
+                ChamsColor = color or Color3.fromRGB(255, 0, 0),
+                BoxRainbow = rainbow or false,
+                TracerRainbow = rainbow or false,
+                NameRainbow = rainbow or false,
+                ChamsRainbow = rainbow or false
+            }
+        end
+    end,
     
     -- === PLAYER FILTERING ===
     -- Whitelist a player (only show whitelisted players)
@@ -2060,128 +2128,6 @@ getgenv().TrisESP = {
         end
     end,
     
-    -- === PER-PLAYER ESP (EASY API) ===
-    -- Store per-player custom settings
-    PlayerCustomSettings = {},
-    
-    -- Add ESP to a specific player with custom settings
-    -- Usage: TrisESP.AddPlayerESP("PlayerName", {BoxColor = Color3.new(1,0,0), Rainbow = true, ShowName = true})
-    -- Options: BoxColor, BoxRainbow, TracerColor, TracerRainbow, ShowName, ShowDistance, ShowHealthBar, Highlight, HighlightColor
-    AddPlayerESP = function(playerNameOrInstance, options)
-        options = options or {}
-        local playerName
-        local player
-        
-        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
-            player = playerNameOrInstance
-            playerName = player.Name
-        else
-            playerName = tostring(playerNameOrInstance)
-            player = Players:FindFirstChild(playerName)
-        end
-        
-        if not playerName then return end
-        
-        -- Store custom settings for this player
-        getgenv().TrisESP.PlayerCustomSettings[playerName] = {
-            BoxColor = options.BoxColor,
-            BoxRainbow = options.BoxRainbow,
-            TracerColor = options.TracerColor,
-            TracerRainbow = options.TracerRainbow,
-            ShowName = options.ShowName,
-            ShowDistance = options.ShowDistance,
-            ShowHealthBar = options.ShowHealthBar,
-            Highlight = options.Highlight,
-            HighlightColor = options.HighlightColor,
-            CustomText = options.CustomText
-        }
-        
-        -- Whitelist this player so they show even in whitelist mode
-        if options.Whitelist ~= false then
-            ESPSettings.WhitelistedPlayers[playerName] = true
-        end
-        
-        return getgenv().TrisESP.PlayerCustomSettings[playerName]
-    end,
-    
-    -- Remove per-player custom ESP settings
-    RemovePlayerESP = function(playerNameOrInstance)
-        local playerName
-        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
-            playerName = playerNameOrInstance.Name
-        else
-            playerName = tostring(playerNameOrInstance)
-        end
-        getgenv().TrisESP.PlayerCustomSettings[playerName] = nil
-        ESPSettings.WhitelistedPlayers[playerName] = nil
-    end,
-    
-    -- Get custom settings for a player
-    GetPlayerSettings = function(playerNameOrInstance)
-        local playerName
-        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
-            playerName = playerNameOrInstance.Name
-        else
-            playerName = tostring(playerNameOrInstance)
-        end
-        return getgenv().TrisESP.PlayerCustomSettings[playerName]
-    end,
-    
-    -- Update custom settings for a player
-    UpdatePlayerESP = function(playerNameOrInstance, options)
-        local playerName
-        if typeof(playerNameOrInstance) == "Instance" and playerNameOrInstance:IsA("Player") then
-            playerName = playerNameOrInstance.Name
-        else
-            playerName = tostring(playerNameOrInstance)
-        end
-        
-        if not getgenv().TrisESP.PlayerCustomSettings[playerName] then
-            return getgenv().TrisESP.AddPlayerESP(playerNameOrInstance, options)
-        end
-        
-        for k, v in pairs(options or {}) do
-            getgenv().TrisESP.PlayerCustomSettings[playerName][k] = v
-        end
-        
-        return getgenv().TrisESP.PlayerCustomSettings[playerName]
-    end,
-    
-    -- === QUICK OBJECT ESP ===
-    -- Add ESP to any BasePart or Model instantly
-    -- Usage: TrisESP.AddObjectESP(workspace.Diamond, {Color = Color3.new(1,1,0), Name = "Diamond", Rainbow = true})
-    AddObjectESP = function(object, options)
-        if not object or typeof(object) ~= "Instance" then return end
-        options = options or {}
-        
-        local displayName = options.Name or object.Name
-        local configName = options.Category or displayName
-        
-        -- Create config if needed
-        if not ObjectESPConfigs[configName] then
-            createObjectESPConfig(configName, {
-                Enabled = true,
-                Color = options.Color or Color3.fromRGB(255, 255, 0),
-                Rainbow = options.Rainbow or false,
-                ShowName = options.ShowName ~= false,
-                ShowDistance = options.ShowDistance ~= false,
-                ShowBox = options.ShowBox ~= false,
-                ShowTracer = options.ShowTracer or false,
-                MaxDistance = options.MaxDistance or 500
-            })
-        end
-        
-        addObjectToESP(configName, object, displayName)
-        return configName
-    end,
-    
-    -- Remove object ESP
-    RemoveObjectESP = function(object, category)
-        if not object then return end
-        local configName = category or object.Name
-        removeObjectFromESP(configName, object)
-    end,
-
     -- Advanced API (for custom configs)
     CreateObjectConfig = createObjectESPConfig,
     AddObject = addObjectToESP,
@@ -2304,6 +2250,15 @@ end
         ESP.BlacklistPlayer("Name")             -- Add to blacklist
         ESP.SetFilterMode("Whitelist")          -- Set filter mode
         ESP.AddTextEntry("Label", func, order)  -- Add custom text
+        
+    PER-PLAYER CUSTOMIZATION:
+        ESP.SetPlayerESP("Name", {BoxColor = Color3.new(1,0,0), BoxRainbow = true})
+        ESP.ClearPlayerESP("Name")              -- Remove player overrides
+        ESP.GetPlayerESP("Name")                -- Get player overrides
+        ESP.HighlightPlayer("Name", Color3.new(1,0,0), false)  -- Quick highlight
+        
+        Override options: BoxColor, BoxRainbow, TracerColor, TracerRainbow,
+                         NameColor, NameRainbow, ChamsColor, ChamsRainbow
     
     =========================================================================
 --]]
