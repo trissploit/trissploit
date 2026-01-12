@@ -661,42 +661,50 @@ end
 local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, element)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
-    
+
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
     if ih <= 0 or iw <= 0 then
         for i = 1, maxSegs do segments[i].Visible = false end
         return
     end
 
-    -- Always use all available segments for smoother gradients
-    -- Each segment covers an equal portion of the gradient, with overlap to prevent seams
-    local segCount = maxSegs
-    local segHeight = math.max(2, math.ceil(ih / segCount) + 2) -- Minimum 2px height with extra for overlap
-    
-    for i = 1, segCount do
-        -- Calculate this segment's logical position in the gradient (0 to 1)
-        local t = (i - 0.5) / segCount
-        local segColor = getRainbowColor(baseOffset + t * 0.5, element)
-        
-        -- Get per-color transparency if available, otherwise use default
-        local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
-        if segTrans == nil then
-            segTrans = transparency or 0.5
-        end
-        
-        -- Position segment with overlap - each segment slightly overlaps neighbors
-        local segCenterY = iy + (ih * (i - 0.5) / segCount)
-        local posY = math.floor(segCenterY - segHeight / 2)
-        
-        -- Clamp to bounds but keep overlap within the fill area
-        local clampedY = math.max(iy - 1, math.min(iy + ih - 1, posY))
-        local clampedHeight = math.max(1, math.min(segHeight, (iy + ih) - clampedY + 1))
+    -- Older algorithm: segment count based on available rows (pixel-accurate distribution)
+    local totalRows = ih
+    local segCount = math.min(maxSegs, totalRows)
+    local baseH = math.floor(totalRows / segCount)
+    local remainder = totalRows - baseH * segCount
 
-        segments[i].Size = Vector2.new(iw, clampedHeight)
-        segments[i].Position = Vector2.new(ix, clampedY)
+    local curY = iy
+    for i = 1, segCount do
+        local thisH = baseH + (i <= remainder and 1 or 0)
+        local segTop = curY
+        local segBottom = curY + thisH - 1
+        local segCenter = (segTop + segBottom) * 0.5
+        local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
+
+        -- Color uses existing rainbow/custom logic (respects GradientBlending & RainbowSpeed)
+        local segColor = getRainbowColor(baseOffset + t * 0.5, element)
+
+        -- Transparency: prefer per-color transparency interpolation if available
+        local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
+        if segTrans == nil then segTrans = transparency or 0.5 end
+
+        -- overlap vertically to avoid 1px gaps (older approach)
+        local overlapTop = (i > 1) and 1 or 0
+        local fromY = segTop - overlapTop
+        local height = (segBottom - segTop + 1) + overlapTop
+
+        segments[i].Size = Vector2.new(iw, height)
+        segments[i].Position = Vector2.new(ix, fromY)
         segments[i].Color = segColor
         segments[i].Transparency = segTrans
         segments[i].Visible = true
+
+        curY = curY + thisH
+    end
+
+    for i = segCount + 1, maxSegs do
+        segments[i].Visible = false
     end
 end
 
