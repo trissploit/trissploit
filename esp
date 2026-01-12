@@ -852,7 +852,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
-                    -- Vertical sides interpolate from topColor to bottomColor
+                    -- Interpolate between top and bottom colors for vertical sides
                     if topColor and bottomColor then
                         lineSegs[i].Color = lerpColor(topColor, bottomColor, t)
                     else
@@ -882,8 +882,9 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
                     local segCenter = (segLeft + segRight) * 0.5
-                        -- Horizontal gradient should vary across width; compute t from X
-                        local t = (segCenter - ix) / math.max(1, iw)
+
+                    -- Use vertical interpolation for color so top/bottom edges follow vertical gradient
+                    local t = (sy - iy) / math.max(1, ih)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
@@ -891,13 +892,9 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(fromX, sy)
                     lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
-                    -- Keep top and bottom lines as solid topColor/bottomColor (no horizontal gradient)
-                    if sideIdx == 1 and topColor then
-                        lineSegs[i].Color = topColor
-                    elseif sideIdx == 3 and bottomColor then
-                        lineSegs[i].Color = bottomColor
+                    if topColor and bottomColor then
+                        lineSegs[i].Color = lerpColor(topColor, bottomColor, t)
                     else
-                        -- Fallback: use rainbow across width
                         lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     end
                     lineSegs[i].Transparency = 1
