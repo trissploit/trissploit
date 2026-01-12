@@ -1393,7 +1393,7 @@ local function updateESP()
                             -- Respect configured outline color and thickness
                             espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or espObj.BoxOutline.Color
                             -- Outline should always be a thin 1px border for crisp visuals
-                            espObj.BoxOutline.Thickness = .5
+                            espObj.BoxOutline.Thickness = 10
                             espObj.BoxOutline.ZIndex = 8
                             espObj.BoxOutline.Visible = true
                         end
