@@ -1871,7 +1871,9 @@ end
 local function updateFOVs()
     if next(FOVCircles) == nil then
         -- no custom FOVs, keep legacy behaviour
-        updateFOVCircle()
+        if type(updateFOVCircle) == "function" then
+            updateFOVCircle()
+        end
         return
     end
     for name, cfg in pairs(FOVCircles) do
@@ -2008,9 +2010,9 @@ end
 local function mainUpdate()
     -- advance shared rainbow hue so all rainbow toggles stay in sync
     RainbowHue = (RainbowHue + (ESPSettings.RainbowSpeed or 1) * 0.001) % 1
-    updateESP()
-    updateObjectESP()
-    updateFOVs()
+    if type(updateESP) == "function" then pcall(updateESP) end
+    if type(updateObjectESP) == "function" then pcall(updateObjectESP) end
+    if type(updateFOVs) == "function" then pcall(updateFOVs) end
 end
 
 if renderConn then renderConn:Disconnect() end
