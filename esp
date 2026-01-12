@@ -416,7 +416,7 @@ end
 -- Segments are precisely positioned with NO overlap to prevent transparency artifacts.
 local MAX_GRADIENT_SEGMENTS = 500  -- Reduced from 2000 for better performance
 local MIN_GRADIENT_SEGMENTS = 10   -- Minimum segments for very small boxes
-local BOX_LINE_SEGMENTS = 400      -- Increased to allow per-pixel segments for long box edges (improves rainbow sharpness)
+local BOX_LINE_SEGMENTS = 50       -- Reduced from 100 for better performance
 
 local function createESPObject()
     local espObj = {
@@ -1168,14 +1168,17 @@ local function updateESP()
                     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     hideBoxLines(espObj)
                     
-                    -- Horizontal corner length (small L). Vertical lines are extended to half box height
-                    local Lh = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
-                    local Lv = math.clamp(math.floor(h * 0.5), Lh, math.floor(h))
+                    local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
+                    -- Define corners as: horiz_from(x1,y1)->(x2,y2), vert_from(x3,y3)->(x4,y4)
                     local corners = {
-                        {x, y, x + Lh, y, x, y + Lv},                     -- top-left
-                        {x + w, y, x + w - Lh, y, x + w, y + Lv},         -- top-right
-                        {x, y + h, x + Lh, y + h, x, y + h - Lv},         -- bottom-left
-                        {x + w, y + h, x + w - Lh, y + h, x + w, y + h - Lv} -- bottom-right
+                        -- top-left: horiz (x,y)->(x+L,y), vert (x+L,y)->(x+L,y+L)
+                        {x, y, x + L, y, x + L, y, x + L, y + L},
+                        -- top-right: horiz (x+w,y)->(x+w-L,y), vert (x+w-L,y)->(x+w-L,y+L)
+                        {x + w, y, x + w - L, y, x + w - L, y, x + w - L, y + L},
+                        -- bottom-left: horiz (x,y+h)->(x+L,y+h), vert (x+L,y+h)->(x+L,y+h-L)
+                        {x, y + h, x + L, y + h, x + L, y + h, x + L, y + h - L},
+                        -- bottom-right: horiz (x+w,y+h)->(x+w-L,y+h), vert (x+w-L,y+h)->(x+w-L,y+h-L)
+                        {x + w, y + h, x + w - L, y + h, x + w - L, y + h, x + w - L, y + h - L}
                     }
                     
                     -- Y positions for vertical rainbow gradient
@@ -1184,12 +1187,12 @@ local function updateESP()
                     for i, corner in ipairs(corners) do
                         local c = espObj.Corners[i]
                         -- Pixel-align corner endpoints for crisp edges matching outline
-                        local x1, y1, x2, y2 = corner[1], corner[2], corner[3], corner[4]
-                        local x3, y3 = corner[5], corner[6]
-                        c.Line1.From = Vector2.new(math.floor(x1 + 0.5), math.floor(y1 + 0.5))
-                        c.Line1.To = Vector2.new(math.floor(x2 + 0.5), math.floor(y2 + 0.5))
-                        c.Line2.From = Vector2.new(math.floor(x1 + 0.5), math.floor(y1 + 0.5))
-                        c.Line2.To = Vector2.new(math.floor(x3 + 0.5), math.floor(y3 + 0.5))
+                        local hx1, hy1, hx2, hy2 = corner[1], corner[2], corner[3], corner[4]
+                        local vx1, vy1, vx2, vy2 = corner[5], corner[6], corner[7], corner[8]
+                        c.Line1.From = Vector2.new(math.floor(hx1 + 0.5), math.floor(hy1 + 0.5))
+                        c.Line1.To = Vector2.new(math.floor(hx2 + 0.5), math.floor(hy2 + 0.5))
+                        c.Line2.From = Vector2.new(math.floor(vx1 + 0.5), math.floor(vy1 + 0.5))
+                        c.Line2.To = Vector2.new(math.floor(vx2 + 0.5), math.floor(vy2 + 0.5))
                         if ESPSettings.BoxRainbow then
                             -- Vertical gradient: top corners share one color, bottom corners share another
                             local yProgress = cornerYs[i]
