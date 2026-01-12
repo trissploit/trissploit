@@ -852,12 +852,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
-                    -- Interpolate between top and bottom colors for vertical sides
-                    if topColor and bottomColor then
-                        lineSegs[i].Color = lerpColor(topColor, bottomColor, t)
-                    else
-                        lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                    end
+                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
@@ -882,9 +877,8 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
                     local segCenter = (segLeft + segRight) * 0.5
-
-                    -- Use vertical interpolation for color so top/bottom edges follow vertical gradient
-                    local t = (sy - iy) / math.max(1, ih)
+                        -- Horizontal gradient should vary across width; compute t from X
+                        local t = (segCenter - ix) / math.max(1, iw)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
@@ -892,11 +886,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(fromX, sy)
                     lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
-                    if topColor and bottomColor then
-                        lineSegs[i].Color = lerpColor(topColor, bottomColor, t)
-                    else
-                        lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                    end
+                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
 
