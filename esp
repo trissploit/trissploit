@@ -80,6 +80,8 @@ local ESPSettings = {
     -- Rainbow settings (per element)
     RainbowSpeed = 1,
     GradientBlending = 1, -- 0 = sharp transitions, 1 = smooth (default), 2 = extra smooth
+    GradientMoving = false, -- When false, gradients are static; when true, they animate
+    GradientRotation = 0, -- 0-360 degrees, rotates gradient direction
     
     -- Custom gradient colors for rainbow (instead of HSV rainbow)
     -- Global toggle: when true, use per-element custom 3-color gradients
@@ -212,8 +214,13 @@ local function getRainbowColor(offset, element)
 
     local colors = pickColorsForElement(element)
 
-    -- Use absolute time + offset for smooth animation through stops
-    local t = ((RainbowHue + offset) % 1) * stops
+    -- Apply rotation to offset
+    local rotRad = math.rad(ESPSettings.GradientRotation or 0)
+    local rotOffset = offset + (math.sin(rotRad) * 0.2) -- Add rotation influence
+    
+    -- Use absolute time + offset for smooth animation through stops (only if GradientMoving is true)
+    local baseOffset = ESPSettings.GradientMoving and RainbowHue or 0
+    local t = ((baseOffset + rotOffset) % 1) * stops
     local idx = math.floor(t) % stops
     local frac = t - math.floor(t)
 
@@ -1916,44 +1923,26 @@ local function renderFOVs()
             for i = 1, #c.outlineLines do c.outlineLines[i].Visible = false end
         end
 
-        -- Fill using concentric rings of triangles to avoid center seams
+        -- Fill using radial gradient segments
         if c.Filled then
-            local fillSegs = math.min(math.max(8, c.Segments), 64)
-            local rings = c.rings or 3
+            local fillSegs = math.min(math.max(16, c.Segments * 2), 128)
             local triIdx = 1
-            for r = 1, rings do
-                local innerR = (r - 1) / rings * radius
-                local outerR = (r) / rings * radius
-                for i = 1, fillSegs do
-                    local angle1 = ((i - 1) / fillSegs) * math.pi * 2
-                    local angle2 = (i / fillSegs) * math.pi * 2
-                    local ia = center + Vector2.new(math.cos(angle1) * innerR, math.sin(angle1) * innerR)
-                    local ib = center + Vector2.new(math.cos(angle2) * innerR, math.sin(angle2) * innerR)
-                    local oa = center + Vector2.new(math.cos(angle1) * outerR, math.sin(angle1) * outerR)
-                    local ob = center + Vector2.new(math.cos(angle2) * outerR, math.sin(angle2) * outerR)
+            for i = 1, fillSegs do
+                local angle1 = ((i - 1) / fillSegs) * math.pi * 2
+                local angle2 = (i / fillSegs) * math.pi * 2
+                local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
+                local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
 
-                    local tri1 = c.fillTris[triIdx]
-                    if tri1 then
-                        tri1.PointA = ia
-                        tri1.PointB = oa
-                        tri1.PointC = ob
-                        tri1.Transparency = 1 - (c.FillTransparency or 0.8)
-                        tri1.Color = c.FillRainbow and getRainbowColor((i - 0.5) / fillSegs, "FOV") or c.Color
-                        tri1.Visible = true
-                    end
-                    triIdx = triIdx + 1
-
-                    local tri2 = c.fillTris[triIdx]
-                    if tri2 then
-                        tri2.PointA = ia
-                        tri2.PointB = ib
-                        tri2.PointC = ob
-                        tri2.Transparency = 1 - (c.FillTransparency or 0.8)
-                        tri2.Color = c.FillRainbow and getRainbowColor((i - 0.5) / fillSegs, "FOV") or c.Color
-                        tri2.Visible = true
-                    end
-                    triIdx = triIdx + 1
+                local tri = c.fillTris[triIdx]
+                if tri then
+                    tri.PointA = center
+                    tri.PointB = p1
+                    tri.PointC = p2
+                    tri.Transparency = 1 - (c.FillTransparency or 0.8)
+                    tri.Color = c.FillRainbow and getRainbowColor((i - 0.5) / fillSegs, "FOV") or c.Color
+                    tri.Visible = true
                 end
+                triIdx = triIdx + 1
             end
             for i = triIdx, #c.fillTris do c.fillTris[i].Visible = false end
         else
@@ -1968,8 +1957,10 @@ local function renderFOVs()
 end
 
 local function mainUpdate()
-    -- advance shared rainbow hue so all rainbow toggles stay in sync
-    RainbowHue = (RainbowHue + (ESPSettings.RainbowSpeed or 1) * 0.001) % 1
+    -- advance shared rainbow hue only when moving is enabled
+    if ESPSettings.GradientMoving then
+        RainbowHue = (RainbowHue + (ESPSettings.RainbowSpeed or 1) * 0.001) % 1
+    end
     updateESP()
     updateObjectESP()
     renderFOVs()
