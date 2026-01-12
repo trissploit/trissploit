@@ -390,31 +390,84 @@ local function shouldShowPlayer(player)
 end
 
 local function getScreenRectForCharacter(char)
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local head = char:FindFirstChild("Head")
-    if not hrp then return end
-    
-    local hrpPos = Camera:WorldToViewportPoint(hrp.Position)
-    if hrpPos.Z <= 0 then return end
-    
+    if not char then return end
     local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
-    if hrpPos.X < 0 or hrpPos.X > vw or hrpPos.Y < 0 or hrpPos.Y > vh then return end
-    
-    -- Calculate distance and use fixed size based on distance for consistency
-    local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
-    local scale = math.clamp(1000 / distance, 0.5, 10)
-    
-    -- Fixed box dimensions that scale with distance (maintains aspect ratio regardless of viewing angle)
-    local baseWidth = 35 * scale
-    local baseHeight = 60 * scale
-    
-    -- Only filter out if taking up almost entire screen
-    if baseWidth > vw * 0.95 or baseHeight > vh * 0.95 then return end
-    
-    local x = hrpPos.X - baseWidth / 2
-    local y = hrpPos.Y - baseHeight / 2
-    
-    return { x = x, y = y, w = baseWidth, h = baseHeight, cx = hrpPos.X, cy = hrpPos.Y }
+
+    -- Preferred method: use model extents (stable across animations) centered on HumanoidRootPart
+    local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    if hrp then
+        local ok, extents = pcall(function() return char:GetExtentsSize() end)
+        if ok and extents and extents.Y and extents.Y > 0 then
+            local halfH = extents.Y / 2
+            local topWorld = hrp.Position + Vector3.new(0, halfH, 0)
+            local bottomWorld = hrp.Position - Vector3.new(0, halfH, 0)
+            local spTop = Camera:WorldToViewportPoint(topWorld)
+            local spBottom = Camera:WorldToViewportPoint(bottomWorld)
+            if spTop.Z > 0 and spBottom.Z > 0 then
+                local topY = spTop.Y
+                local bottomY = spBottom.Y
+                local h = math.max(6, math.abs(bottomY - topY))
+                local widthRatio = 0.55
+                local w = math.max(6, h * widthRatio)
+                local padY = math.max(2, math.floor(h * 0.06))
+                local padX = math.max(2, math.floor(w * 0.06))
+                h = math.min(vh * 0.95, h + padY * 2)
+                w = math.min(vw * 0.95, w + padX * 2)
+                local cx = (spTop.X + spBottom.X) / 2
+                local x = cx - w / 2
+                local y = topY - padY
+                return { x = x, y = y, w = w, h = h, cx = cx, cy = y + h/2 }
+            end
+        end
+    end
+
+    -- Fallback: world-space AABB corner projection (used when head/hrp unavailable or off-screen)
+    local minXw, minYw, minZw, maxXw, maxYw, maxZw
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local half = part.Size * 0.5
+            for xi = -1, 1, 2 do
+                for yi = -1, 1, 2 do
+                    for zi = -1, 1, 2 do
+                        local corner = part.Position + Vector3.new(half.X * xi, half.Y * yi, half.Z * zi)
+                        minXw = (minXw == nil) and corner.X or math.min(minXw, corner.X)
+                        minYw = (minYw == nil) and corner.Y or math.min(minYw, corner.Y)
+                        minZw = (minZw == nil) and corner.Z or math.min(minZw, corner.Z)
+                        maxXw = (maxXw == nil) and corner.X or math.max(maxXw, corner.X)
+                        maxYw = (maxYw == nil) and corner.Y or math.max(maxYw, corner.Y)
+                        maxZw = (maxZw == nil) and corner.Z or math.max(maxZw, corner.Z)
+                    end
+                end
+            end
+        end
+    end
+    if not minXw or not maxXw then return end
+    local worldCorners = {
+        Vector3.new(minXw, minYw, minZw), Vector3.new(minXw, minYw, maxZw), Vector3.new(minXw, maxYw, minZw), Vector3.new(minXw, maxYw, maxZw),
+        Vector3.new(maxXw, minYw, minZw), Vector3.new(maxXw, minYw, maxZw), Vector3.new(maxXw, maxYw, minZw), Vector3.new(maxXw, maxYw, maxZw)
+    }
+    local minXs, minYs, maxXs, maxYs
+    for _, wc in ipairs(worldCorners) do
+        local sp = Camera:WorldToViewportPoint(wc)
+        if sp.Z > 0 then
+            minXs = (minXs == nil) and sp.X or math.min(minXs, sp.X)
+            minYs = (minYs == nil) and sp.Y or math.min(minYs, sp.Y)
+            maxXs = (maxXs == nil) and sp.X or math.max(maxXs, sp.X)
+            maxYs = (maxYs == nil) and sp.Y or math.max(maxYs, sp.Y)
+        end
+    end
+    if not minXs or not maxYs then return end
+    if maxYs < 0 or minYs > vh then return end
+    local w = math.max(4, math.abs(maxXs - minXs))
+    local h = math.max(4, math.abs(maxYs - minYs))
+    local padY = math.max(2, math.floor(h * 0.06))
+    local padX = math.max(2, math.floor(w * 0.06))
+    h = math.min(vh * 0.95, h + padY * 2)
+    w = math.min(vw * 0.95, w + padX * 2)
+    local cx = (minXs + maxXs) / 2
+    local x = cx - w / 2
+    local y = minYs - padY
+    return { x = x, y = y, w = w, h = h, cx = cx, cy = y + h/2 }
 end
 
 local function getFallbackRect(char)
@@ -551,6 +604,17 @@ local function createESPObject()
     espObj.OutlineSquare.Thickness = 2
     espObj.OutlineSquare.Color = ESPSettings.BoxColor or Color3.fromRGB(0,170,255)
     espObj.OutlineSquare.ZIndex = 3
+    -- Corner filler squares to ensure no missing pixels at corners
+    espObj.CornerSquares = {}
+    for i = 1, 4 do
+        local cs = Drawing.new("Square")
+        cs.Filled = true
+        -- Slightly larger corner filler and higher ZIndex to ensure visibility
+        cs.Size = Vector2.new(3, 3)
+        cs.Visible = false
+        cs.ZIndex = 6
+        espObj.CornerSquares[i] = cs
+    end
     espObj.Name.Center = true
     espObj.Name.Outline = true
     espObj.Name.OutlineColor = Color3.new(0,0,0)
@@ -577,44 +641,49 @@ local function createESPObject()
     espObj.DistanceText.Visible = false
     espObj.DistanceText.ZIndex = 999
     
-    espObj.Tracer.Thickness = ESPSettings.TracerThickness
-    espObj.Tracer.Visible = 2
+    espObj.Tracer.Thickness = ESPSettings.TracerThickness or 2
+    espObj.Tracer.Visible = false
+    espObj.Tracer.ZIndex = 3
+
+    -- Initialize corner line defaults
+    for _, c in ipairs(espObj.Corners) do
+        c.Line1.Thickness = 2
         c.Line2.Thickness = 2
         c.Line1.Visible = false
         c.Line2.Visible = false
         c.Line1.ZIndex = 3
         c.Line2.ZIndex = 3
     end
-    
+
+    -- Health bar defaults: filled gradient segments used for visuals, outline is 1px
     espObj.HealthBar.Filled = true
     espObj.HealthBar.Visible = false
     espObj.HealthBar.ZIndex = 5
-    
+
     espObj.HealthBarOutline.Filled = false
     espObj.HealthBarOutline.Thickness = 1
     espObj.HealthBarOutline.Visible = false
     espObj.HealthBarOutline.ZIndex = 4
-    espObj.HealthBar.Filled = true
-    espObj.HealthBar.Visible = false
-    espObj.HealthBar.ZIndex = 1
-    
-    espObj.HealthBarOutline.Filled = false
-    espObj.HealthBarOutline.Thickness = 2
-    espObj.HealthBarOutline.Visible = false
-    espObj.HealthBarOutline.ZIndex = 3
     
     return espObj
 end
 
+
 local function removeESP(espObj)
     if not espObj then return end
+    -- Disconnect any connections attached to this espObj
+    if espObj._connections then
+        for _, conn in pairs(espObj._connections) do
+            pcall(function() if conn and conn.Disconnect then conn:Disconnect() end end)
+        end
+        espObj._connections = nil
+    end
     pcall(function() espObj.Name:Remove() end)
     pcall(function() if espObj.HealthText then espObj.HealthText:Remove() end end)
     pcall(function() if espObj.DistanceText then espObj.DistanceText:Remove() end end)
     pcall(function() espObj.Tracer:Remove() end)
     for side = 1, 4 do
-        local sideLines = (espObj.BoxLines and espObj.BoxLines[side]) or {}
-        for _, line in ipairs(sideLines) do pcall(function() line:Remove() end) end
+        for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
     end
     pcall(function() espObj.BoxFill:Remove() end)
     for _, seg in ipairs(espObj.GradientSegments or {}) do
@@ -625,12 +694,12 @@ local function removeESP(espObj)
     for _, seg in ipairs(espObj.HealthBarGradient or {}) do
         pcall(function() seg:Remove() end)
     end
-    if espObj.Corners then
-        for _, c in ipairs(espObj.Corners) do
-            pcall(function() if c.Line1 then c.Line1:Remove() end end)
-            pcall(function() if c.Line2 then c.Line2:Remove() end end)
-        end
+    for _, c in ipairs(espObj.Corners) do
+        pcall(function() c.Line1:Remove() end)
+        pcall(function() c.Line2:Remove() end)
     end
+    pcall(function() if espObj.BoxOutline then espObj.BoxOutline:Remove() end end)
+    pcall(function() if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs:Remove() end end end)
     if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
     pcall(function() if espObj.EquippedText then espObj.EquippedText:Remove() end end)
     pcall(function() if espObj.EquippedImage then espObj.EquippedImage:Remove() end end)
@@ -655,6 +724,7 @@ local function hideESP(espObj)
     if espObj.EquippedText then espObj.EquippedText.Visible = false end
     if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+    if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
 end
 
 -- SIMPLIFIED GRADIENT SYSTEM
@@ -692,15 +762,9 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
         if segTrans == nil then segTrans = transparency or 0.5 end
 
-        -- Decide overlap strategy: if segment is semi-transparent, avoid overlap (no double-draw)
-        local overlapTop, overlapBottom
-        if segTrans < 0.999 then
-            overlapTop = 0
-            overlapBottom = 0
-        else
-            overlapTop = (i > 1) and 1 or 0
-            overlapBottom = (i < segCount) and 1 or 0
-        end
+        -- Always overlap adjacent segments by 1px to avoid 1px seams at segment boundaries
+        local overlapTop = (i > 1) and 1 or 0
+        local overlapBottom = (i < segCount) and 1 or 0
 
         local fromY = segTop - overlapTop
         local toY = segBottom + overlapBottom
@@ -729,14 +793,14 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
 end
 
 -- Draw box outline with gradient (same thickness/position as normal outline)
-local function drawGradientBox(espObj, x, y, w, h, baseOffset)
+local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomColor)
     -- 4 sides: top, right, bottom, left - each drawn as segments
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
     local th = 2
 
-    -- Use inclusive pixel coordinates for edges
-    local right = ix + iw
-    local bottom = iy + ih
+    -- Use inclusive pixel coordinates for edges (convert width/height to last pixel indices)
+    local right = ix + iw - 1
+    local bottom = iy + ih - 1
 
     -- Side definitions: {startX, startY, endX, endY, isVertical}
     local sides = {
@@ -818,6 +882,33 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset)
 
                 for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
             end
+        end
+    end
+
+    -- Draw tiny filled corner squares to guarantee corner pixels are covered
+    if espObj.CornerSquares then
+        local cornerPositions = {
+            Vector2.new(ix, iy),           -- top-left
+            Vector2.new(right, iy),        -- top-right
+            Vector2.new(ix, bottom),       -- bottom-left
+            Vector2.new(right, bottom)     -- bottom-right
+        }
+        for i, cs in ipairs(espObj.CornerSquares) do
+            local pos = cornerPositions[i]
+            -- Slight offset to ensure full corner coverage (covers inclusive edge pixels)
+            cs.Size = Vector2.new(3, 3)
+            cs.Position = Vector2.new(math.max(0, pos.X - 1), math.max(0, pos.Y - 1))
+            -- top corners use top color, bottom corners use bottom color for smooth transition
+            if topColor and bottomColor then
+                cs.Color = (i <= 2) and topColor or bottomColor
+            elseif topColor then
+                cs.Color = topColor
+            else
+                local cornerColor = (i <= 2) and getRainbowColor(baseOffset, "Box") or getRainbowColor(baseOffset + 0.5, "Box")
+                cs.Color = cornerColor
+            end
+            cs.Transparency = 1
+            cs.Visible = true
         end
     end
 end
@@ -963,7 +1054,7 @@ local function updateESP()
                 if playerOverride.ChamsColor then
                     chamColor = playerOverride.ChamsColor
                 end
-                elseif playerOverride.NameColor then
+                if playerOverride.NameColor then
                     nameColor = playerOverride.NameColor
                 end
             end
@@ -1282,13 +1373,20 @@ local function updateESP()
                             espObj.BoxOutline.Position = Vector2.new(ix - 1, iy - 1)
                             espObj.BoxOutline.Visible = true
                         end
-                        drawGradientBox(espObj, ix, iy, iw, ih, baseOffset)
-                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                        drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, topColor, bottomColor)
+                        if espObj.OutlineSquare then
+                            espObj.OutlineSquare.Size = Vector2.new(iw, ih)
+                            espObj.OutlineSquare.Position = Vector2.new(ix, iy)
+                            espObj.OutlineSquare.Color = boxColor or (ESPSettings.BoxColor or Color3.fromRGB(0,170,255))
+                            espObj.OutlineSquare.Thickness = 2
+                            espObj.OutlineSquare.Visible = true
+                        end
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                     else
                         -- Corner box - always gradient
                         if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
+                        if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
                         hideBoxLines(espObj)
                         
                         local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
@@ -1320,6 +1418,7 @@ local function updateESP()
                     -- Hide box outlines when Boxes disabled
                     hideBoxLines(espObj)
                     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                    if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
                     if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                     for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                 end
@@ -1441,6 +1540,8 @@ local function addESP(player)
     if not player or player == LocalPlayer or ESPObjects[player] then return end
     local espObj = createESPObject()
     espObj.Player = player
+    -- store connections so we can cleanly disconnect on removal
+    espObj._connections = {}
     ESPObjects[player] = espObj
     
     local function onCharAdded(char)
@@ -1455,7 +1556,7 @@ local function addESP(player)
         end
     end
     
-    player.CharacterAdded:Connect(onCharAdded)
+    espObj._connections.charConn = player.CharacterAdded:Connect(onCharAdded)
     if player.Character then onCharAdded(player.Character) end
 end
 
