@@ -619,7 +619,8 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
 
     -- Determine how many segments we should use to avoid visible banding at large sizes.
     local totalRows = ih
-    local desiredPixelPerSegment = 4 -- aim for ~4px per gradient segment for smoothness
+    -- Use denser segmentation to avoid visible banding; 1px target gives smooth gradients
+    local desiredPixelPerSegment = 1
     local segCount = math.min(maxSegs, math.max(MIN_GRADIENT_SEGMENTS, math.floor(totalRows / desiredPixelPerSegment)))
     segCount = math.max(1, math.min(segCount, totalRows))
     local baseH = math.floor(totalRows / segCount)
@@ -634,12 +635,13 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
         local segColor = getRainbowColor(baseOffset + t * 0.5, element)
 
-        -- Add 1px overlap between adjacent segments to avoid seams
+        -- Add small overlap on both edges to avoid seams when colors change between segments
         local overlapTop = (i > 1) and 1 or 0
+        local overlapBottom = (i < segCount) and 1 or 0
         local posY = segTop - overlapTop
-        local height = (segBottom - segTop + 1) + overlapTop
+        local height = (segBottom - segTop + 1) + overlapTop + overlapBottom
 
-        segments[i].Size = Vector2.new(iw, height)
+        segments[i].Size = Vector2.new(iw + 0, height)
         segments[i].Position = Vector2.new(ix, posY)
         segments[i].Color = segColor
         segments[i].Transparency = transparency or 0.5
@@ -680,7 +682,9 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
             -- Vertical line: inclusive length
             local startY = math.min(sy, ey)
             local lineLen = math.abs(ey - sy) + 1
-            local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, lineLen))
+                    -- limit segments to reasonable amount using desired pixels per segment
+                    local desiredPixelPerSegment = 2
+                    local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, math.floor(lineLen / desiredPixelPerSegment)))
             if actualSegs == 0 then
                 for i = 1, #lineSegs do lineSegs[i].Visible = false end
             else
@@ -694,7 +698,7 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
                     local segCenter = (segTop + segBottom) * 0.5
                     local t = (segCenter - iy) / math.max(1, ih)
 
-                    -- overlap vertically to avoid 1px gaps
+                    -- overlap vertically to avoid 1px gaps and ensure smooth blending
                     local fromY = segTop - (i > 1 and 1 or 0)
                     local toY = segBottom + (i < actualSegs and 1 or 0)
 
@@ -702,7 +706,7 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                    lineSegs[i].Transparency = 1
+                    lineSegs[i].Transparency = 0.98
                     lineSegs[i].Visible = true
 
                     cur = cur + thisLen
@@ -714,7 +718,8 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
             -- Horizontal line: inclusive length
             local startX = math.min(sx, ex)
             local lineLen = math.abs(ex - sx) + 1
-            local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, lineLen))
+            local desiredPixelPerSegment = 2
+            local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, math.floor(lineLen / desiredPixelPerSegment)))
             if actualSegs == 0 then
                 for i = 1, #lineSegs do lineSegs[i].Visible = false end
             else
@@ -735,7 +740,7 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
                     lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                    lineSegs[i].Transparency = 1
+                    lineSegs[i].Transparency = 0.98
                     lineSegs[i].Visible = true
 
                     cur = cur + thisLen
@@ -763,7 +768,8 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
     if isVertical then
         -- Vertical bar: reduce segmentation density for smoothness at large sizes
         local totalRows = ih
-        local desiredPixelPerSegment = 4
+        -- denser segmentation for healthbar to avoid visible banding
+        local desiredPixelPerSegment = 1
         local segCount = math.min(maxSegs, math.max(MIN_GRADIENT_SEGMENTS, math.floor(totalRows / desiredPixelPerSegment)))
         segCount = math.max(1, math.min(segCount, totalRows))
         local baseH = math.floor(totalRows / segCount)
@@ -776,10 +782,16 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local segCenter = (segTop + segBottom) * 0.5
             local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
 
-            segs[i].Size = Vector2.new(iw, segBottom - segTop + 1)
-            segs[i].Position = Vector2.new(ix, segTop)
+            -- Add overlap to prevent seams between segments
+            local overlapTop = (i > 1) and 1 or 0
+            local overlapBottom = (i < segCount) and 1 or 0
+            local posY = segTop - overlapTop
+            local height = (segBottom - segTop + 1) + overlapTop + overlapBottom
+
+            segs[i].Size = Vector2.new(iw, height)
+            segs[i].Position = Vector2.new(ix, posY)
             segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-            segs[i].Transparency = 1
+            segs[i].Transparency = 0.98
             segs[i].Visible = true
 
             curY = curY + thisH
@@ -789,7 +801,7 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
     else
         -- Horizontal bar: reduce segmentation density for smoothness at large sizes
         local totalCols = iw
-        local desiredPixelPerSegment = 4
+        local desiredPixelPerSegment = 1
         local segCount = math.min(maxSegs, math.max(MIN_GRADIENT_SEGMENTS, math.floor(totalCols / desiredPixelPerSegment)))
         segCount = math.max(1, math.min(segCount, totalCols))
         local baseW = math.floor(totalCols / segCount)
@@ -802,10 +814,15 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local segCenter = (segLeft + segRight) * 0.5
             local t = ((segCenter - ix) + 0.5) / math.max(1, totalCols)
 
-            segs[i].Size = Vector2.new(segRight - segLeft + 1, ih)
-            segs[i].Position = Vector2.new(segLeft, iy)
+            local overlapLeft = (i > 1) and 1 or 0
+            local overlapRight = (i < segCount) and 1 or 0
+            local posX = segLeft - overlapLeft
+            local width = (segRight - segLeft + 1) + overlapLeft + overlapRight
+
+            segs[i].Size = Vector2.new(width, ih)
+            segs[i].Position = Vector2.new(posX, iy)
             segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-            segs[i].Transparency = 1
+            segs[i].Transparency = 0.98
             segs[i].Visible = true
 
             curX = curX + thisW
