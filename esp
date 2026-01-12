@@ -602,22 +602,31 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         for i = 1, maxSegs do segments[i].Visible = false end
         return
     end
-    
-    -- One segment per pixel row for smooth gradient
-    local segCount = math.min(ih, maxSegs)
-    
+
+    -- Determine how many segments we can use and their pixel coverage.
+    local totalRows = ih
+    local segCount = math.min(maxSegs, totalRows)
+    local baseH = math.floor(totalRows / segCount)
+    local remainder = totalRows - baseH * segCount
+
+    local curY = iy
     for i = 1, segCount do
-        local segY = iy + i - 1
-        local t = (i - 0.5) / segCount
+        local thisH = baseH + (i <= remainder and 1 or 0)
+        local segTop = curY
+        local segBottom = curY + thisH - 1
+        local segCenter = (segTop + segBottom) * 0.5
+        local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
         local segColor = getRainbowColor(baseOffset + t * 0.5, element)
-        
-        segments[i].Size = Vector2.new(iw, 1)
-        segments[i].Position = Vector2.new(ix, segY)
+
+        segments[i].Size = Vector2.new(iw, segBottom - segTop + 1)
+        segments[i].Position = Vector2.new(ix, segTop)
         segments[i].Color = segColor
         segments[i].Transparency = transparency or 0.5
         segments[i].Visible = true
+
+        curY = curY + thisH
     end
-    
+
     for i = segCount + 1, maxSegs do
         segments[i].Visible = false
     end
@@ -628,13 +637,17 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
     -- 4 sides: top, right, bottom, left - each drawn as segments
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
     local th = thickness or 2
-    
+
+    -- Use inclusive pixel coordinates for edges (right/bottom are -1 from size)
+    local right = ix + math.max(0, iw - 1)
+    local bottom = iy + math.max(0, ih - 1)
+
     -- Side definitions: {startX, startY, endX, endY, isVertical}
     local sides = {
-        {ix, iy, ix + iw, iy, false},           -- top
-        {ix + iw, iy, ix + iw, iy + ih, true},  -- right
-        {ix + iw, iy + ih, ix, iy + ih, false}, -- bottom
-        {ix, iy + ih, ix, iy, true}              -- left
+        {ix, iy, right, iy, false},           -- top
+        {right, iy, right, bottom, true},     -- right
+        {right, bottom, ix, bottom, false},   -- bottom
+        {ix, bottom, ix, iy, true}            -- left
     }
     
     for sideIdx, side in ipairs(sides) do
@@ -643,47 +656,62 @@ local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
         local segCount = #lineSegs
         
         if isVert then
-            -- Vertical line: gradient based on Y position
-            local lineH = math.abs(ey - sy)
-            local actualSegs = math.min(lineH, segCount)
+            -- Vertical line: inclusive length
             local startY = math.min(sy, ey)
-            
-            for i = 1, actualSegs do
-                local segY1 = startY + i - 1
-                local segY2 = startY + i
-                local t = (i - 0.5) / math.max(1, lineH)
-                
-                lineSegs[i].From = Vector2.new(sx, segY1)
-                lineSegs[i].To = Vector2.new(sx, segY2)
-                lineSegs[i].Thickness = th
-                lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                lineSegs[i].Visible = true
-            end
-            
-            for i = actualSegs + 1, segCount do
-                lineSegs[i].Visible = false
+            local lineLen = math.abs(ey - sy) + 1
+            local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, lineLen))
+            if actualSegs == 0 then
+                for i = 1, #lineSegs do lineSegs[i].Visible = false end
+            else
+                local baseLen = math.floor(lineLen / actualSegs)
+                local rem = lineLen - baseLen * actualSegs
+                local cur = startY
+                for i = 1, actualSegs do
+                    local thisLen = baseLen + (i <= rem and 1 or 0)
+                    local segTop = cur
+                    local segBottom = cur + thisLen - 1
+                    local segCenter = (segTop + segBottom) * 0.5
+                    local t = (segCenter - iy) / math.max(1, ih)
+
+                    lineSegs[i].From = Vector2.new(sx, segTop)
+                    lineSegs[i].To = Vector2.new(sx, segBottom)
+                    lineSegs[i].Thickness = th
+                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    lineSegs[i].Visible = true
+
+                    cur = cur + thisLen
+                end
+
+                for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
             end
         else
-            -- Horizontal line: gradient based on relative Y (top vs bottom)
-            local lineW = math.abs(ex - sx)
-            local actualSegs = math.min(lineW, segCount)
+            -- Horizontal line: inclusive length
             local startX = math.min(sx, ex)
-            local yProgress = (sy - iy) / math.max(1, ih)  -- 0 at top, 1 at bottom
-            local lineColor = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
-            
-            for i = 1, actualSegs do
-                local segX1 = startX + i - 1
-                local segX2 = startX + i
-                
-                lineSegs[i].From = Vector2.new(segX1, sy)
-                lineSegs[i].To = Vector2.new(segX2, sy)
-                lineSegs[i].Thickness = th
-                lineSegs[i].Color = lineColor
-                lineSegs[i].Visible = true
-            end
-            
-            for i = actualSegs + 1, segCount do
-                lineSegs[i].Visible = false
+            local lineLen = math.abs(ex - sx) + 1
+            local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, lineLen))
+            if actualSegs == 0 then
+                for i = 1, #lineSegs do lineSegs[i].Visible = false end
+            else
+                local baseLen = math.floor(lineLen / actualSegs)
+                local rem = lineLen - baseLen * actualSegs
+                local cur = startX
+                for i = 1, actualSegs do
+                    local thisLen = baseLen + (i <= rem and 1 or 0)
+                    local segLeft = cur
+                    local segRight = cur + thisLen - 1
+                    local segCenter = (segLeft + segRight) * 0.5
+                    local t = (sy - iy) / math.max(1, ih)
+
+                    lineSegs[i].From = Vector2.new(segLeft, sy)
+                    lineSegs[i].To = Vector2.new(segRight, sy)
+                    lineSegs[i].Thickness = th
+                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    lineSegs[i].Visible = true
+
+                    cur = cur + thisLen
+                end
+
+                for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
             end
         end
     end
@@ -703,41 +731,53 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
     end
     
     if isVertical then
-        -- Vertical bar: one segment per pixel row
-        local segCount = math.min(ih, maxSegs)
-        
+        -- Vertical bar: allow segmentation to cover entire height even when iw/ih > pool
+        local totalRows = ih
+        local segCount = math.min(maxSegs, totalRows)
+        local baseH = math.floor(totalRows / segCount)
+        local remainder = totalRows - baseH * segCount
+        local curY = iy
         for i = 1, segCount do
-            local segY = iy + i - 1
-            local t = (i - 0.5) / segCount
-            
-            segs[i].Size = Vector2.new(iw, 1)
-            segs[i].Position = Vector2.new(ix, segY)
+            local thisH = baseH + (i <= remainder and 1 or 0)
+            local segTop = curY
+            local segBottom = curY + thisH - 1
+            local segCenter = (segTop + segBottom) * 0.5
+            local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
+
+            segs[i].Size = Vector2.new(iw, segBottom - segTop + 1)
+            segs[i].Position = Vector2.new(ix, segTop)
             segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
             segs[i].Transparency = 1
             segs[i].Visible = true
+
+            curY = curY + thisH
         end
-        
-        for i = segCount + 1, maxSegs do
-            segs[i].Visible = false
-        end
+
+        for i = segCount + 1, maxSegs do segs[i].Visible = false end
     else
-        -- Horizontal bar: one segment per pixel column
-        local segCount = math.min(iw, maxSegs)
-        
+        -- Horizontal bar: allow segmentation to cover entire width
+        local totalCols = iw
+        local segCount = math.min(maxSegs, totalCols)
+        local baseW = math.floor(totalCols / segCount)
+        local remainder = totalCols - baseW * segCount
+        local curX = ix
         for i = 1, segCount do
-            local segX = ix + i - 1
-            local t = (i - 0.5) / segCount
-            
-            segs[i].Size = Vector2.new(1, ih)
-            segs[i].Position = Vector2.new(segX, iy)
+            local thisW = baseW + (i <= remainder and 1 or 0)
+            local segLeft = curX
+            local segRight = curX + thisW - 1
+            local segCenter = (segLeft + segRight) * 0.5
+            local t = ((segCenter - ix) + 0.5) / math.max(1, totalCols)
+
+            segs[i].Size = Vector2.new(segRight - segLeft + 1, ih)
+            segs[i].Position = Vector2.new(segLeft, iy)
             segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
             segs[i].Transparency = 1
             segs[i].Visible = true
+
+            curX = curX + thisW
         end
-        
-        for i = segCount + 1, maxSegs do
-            segs[i].Visible = false
-        end
+
+        for i = segCount + 1, maxSegs do segs[i].Visible = false end
     end
 end
 
