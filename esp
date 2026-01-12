@@ -685,16 +685,15 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         return
     end
 
-    -- For smooth gradients: limit segment count to prevent visible bands
-    -- Use fewer segments with larger coverage for smoother appearance
-    -- Max 64 segments gives a good gradient without visible lines
-    local desiredSegs = math.min(64, ih)
-    local segCount = math.min(maxSegs, desiredSegs)
-    
+    -- Use as many segments as available when close (up to MAX_GRADIENT_SEGMENTS)
+    -- This prevents the gradient from collapsing into very few large bands
+    local desiredSegs = math.min(maxSegs, ih)
+    local segCount = math.max(1, desiredSegs)
+
     -- Calculate segment heights - distribute evenly with 2px overlap
-    local baseH = math.max(2, math.ceil(ih / segCount))
-    segCount = math.ceil(ih / baseH)
-    segCount = math.min(segCount, maxSegs)
+    local baseH = math.max(1, math.floor(ih / segCount))
+    if baseH <= 0 then baseH = 1 end
+    segCount = math.min(maxSegs, math.ceil(ih / baseH))
 
     for i = 1, segCount do
         local segTop = iy + (i - 1) * baseH
