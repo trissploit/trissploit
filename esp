@@ -422,14 +422,13 @@ end
 -- Segments are precisely positioned with NO overlap to prevent transparency artifacts.
 local MAX_GRADIENT_SEGMENTS = 500  -- Reduced from 2000 for better performance
 local MIN_GRADIENT_SEGMENTS = 10   -- Minimum segments for very small boxes
-local BOX_LINE_SEGMENTS = 50       -- Reduced from 100 for better performance
+local BOX_LINE_SEGMENTS = 300      -- Enough for typical box dimensions
 
 local function createESPObject()
     local espObj = {
         Name = Drawing.new("Text"),
         Tracer = Drawing.new("Line"),
         BoxLines = {},  -- 4 sides with gradient segments
-        BoxOutlineLines = {},  -- outline for each side
         BoxFill = Drawing.new("Square"),
         GradientSegments = {},
         Corners = {
@@ -458,18 +457,11 @@ local function createESPObject()
     -- Create box line segments for rainbow gradient on box edges
     for side = 1, 4 do
         espObj.BoxLines[side] = {}
-        espObj.BoxOutlineLines[side] = {}
         for seg = 1, BOX_LINE_SEGMENTS do
             local line = Drawing.new("Line")
             line.Thickness = 1
             line.Visible = false
-                    espObj.BoxLines[side][seg] = line
-            
-                    local outLine = Drawing.new("Line")
-                    outLine.Thickness = ESPSettings.Thickness or 3
-                    outLine.Color = ESPSettings.BoxOutlineColor or Color3.new(0, 0, 0)
-                    outLine.Visible = false
-                    espObj.BoxOutlineLines[side][seg] = outLine
+            espObj.BoxLines[side][seg] = line
         end
     end
     
@@ -557,7 +549,6 @@ local function removeESP(espObj)
     pcall(function() espObj.Tracer:Remove() end)
     for side = 1, 4 do
         for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
-        for _, line in ipairs(espObj.BoxOutlineLines[side] or {}) do pcall(function() line:Remove() end) end
     end
     pcall(function() espObj.BoxFill:Remove() end)
     for _, seg in ipairs(espObj.GradientSegments or {}) do
@@ -585,7 +576,6 @@ local function hideESP(espObj)
     espObj.Tracer.Visible = false
     for side = 1, 4 do
         for _, line in ipairs(espObj.BoxLines[side] or {}) do line.Visible = false end
-        for _, line in ipairs(espObj.BoxOutlineLines[side] or {}) do line.Visible = false end
     end
     espObj.BoxFill.Visible = false
     for _, seg in ipairs(espObj.GradientSegments or {}) do seg.Visible = false end
@@ -599,54 +589,155 @@ local function hideESP(espObj)
     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
 end
 
-local function drawGradient(espObj, rect, color1, color2, rotation, transparency, useRainbow, baseOffset, element)
+-- SIMPLIFIED GRADIENT SYSTEM
+-- Principle: Gradients are IDENTICAL to normal ESP, just with color variation
+
+-- Draw a filled rectangle with vertical gradient (same size/position as normal fill)
+local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, element)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
     
-    -- Use EXACT integer pixel dimensions
-    local rectX = math.floor(rect.x)
-    local rectY = math.floor(rect.y)
-    local rectW = math.floor(rect.w)
-    local rectH = math.floor(rect.h)
-    
-    if rectH <= 0 or rectW <= 0 then
-        -- nothing to draw
+    local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
+    if ih <= 0 or iw <= 0 then
         for i = 1, maxSegs do segments[i].Visible = false end
         return
     end
     
-    -- Dynamic segment count: scale with box height but cap at reasonable limits
-    local segCount = math.clamp(math.floor(rectH / 3), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, rectH))
+    -- One segment per pixel row for smooth gradient
+    local segCount = math.min(ih, maxSegs)
     
-    -- Use exact integer pixel distribution with no float drift
-    local positions = {}
     for i = 1, segCount do
-        local pixelStart = math.floor((i - 1) * rectH / segCount)
-        local pixelEnd = (i == segCount) and rectH or math.floor(i * rectH / segCount)
-        local pixelHeight = pixelEnd - pixelStart
-        positions[i] = { y = rectY + pixelStart, h = pixelHeight }
-    end
-    
-    -- Render segments with exact positioning
-    for i = 1, segCount do
+        local segY = iy + i - 1
         local t = (i - 0.5) / segCount
-        local segColor
-        if useRainbow then
-            segColor = getRainbowColor((baseOffset or 0) + t * 0.5, element)
-        else
-            segColor = lerpColor(color1, color2, t)
-        end
+        local segColor = getRainbowColor(baseOffset + t * 0.5, element)
         
-        segments[i].Size = Vector2.new(rectW, positions[i].h)
-        segments[i].Position = Vector2.new(rectX, positions[i].y)
+        segments[i].Size = Vector2.new(iw, 1)
+        segments[i].Position = Vector2.new(ix, segY)
         segments[i].Color = segColor
-        segments[i].Transparency = transparency or 0
+        segments[i].Transparency = transparency or 0.5
         segments[i].Visible = true
     end
     
-    -- Hide unused segments
     for i = segCount + 1, maxSegs do
         segments[i].Visible = false
+    end
+end
+
+-- Draw box outline with gradient (same thickness/position as normal outline)
+local function drawGradientBox(espObj, x, y, w, h, thickness, baseOffset)
+    -- 4 sides: top, right, bottom, left - each drawn as segments
+    local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
+    local th = thickness or 2
+    
+    -- Side definitions: {startX, startY, endX, endY, isVertical}
+    local sides = {
+        {ix, iy, ix + iw, iy, false},           -- top
+        {ix + iw, iy, ix + iw, iy + ih, true},  -- right
+        {ix + iw, iy + ih, ix, iy + ih, false}, -- bottom
+        {ix, iy + ih, ix, iy, true}              -- left
+    }
+    
+    for sideIdx, side in ipairs(sides) do
+        local sx, sy, ex, ey, isVert = side[1], side[2], side[3], side[4], side[5]
+        local lineSegs = espObj.BoxLines[sideIdx]
+        local segCount = #lineSegs
+        
+        if isVert then
+            -- Vertical line: gradient based on Y position
+            local lineH = math.abs(ey - sy)
+            local actualSegs = math.min(lineH, segCount)
+            local startY = math.min(sy, ey)
+            
+            for i = 1, actualSegs do
+                local segY1 = startY + i - 1
+                local segY2 = startY + i
+                local t = (i - 0.5) / math.max(1, lineH)
+                
+                lineSegs[i].From = Vector2.new(sx, segY1)
+                lineSegs[i].To = Vector2.new(sx, segY2)
+                lineSegs[i].Thickness = th
+                lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                lineSegs[i].Visible = true
+            end
+            
+            for i = actualSegs + 1, segCount do
+                lineSegs[i].Visible = false
+            end
+        else
+            -- Horizontal line: gradient based on relative Y (top vs bottom)
+            local lineW = math.abs(ex - sx)
+            local actualSegs = math.min(lineW, segCount)
+            local startX = math.min(sx, ex)
+            local yProgress = (sy - iy) / math.max(1, ih)  -- 0 at top, 1 at bottom
+            local lineColor = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
+            
+            for i = 1, actualSegs do
+                local segX1 = startX + i - 1
+                local segX2 = startX + i
+                
+                lineSegs[i].From = Vector2.new(segX1, sy)
+                lineSegs[i].To = Vector2.new(segX2, sy)
+                lineSegs[i].Thickness = th
+                lineSegs[i].Color = lineColor
+                lineSegs[i].Visible = true
+            end
+            
+            for i = actualSegs + 1, segCount do
+                lineSegs[i].Visible = false
+            end
+        end
+    end
+end
+
+-- Draw health bar fill with gradient (same size/position as normal fill)
+local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVertical, baseOffset)
+    local segs = espObj.HealthBarGradient
+    local maxSegs = #segs
+    
+    local ix, iy = math.floor(fillX), math.floor(fillY)
+    local iw, ih = math.floor(fillW), math.floor(fillH)
+    
+    if iw <= 0 or ih <= 0 then
+        for i = 1, maxSegs do segs[i].Visible = false end
+        return
+    end
+    
+    if isVertical then
+        -- Vertical bar: one segment per pixel row
+        local segCount = math.min(ih, maxSegs)
+        
+        for i = 1, segCount do
+            local segY = iy + i - 1
+            local t = (i - 0.5) / segCount
+            
+            segs[i].Size = Vector2.new(iw, 1)
+            segs[i].Position = Vector2.new(ix, segY)
+            segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
+            segs[i].Transparency = 1
+            segs[i].Visible = true
+        end
+        
+        for i = segCount + 1, maxSegs do
+            segs[i].Visible = false
+        end
+    else
+        -- Horizontal bar: one segment per pixel column
+        local segCount = math.min(iw, maxSegs)
+        
+        for i = 1, segCount do
+            local segX = ix + i - 1
+            local t = (i - 0.5) / segCount
+            
+            segs[i].Size = Vector2.new(1, ih)
+            segs[i].Position = Vector2.new(segX, iy)
+            segs[i].Color = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
+            segs[i].Transparency = 1
+            segs[i].Visible = true
+        end
+        
+        for i = segCount + 1, maxSegs do
+            segs[i].Visible = false
+        end
     end
 end
 
@@ -654,99 +745,9 @@ local function hideGradient(espObj)
     for _, seg in ipairs(espObj.GradientSegments or {}) do seg.Visible = false end
 end
 
-local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, baseOffset)
-    -- Draw 4 sides: top, right, bottom, left
-    -- Rainbow gradient goes VERTICALLY DOWN based on Y position
-    local sides = {
-        {x, y, x + w, y},         -- top (horizontal)
-        {x + w, y, x + w, y + h}, -- right (vertical)
-        {x + w, y + h, x, y + h}, -- bottom (horizontal)
-        {x, y + h, x, y}          -- left (vertical)
-    }
-    
-    for sideIdx, side in ipairs(sides) do
-        local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
-        -- Align to integer pixel boundaries so segments exactly cover the outline
-        local ax_sx, ax_sy = math.floor(sx), math.floor(sy)
-        local ax_ex, ax_ey = math.floor(ex), math.floor(ey)
-        local segCount = #espObj.BoxLines[sideIdx]
-        
-        -- Calculate line length for this side
-        local lineLength = math.sqrt((ex - sx)^2 + (ey - sy)^2)
-        -- Use one segment per pixel length when possible (clamped to available pool)
-        local dynamicSegCount = math.clamp(math.max(1, math.floor(lineLength)), 1, segCount)
-        
-        for seg = 1, dynamicSegCount do
-            -- Compute integer-aligned segment endpoints exactly covering the outline rectangle
-            local dx = ax_ex - ax_sx
-            local dy = ax_ey - ax_sy
-            local lx1, ly1, lx2, ly2
-            if math.abs(dx) >= math.abs(dy) then
-                -- Horizontal side: distribute pixels evenly
-                local pixelStart = math.floor((seg - 1) * math.abs(dx) / dynamicSegCount)
-                local pixelEnd = (seg == dynamicSegCount) and math.abs(dx) or math.floor(seg * math.abs(dx) / dynamicSegCount)
-                if dx >= 0 then
-                    lx1, ly1 = ax_sx + pixelStart, ax_sy
-                    lx2, ly2 = ax_sx + pixelEnd, ax_ey
-                else
-                    lx1, ly1 = ax_sx - pixelStart, ax_sy
-                    lx2, ly2 = ax_sx - pixelEnd, ax_ey
-                end
-            else
-                -- Vertical side: distribute pixels evenly
-                local pixelStart = math.floor((seg - 1) * math.abs(dy) / dynamicSegCount)
-                local pixelEnd = (seg == dynamicSegCount) and math.abs(dy) or math.floor(seg * math.abs(dy) / dynamicSegCount)
-                if dy >= 0 then
-                    lx1, ly1 = ax_sx, ax_sy + pixelStart
-                    lx2, ly2 = ax_ex, ax_sy + pixelEnd
-                else
-                    lx1, ly1 = ax_sx, ax_sy - pixelStart
-                    lx2, ly2 = ax_ex, ax_sy - pixelEnd
-                end
-            end
-            -- Use exact integer positions (already aligned)
-            local line = espObj.BoxLines[sideIdx][seg]
-            local outLine = espObj.BoxOutlineLines[sideIdx][seg]
-            line.From = Vector2.new(lx1, ly1)
-            line.To = Vector2.new(lx2, ly2)
-            line.Thickness = ESPSettings.Thickness or 1
-            
-            outLine.From = Vector2.new(lx1, ly1)
-            outLine.To = Vector2.new(lx2, ly2)
-            
-            if useRainbow then
-                -- Color based on Y position (vertical gradient going down)
-                local avgY = (ly1 + ly2) / 2
-                local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
-                line.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
-                -- Hide outline when rainbow to prevent color interference
-                if outLine then outLine.Visible = false end
-            else
-                line.Color = baseColor
-                -- Show outline for non-rainbow
-                if outLine then
-                    outLine.Color = ESPSettings.BoxOutlineColor
-                    outLine.Thickness = ESPSettings.Thickness or 3
-                    outLine.Visible = true
-                end
-            end
-            line.Visible = true
-        end
-        
-        -- Hide unused segments
-        for seg = dynamicSegCount + 1, segCount do
-            espObj.BoxLines[sideIdx][seg].Visible = false
-            if espObj.BoxOutlineLines[sideIdx][seg] then
-                espObj.BoxOutlineLines[sideIdx][seg].Visible = false
-            end
-        end
-    end
-end
-
 local function hideBoxLines(espObj)
     for side = 1, 4 do
         for _, line in ipairs(espObj.BoxLines[side] or {}) do line.Visible = false end
-        for _, line in ipairs(espObj.BoxOutlineLines[side] or {}) do line.Visible = false end
     end
 end
 
@@ -1100,111 +1101,87 @@ local function updateESP()
 
                 -- Box fill (independent from Box ESP)
                 if ESPSettings.BoxFill then
-                    if ESPSettings.BoxFillGradient or ESPSettings.BoxFillRainbow then
-                        local useRainbow = ESPSettings.BoxFillRainbow
-                        -- Use exact box dimensions for fill gradient
-                        drawGradient(espObj, {x = x, y = y, w = w, h = h}, ESPSettings.BoxFillCustomColor1, ESPSettings.BoxFillCustomColor3, 
-                            0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "BoxFill")
+                    local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
+                    
+                    if ESPSettings.BoxFillRainbow then
+                        -- Rainbow fill: use gradient segments with SAME size as normal fill
+                        drawGradientFill(espObj, ix, iy, iw, ih, 1 - ESPSettings.BoxFillTransparency, baseOffset, "BoxFill")
                         espObj.BoxFill.Visible = false
-
-                        -- Draw outline around gradient fill ONLY if Boxes are enabled
-                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" and ESPSettings.Boxes then
-                            espObj.OutlineSquare.Size = Vector2.new(w, h)
-                            espObj.OutlineSquare.Position = Vector2.new(x, y)
-                            espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
-                            espObj.OutlineSquare.Thickness = thickness
-                            espObj.OutlineSquare.Visible = true
-                        end
                     else
+                        -- Normal fill: single colored square
                         hideGradient(espObj)
                         local fillColor = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxFillColor
-                        espObj.BoxFill.Size = Vector2.new(math.max(1, w), math.max(1, h))
-                        espObj.BoxFill.Position = Vector2.new(x, y)
+                        espObj.BoxFill.Size = Vector2.new(iw, ih)
+                        espObj.BoxFill.Position = Vector2.new(ix, iy)
                         espObj.BoxFill.Color = fillColor
                         espObj.BoxFill.Transparency = 1 - ESPSettings.BoxFillTransparency
                         espObj.BoxFill.Visible = true
-                        -- Draw outline around solid fill ONLY if Boxes are enabled
-                        if espObj.OutlineSquare and ESPSettings.BoxType == "Square" and ESPSettings.Boxes then
-                            local thickness = ESPSettings.Thickness or 1
-                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
-                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
-                            espObj.OutlineSquare.Color = ESPSettings.BoxOutlineColor
-                            espObj.OutlineSquare.Thickness = thickness
-                            espObj.OutlineSquare.Visible = true
-                        end
                     end
                 else
                     espObj.BoxFill.Visible = false
                     hideGradient(espObj)
-                    if espObj.OutlineSquare and not ESPSettings.Boxes then espObj.OutlineSquare.Visible = false end
                 end
 
                 -- Boxes (outline)
                 if ESPSettings.Boxes then
-                if ESPSettings.BoxType == "Square" then
-                    -- Square box
-                    if ESPSettings.BoxRainbow then
-                        -- Use segmented lines for smooth vertical rainbow gradient
-                        drawBoxWithGradient(espObj, x, y, w, h, true, boxColor, baseOffset)
-                        -- hide crisp outline when using gradient segments
-                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
-                    else
-                        -- Use a single square outline for crisp, sharp edges when not rainbow
-                        hideBoxLines(espObj)
-                        if espObj.OutlineSquare and not ESPSettings.BoxFill then
-                            -- Only draw outline if not already drawn for fill
-                            local thickness = ESPSettings.Thickness or 1
-                            local offset = math.floor(thickness / 2)
-                            espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
-                            espObj.OutlineSquare.Position = Vector2.new(math.floor(x), math.floor(y))
-                            espObj.OutlineSquare.Color = boxColor
-                            espObj.OutlineSquare.Thickness = thickness
-                            espObj.OutlineSquare.Visible = true
-                        end
-                    end
-
-                    for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
-                else
-                    -- Corner box
-                    if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
-                    hideBoxLines(espObj)
+                    local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
+                    local thickness = ESPSettings.Thickness or 2
                     
-                    local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
-                    -- Use pixel-aligned integer coordinates for corner lines
-                    local fx, fy, fw, fh = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-                    local corners = {
-                        {fx, fy, fx + L, fy, fx, fy + L},                           -- top-left
-                        {fx + fw, fy, fx + fw - L, fy, fx + fw, fy + L},           -- top-right
-                        {fx, fy + fh, fx + L, fy + fh, fx, fy + fh - L},           -- bottom-left
-                        {fx + fw, fy + fh, fx + fw - L, fy + fh, fx + fw, fy + fh - L} -- bottom-right
-                    }
-                    
-                    -- Y positions for vertical rainbow gradient
-                    local cornerYs = {0, 0, 1, 1}  -- top corners = 0, bottom corners = 1
-                    
-                    for i, corner in ipairs(corners) do
-                        local c = espObj.Corners[i]
-                        c.Line1.From = Vector2.new(corner[1], corner[2])
-                        c.Line1.To = Vector2.new(corner[3], corner[4])
-                        c.Line2.From = Vector2.new(corner[1], corner[2])
-                        c.Line2.To = Vector2.new(corner[5], corner[6])
-                            if ESPSettings.BoxRainbow then
-                            -- Vertical gradient: top corners share one color, bottom corners share another
-                            local yProgress = cornerYs[i]
-                            c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
-                            c.Line2.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
+                    if ESPSettings.BoxType == "Square" then
+                        if ESPSettings.BoxRainbow then
+                            -- Rainbow box: use line segments with SAME position/thickness as normal outline
+                            drawGradientBox(espObj, ix, iy, iw, ih, thickness, baseOffset)
+                            if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         else
-                            c.Line1.Color, c.Line2.Color = boxColor, boxColor
+                            -- Normal box: single square outline
+                            hideBoxLines(espObj)
+                            if espObj.OutlineSquare then
+                                espObj.OutlineSquare.Size = Vector2.new(iw, ih)
+                                espObj.OutlineSquare.Position = Vector2.new(ix, iy)
+                                espObj.OutlineSquare.Color = boxColor
+                                espObj.OutlineSquare.Thickness = thickness
+                                espObj.OutlineSquare.Visible = true
+                            end
                         end
-                            c.Line1.Thickness = ESPSettings.Thickness or 1
-                            c.Line2.Thickness = ESPSettings.Thickness or 1
+                        for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
+                    else
+                        -- Corner box
+                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
+                        hideBoxLines(espObj)
+                        
+                        local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
+                        local fx, fy, fw, fh = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
+                        local corners = {
+                            {fx, fy, fx + L, fy, fx, fy + L},
+                            {fx + fw, fy, fx + fw - L, fy, fx + fw, fy + L},
+                            {fx, fy + fh, fx + L, fy + fh, fx, fy + fh - L},
+                            {fx + fw, fy + fh, fx + fw - L, fy + fh, fx + fw, fy + fh - L}
+                        }
+                        
+                        local cornerYs = {0, 0, 1, 1}
+                        
+                        for i, corner in ipairs(corners) do
+                            local c = espObj.Corners[i]
+                            c.Line1.From = Vector2.new(corner[1], corner[2])
+                            c.Line1.To = Vector2.new(corner[3], corner[4])
+                            c.Line2.From = Vector2.new(corner[1], corner[2])
+                            c.Line2.To = Vector2.new(corner[5], corner[6])
+                            if ESPSettings.BoxRainbow then
+                                local yProgress = cornerYs[i]
+                                c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
+                                c.Line2.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
+                            else
+                                c.Line1.Color, c.Line2.Color = boxColor, boxColor
+                            end
+                            c.Line1.Thickness = thickness
+                            c.Line2.Thickness = thickness
                             c.Line1.Visible, c.Line2.Visible = true, true
+                        end
                     end
-                end
                 else
                     -- Hide box outlines when Boxes disabled
                     hideBoxLines(espObj)
-                    if espObj.OutlineSquare and not ESPSettings.BoxFill then espObj.OutlineSquare.Visible = false end
+                    if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                 end
                 
@@ -1225,133 +1202,69 @@ local function updateESP()
             if ESPSettings.Enabled and ESPSettings.HealthBarEnabled and rect then
                 local maxHealth = math.max(1, hum.MaxHealth or 100)
                 local ratio = math.clamp(hum.Health / maxHealth, 0, 1)
-                local thickness = ESPSettings.HealthBarThickness  -- Fixed pixel thickness
+                local thickness = ESPSettings.HealthBarThickness or 6
                 local pos = ESPSettings.HealthBarPosition
-                local barX, barY, barW, barH, fillX, fillY, fillW, fillH
                 local isVertical = (pos == "Left" or pos == "Right")
-                    
-                    -- Use actual box dimensions - health bar 4 pixels away from box
-                    if pos == "Left" then
-                        barX, barY = x - thickness - 4, y
-                        barW, barH = thickness, h
-                        fillW = math.max(1, thickness - 2)
-                        fillH = math.max(1, math.floor(h * ratio))
-                        fillX, fillY = barX + 1, y + h - fillH
-                    elseif pos == "Right" then
-                        barX, barY = x + w + 4, y
-                        barW, barH = thickness, h
-                        fillW = math.max(1, thickness - 2)
-                        fillH = math.max(1, math.floor(h * ratio))
-                        fillX, fillY = barX + 1, y + h - fillH
-                    elseif pos == "Top" then
-                        barX, barY = x, y - thickness - 4
-                        barW, barH = w, thickness
-                        fillW = math.max(1, math.floor(w * ratio))
-                        fillH = math.max(1, thickness - 2)
-                        fillX, fillY = x, barY + 1
-                    else -- Bottom
-                        barX, barY = x, y + h + 4
-                        barW, barH = w, thickness
-                        fillW = math.max(1, math.floor(w * ratio))
-                        fillH = math.max(1, thickness - 2)
-                        fillX, fillY = x, barY + 1
-                    end
+                
+                -- Calculate bar and fill dimensions
+                local barX, barY, barW, barH, fillX, fillY, fillW, fillH
+                
+                if pos == "Left" then
+                    barX, barY = x - thickness - 4, y
+                    barW, barH = thickness, h
+                    fillW, fillH = thickness, math.max(1, math.floor(h * ratio))
+                    fillX, fillY = barX, y + h - fillH
+                elseif pos == "Right" then
+                    barX, barY = x + w + 4, y
+                    barW, barH = thickness, h
+                    fillW, fillH = thickness, math.max(1, math.floor(h * ratio))
+                    fillX, fillY = barX, y + h - fillH
+                elseif pos == "Top" then
+                    barX, barY = x, y - thickness - 4
+                    barW, barH = w, thickness
+                    fillW, fillH = math.max(1, math.floor(w * ratio)), thickness
+                    fillX, fillY = x, barY
+                else -- Bottom
+                    barX, barY = x, y + h + 4
+                    barW, barH = w, thickness
+                    fillW, fillH = math.max(1, math.floor(w * ratio)), thickness
+                    fillX, fillY = x, barY
+                end
+                
+                -- Floor all values
+                barX, barY = math.floor(barX), math.floor(barY)
+                barW, barH = math.floor(barW), math.floor(barH)
+                fillX, fillY = math.floor(fillX), math.floor(fillY)
+                fillW, fillH = math.floor(fillW), math.floor(fillH)
 
-                    if ESPSettings.HealthBarOutline then
-                        espObj.HealthBarOutline.Size = Vector2.new(barW + 2, barH + 2)
-                        espObj.HealthBarOutline.Position = Vector2.new(barX - 1, barY - 1)
-                        espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
-                        espObj.HealthBarOutline.Visible = true
-                    else
-                        espObj.HealthBarOutline.Visible = false
-                    end
+                -- Outline
+                if ESPSettings.HealthBarOutline then
+                    espObj.HealthBarOutline.Size = Vector2.new(barW + 2, barH + 2)
+                    espObj.HealthBarOutline.Position = Vector2.new(barX - 1, barY - 1)
+                    espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
+                    espObj.HealthBarOutline.Visible = true
+                else
+                    espObj.HealthBarOutline.Visible = false
+                end
 
-                    -- Health bar rendering with optimized gradient for rainbow
-                    if ESPSettings.HealthBarRainbow then
-                        -- Use gradient segments for smooth rainbow blend - MUST match normal health bar size
-                        espObj.HealthBar.Visible = false
-                        local segs = espObj.HealthBarGradient
-                        local maxSegs = #segs
-                        local isVertical = (pos == "Left" or pos == "Right")
-                        
-                        if isVertical then
-                            -- Vertical health bar - use FULL bar dimensions, then clip to health ratio
-                            local ibarH = math.floor(barH)
-                            local ibarW = math.floor(barW)
-                            local ibarX = math.floor(barX)
-                            local ibarY = math.floor(barY)
-                            local ifillH = math.floor(fillH)
-                            
-                            if ifillH <= 0 or ibarW <= 0 then
-                                for i = 1, maxSegs do segs[i].Visible = false end
-                            else
-                                local segCount = math.clamp(math.floor(ifillH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, ifillH))
-
-                                -- Use exact integer pixel distribution over fill height
-                                for i = 1, segCount do
-                                    local pixelStart = math.floor((i - 1) * ifillH / segCount)
-                                    local pixelEnd = (i == segCount) and ifillH or math.floor(i * ifillH / segCount)
-                                    local pixelHeight = pixelEnd - pixelStart
-                                    
-                                    local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-                                    segs[i].Size = Vector2.new(ibarW, pixelHeight)
-                                    segs[i].Position = Vector2.new(ibarX, ibarY + ibarH - ifillH + pixelStart)
-                                    segs[i].Color = segColor
-                                    segs[i].Transparency = 1
-                                    segs[i].Visible = true
-                                end
-
-                                for i = segCount + 1, maxSegs do
-                                    segs[i].Visible = false
-                                end
-                            end
-                        else
-                            -- Horizontal health bar - use FULL bar dimensions, then clip to health ratio
-                            local ibarW = math.floor(barW)
-                            local ibarH = math.floor(barH)
-                            local ibarX = math.floor(barX)
-                            local ibarY = math.floor(barY)
-                            local ifillW = math.floor(fillW)
-                            
-                            if ifillW <= 0 or ibarH <= 0 then
-                                for i = 1, maxSegs do segs[i].Visible = false end
-                            else
-                                local segCount = math.clamp(math.floor(ifillW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, ifillW))
-
-                                -- Use exact integer pixel distribution over fill width
-                                for i = 1, segCount do
-                                    local pixelStart = math.floor((i - 1) * ifillW / segCount)
-                                    local pixelEnd = (i == segCount) and ifillW or math.floor(i * ifillW / segCount)
-                                    local pixelWidth = pixelEnd - pixelStart
-                                    
-                                    local t = (i - 0.5) / segCount
-                                    local segColor = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-                                    segs[i].Size = Vector2.new(pixelWidth, ibarH)
-                                    segs[i].Position = Vector2.new(ibarX + pixelStart, ibarY)
-                                    segs[i].Color = segColor
-                                    segs[i].Transparency = 1
-                                    segs[i].Visible = true
-                                end
-
-                                for i = segCount + 1, maxSegs do
-                                    segs[i].Visible = false
-                                end
-                            end
-                        end
-                    else
-                        -- Normal health color based on ratio
-                        for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
-                        espObj.HealthBar.Size = Vector2.new(fillW, fillH)
-                        espObj.HealthBar.Position = Vector2.new(fillX, fillY)
-                        espObj.HealthBar.Color = getHealthColor(ratio)
-                        espObj.HealthBar.Visible = true
-                    end
+                -- Health bar fill
+                if ESPSettings.HealthBarRainbow then
+                    -- Rainbow: use gradient with EXACT same dimensions as normal fill
+                    espObj.HealthBar.Visible = false
+                    drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVertical, baseOffset)
+                else
+                    -- Normal: single colored fill
+                    for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
+                    espObj.HealthBar.Size = Vector2.new(fillW, fillH)
+                    espObj.HealthBar.Position = Vector2.new(fillX, fillY)
+                    espObj.HealthBar.Color = getHealthColor(ratio)
+                    espObj.HealthBar.Visible = true
+                end
             else
                 espObj.HealthBar.Visible = false
-                    espObj.HealthBarOutline.Visible = false
-                    for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
-                end
+                espObj.HealthBarOutline.Visible = false
+                for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
+            end
 
             -- Chams/Highlight
             if ESPSettings.Enabled and ESPSettings.Highlight then
