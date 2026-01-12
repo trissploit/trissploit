@@ -1377,7 +1377,8 @@ local function updateESP()
                     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
                     
                     -- Always draw gradient fill
-                    drawGradientFill(espObj, ix, iy, iw, ih, 1 - ESPSettings.BoxFillTransparency, baseOffset, "BoxFill")
+                    -- Use the configured transparency directly (0 = opaque, 1 = fully transparent)
+                    drawGradientFill(espObj, ix, iy, iw, ih, ESPSettings.BoxFillTransparency, baseOffset, "BoxFill")
                     espObj.BoxFill.Visible = false
                 else
                     espObj.BoxFill.Visible = false
@@ -1395,7 +1396,9 @@ local function updateESP()
                             espObj.BoxOutline.Position = Vector2.new(ix - 1, iy - 1)
                             espObj.BoxOutline.Visible = true
                         end
-                        drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, topColor, bottomColor)
+                        -- Let drawGradientBox use the shared rainbow/custom gradient system
+                        -- (pass no explicit top/bottom colors so it samples the 3-stop gradient)
+                        drawGradientBox(espObj, ix, iy, iw, ih, baseOffset)
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                     else
                         -- Corner box - always gradient
