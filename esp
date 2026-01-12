@@ -678,43 +678,45 @@ end
 local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, element)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
-
+    
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
     if ih <= 0 or iw <= 0 then
         for i = 1, maxSegs do segments[i].Visible = false end
         return
     end
+    -- Always use the full segment pool. Compute fractional coverage and
+    -- convert to integer pixel positions so the entire rect is covered
+    local segCount = maxSegs
+    local perH = ih / segCount
 
-    -- Adaptive segmentation: prefer one segment per pixel up to the pool size
-    local segCount = math.min(maxSegs, ih)
-    if segCount < 1 then segCount = 1 end
-
-    -- Build each segment using exact integer bounds to avoid rounding drift
     for i = 1, segCount do
-        local startY = math.floor(iy + (i - 1) * (ih / segCount))
-        local endY = math.floor(iy + (i) * (ih / segCount)) - 1
-        if i == segCount then endY = iy + ih - 1 end
+        local topF = (i - 1) * perH
+        local bottomF = i * perH
 
-        -- Add small overlap to hide seams (2px works well)
-        local overlap = 2
-        local segTop = math.max(iy, startY - (i > 1 and overlap or 0))
-        local segBottom = math.min(iy + ih - 1, endY + (i < segCount and overlap or 0))
-        local segHeight = math.max(1, segBottom - segTop + 1)
+        -- integer pixel coordinates for this segment
+        local segTop = iy + math.floor(topF)
+        local segBottom = iy + math.floor(bottomF) - 1
+        if i == segCount then segBottom = iy + ih - 1 end
 
-        local segCenter = segTop + segHeight * 0.5
-        local t = (segCenter - iy) / math.max(1, ih)
-        local segColor = getRainbowColor(baseOffset + t * 0.5, element)
-        local segTransparency = (transparency ~= nil) and transparency or getGradientTransparency(t, element)
+        local segHeight = segBottom - segTop + 1
+        if segHeight <= 0 then
+            segments[i].Visible = false
+        else
+            local segCenterF = (topF + bottomF) * 0.5
+            local t = segCenterF / math.max(1, ih)
+            local segColor = getRainbowColor(baseOffset + t * 0.5, element)
 
-        segments[i].Size = Vector2.new(iw, segHeight)
-        segments[i].Position = Vector2.new(ix, segTop)
-        segments[i].Color = segColor
-        segments[i].Transparency = segTransparency
-        segments[i].Visible = true
-    end
+            local segTransparency = transparency
+            if not segTransparency then
+                segTransparency = getGradientTransparency(t, element) or 0.5
+            end
 
-    for i = segCount + 1, maxSegs do
-        segments[i].Visible = false
+            segments[i].Size = Vector2.new(iw, segHeight)
+            segments[i].Position = Vector2.new(ix, segTop)
+            segments[i].Color = segColor
+            segments[i].Transparency = segTransparency
+            segments[i].Visible = true
+        end
     end
 end
 
