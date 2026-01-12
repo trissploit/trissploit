@@ -451,6 +451,7 @@ local function createESPObject()
         local seg = Drawing.new("Square")
         seg.Filled = true
         seg.Visible = false
+        seg.ZIndex = 0
         espObj.HealthBarGradient[i] = seg
     end
     
@@ -461,6 +462,7 @@ local function createESPObject()
             local line = Drawing.new("Line")
             line.Thickness = 1
             line.Visible = false
+            line.ZIndex = 3
             espObj.BoxLines[side][seg] = line
         end
     end
@@ -470,6 +472,7 @@ local function createESPObject()
         espObj.GradientSegments[i] = Drawing.new("Square")
         espObj.GradientSegments[i].Filled = true
         espObj.GradientSegments[i].Visible = false
+        espObj.GradientSegments[i].ZIndex = 0
     end
     
     
@@ -495,6 +498,7 @@ local function createESPObject()
     espObj.OutlineSquare.Visible = false
     espObj.OutlineSquare.Thickness = ESPSettings.Thickness or 3
     espObj.OutlineSquare.Color = ESPSettings.BoxColor or Color3.fromRGB(0,170,255)
+    espObj.OutlineSquare.ZIndex = 3
     espObj.Name.Center = true
     espObj.Name.Outline = true
     espObj.Name.OutlineColor = Color3.new(0,0,0)
@@ -520,23 +524,29 @@ local function createESPObject()
     
     espObj.Tracer.Thickness = ESPSettings.TracerThickness
     espObj.Tracer.Visible = false
+    espObj.Tracer.ZIndex = 2
     
     espObj.BoxFill.Filled = true
     espObj.BoxFill.Visible = false
+    espObj.BoxFill.ZIndex = 1
     
     for _, c in ipairs(espObj.Corners) do
         c.Line1.Thickness = ESPSettings.Thickness or 1
         c.Line2.Thickness = ESPSettings.Thickness or 1
         c.Line1.Visible = false
         c.Line2.Visible = false
+        c.Line1.ZIndex = 3
+        c.Line2.ZIndex = 3
     end
     
     espObj.HealthBar.Filled = true
     espObj.HealthBar.Visible = false
+    espObj.HealthBar.ZIndex = 1
     
     espObj.HealthBarOutline.Filled = false
     espObj.HealthBarOutline.Thickness = 2
     espObj.HealthBarOutline.Visible = false
+    espObj.HealthBarOutline.ZIndex = 3
     
     return espObj
 end
