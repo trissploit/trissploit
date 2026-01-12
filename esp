@@ -668,82 +668,58 @@ local function drawBoxWithGradient(espObj, x, y, w, h, useRainbow, baseColor, ba
     
     for sideIdx, side in ipairs(sides) do
         local sx, sy, ex, ey = side[1], side[2], side[3], side[4]
+        -- Align to integer pixel boundaries so segments exactly cover the outline
+        local ax_sx, ax_sy = math.floor(sx), math.floor(sy)
+        local ax_ex, ax_ey = math.floor(ex), math.floor(ey)
         local segCount = #espObj.BoxLines[sideIdx]
-        -- Compute integer-aligned box edges consistent with OutlineSquare
-        local left = math.floor(x)
-        local top = math.floor(y)
-        local right = left + math.floor(w)
-        local bottom = top + math.floor(h)
-        local absLen = (sideIdx == 1 or sideIdx == 3) and (right - left) or (bottom - top)
-        local dynamicSegCount = math.clamp(math.max(1, absLen), 1, segCount)
-
+        
+        -- Calculate line length for this side
+        local lineLength = math.sqrt((ex - sx)^2 + (ey - sy)^2)
+        -- Use one segment per pixel length when possible (clamped to available pool)
+        local dynamicSegCount = math.clamp(math.max(1, math.floor(lineLength)), 1, segCount)
+        
         for seg = 1, dynamicSegCount do
+            -- Compute integer-aligned segment endpoints exactly covering the outline rectangle
+            local dx = ax_ex - ax_sx
+            local dy = ax_ey - ax_sy
             local lx1, ly1, lx2, ly2
-            if sideIdx == 1 then
-                -- Top: left -> right
-                local base = math.floor((right - left) / dynamicSegCount)
-                local rem = (right - left) - base * dynamicSegCount
-                local cur = left
-                for k = 1, seg - 1 do cur = cur + base + (k <= rem and 1 or 0) end
-                local segLen = base + (seg <= rem and 1 or 0)
-                local nextPos = cur + segLen
-                lx1, ly1 = cur, top
-                lx2, ly2 = nextPos, top
-                -- add 1px overlap between adjacent segments to avoid seams
-                if seg > 1 then lx1 = math.max(lx1 - 1, left) end
-                if seg < dynamicSegCount then lx2 = math.min(lx2 + 1, right) end
-            elseif sideIdx == 3 then
-                -- Bottom: left -> right
-                local base = math.floor((right - left) / dynamicSegCount)
-                local rem = (right - left) - base * dynamicSegCount
-                local cur = left
-                for k = 1, seg - 1 do cur = cur + base + (k <= rem and 1 or 0) end
-                local segLen = base + (seg <= rem and 1 or 0)
-                local nextPos = cur + segLen
-                lx1, ly1 = cur, bottom
-                lx2, ly2 = nextPos, bottom
-                if seg > 1 then lx1 = math.max(lx1 - 1, left) end
-                if seg < dynamicSegCount then lx2 = math.min(lx2 + 1, right) end
-            elseif sideIdx == 2 then
-                -- Right: top -> bottom
-                local base = math.floor((bottom - top) / dynamicSegCount)
-                local rem = (bottom - top) - base * dynamicSegCount
-                local cur = top
-                for k = 1, seg - 1 do cur = cur + base + (k <= rem and 1 or 0) end
-                local segLen = base + (seg <= rem and 1 or 0)
-                local nextPos = cur + segLen
-                lx1, ly1 = right, cur
-                lx2, ly2 = right, nextPos
-                if seg > 1 then ly1 = math.max(ly1 - 1, top) end
-                if seg < dynamicSegCount then ly2 = math.min(ly2 + 1, bottom) end
+            if math.abs(dx) >= math.abs(dy) then
+                -- Horizontal side: distribute pixels evenly
+                local pixelStart = math.floor((seg - 1) * math.abs(dx) / dynamicSegCount)
+                local pixelEnd = (seg == dynamicSegCount) and math.abs(dx) or math.floor(seg * math.abs(dx) / dynamicSegCount)
+                if dx >= 0 then
+                    lx1, ly1 = ax_sx + pixelStart, ax_sy
+                    lx2, ly2 = ax_sx + pixelEnd, ax_ey
+                else
+                    lx1, ly1 = ax_sx - pixelStart, ax_sy
+                    lx2, ly2 = ax_sx - pixelEnd, ax_ey
+                end
             else
-                -- Left: top -> bottom
-                local base = math.floor((bottom - top) / dynamicSegCount)
-                local rem = (bottom - top) - base * dynamicSegCount
-                local cur = top
-                for k = 1, seg - 1 do cur = cur + base + (k <= rem and 1 or 0) end
-                local segLen = base + (seg <= rem and 1 or 0)
-                local nextPos = cur + segLen
-                lx1, ly1 = left, cur
-                lx2, ly2 = left, nextPos
-                if seg > 1 then ly1 = math.max(ly1 - 1, top) end
-                if seg < dynamicSegCount then ly2 = math.min(ly2 + 1, bottom) end
+                -- Vertical side: distribute pixels evenly
+                local pixelStart = math.floor((seg - 1) * math.abs(dy) / dynamicSegCount)
+                local pixelEnd = (seg == dynamicSegCount) and math.abs(dy) or math.floor(seg * math.abs(dy) / dynamicSegCount)
+                if dy >= 0 then
+                    lx1, ly1 = ax_sx, ax_sy + pixelStart
+                    lx2, ly2 = ax_ex, ax_sy + pixelEnd
+                else
+                    lx1, ly1 = ax_sx, ax_sy - pixelStart
+                    lx2, ly2 = ax_ex, ax_sy - pixelEnd
+                end
             end
-
-            -- Round to nearest pixel for crisp rendering
+            -- Use exact integer positions (already aligned)
             local line = espObj.BoxLines[sideIdx][seg]
             local outLine = espObj.BoxOutlineLines[sideIdx][seg]
-            line.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
-            line.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
+            line.From = Vector2.new(lx1, ly1)
+            line.To = Vector2.new(lx2, ly2)
             line.Thickness = ESPSettings.Thickness or 1
-
-            outLine.From = Vector2.new(math.floor(lx1 + 0.5), math.floor(ly1 + 0.5))
-            outLine.To = Vector2.new(math.floor(lx2 + 0.5), math.floor(ly2 + 0.5))
-
+            
+            outLine.From = Vector2.new(lx1, ly1)
+            outLine.To = Vector2.new(lx2, ly2)
+            
             if useRainbow then
                 -- Color based on Y position (vertical gradient going down)
                 local avgY = (ly1 + ly2) / 2
-                local yProgress = (avgY - top) / math.max(1, bottom - top)  -- 0 at top, 1 at bottom
+                local yProgress = (avgY - y) / math.max(1, h)  -- 0 at top, 1 at bottom
                 line.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
                 -- Hide outline when rainbow to prevent color interference
                 if outLine then outLine.Visible = false end
@@ -1123,7 +1099,7 @@ local function updateESP()
                             0, 1 - ESPSettings.BoxFillTransparency, useRainbow, baseOffset, "BoxFill")
                         espObj.BoxFill.Visible = false
 
-                        -- Draw outline around gradient fill for proper bounding using exact positions
+                        -- Draw outline around gradient fill ONLY if Boxes are enabled
                         if espObj.OutlineSquare and ESPSettings.BoxType == "Square" and ESPSettings.Boxes then
                             espObj.OutlineSquare.Size = Vector2.new(w, h)
                             espObj.OutlineSquare.Position = Vector2.new(x, y)
@@ -1139,7 +1115,7 @@ local function updateESP()
                         espObj.BoxFill.Color = fillColor
                         espObj.BoxFill.Transparency = 1 - ESPSettings.BoxFillTransparency
                         espObj.BoxFill.Visible = true
-                        -- Draw outline around solid fill for proper bounding
+                        -- Draw outline around solid fill ONLY if Boxes are enabled
                         if espObj.OutlineSquare and ESPSettings.BoxType == "Square" and ESPSettings.Boxes then
                             local thickness = ESPSettings.Thickness or 1
                             espObj.OutlineSquare.Size = Vector2.new(math.floor(w), math.floor(h))
@@ -1186,11 +1162,13 @@ local function updateESP()
                     hideBoxLines(espObj)
                     
                     local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
+                    -- Use pixel-aligned integer coordinates for corner lines
+                    local fx, fy, fw, fh = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
                     local corners = {
-                        {x, y, x + L, y, x, y + L},                     -- top-left
-                        {x + w, y, x + w - L, y, x + w, y + L},         -- top-right
-                        {x, y + h, x + L, y + h, x, y + h - L},         -- bottom-left
-                        {x + w, y + h, x + w - L, y + h, x + w, y + h - L} -- bottom-right
+                        {fx, fy, fx + L, fy, fx, fy + L},                           -- top-left
+                        {fx + fw, fy, fx + fw - L, fy, fx + fw, fy + L},           -- top-right
+                        {fx, fy + fh, fx + L, fy + fh, fx, fy + fh - L},           -- bottom-left
+                        {fx + fw, fy + fh, fx + fw - L, fy + fh, fx + fw, fy + fh - L} -- bottom-right
                     }
                     
                     -- Y positions for vertical rainbow gradient
@@ -1198,22 +1176,11 @@ local function updateESP()
                     
                     for i, corner in ipairs(corners) do
                         local c = espObj.Corners[i]
-                        -- Pixel-align corner endpoints for crisp edges matching outline
-                        local x1, y1, x2, y2 = corner[1], corner[2], corner[3], corner[4]
-                        local x3, y3 = corner[5], corner[6]
-                        local f1x, f1y = math.floor(x1 + 0.5), math.floor(y1 + 0.5)
-                        local f2x, f2y = math.floor(x2 + 0.5), math.floor(y2 + 0.5)
-                        local f3x, f3y = math.floor(x3 + 0.5), math.floor(y3 + 0.5)
-                        -- Extend endpoints by one pixel outward to guarantee overlap with side segments
-                        if f2x ~= f1x then f2x = f2x + (f2x > f1x and 1 or -1) end
-                        if f2y ~= f1y then f2y = f2y + (f2y > f1y and 1 or -1) end
-                        if f3x ~= f1x then f3x = f3x + (f3x > f1x and 1 or -1) end
-                        if f3y ~= f1y then f3y = f3y + (f3y > f1y and 1 or -1) end
-                        c.Line1.From = Vector2.new(f1x, f1y)
-                        c.Line1.To = Vector2.new(f2x, f2y)
-                        c.Line2.From = Vector2.new(f1x, f1y)
-                        c.Line2.To = Vector2.new(f3x, f3y)
-                        if ESPSettings.BoxRainbow then
+                        c.Line1.From = Vector2.new(corner[1], corner[2])
+                        c.Line1.To = Vector2.new(corner[3], corner[4])
+                        c.Line2.From = Vector2.new(corner[1], corner[2])
+                        c.Line2.To = Vector2.new(corner[5], corner[6])
+                            if ESPSettings.BoxRainbow then
                             -- Vertical gradient: top corners share one color, bottom corners share another
                             local yProgress = cornerYs[i]
                             c.Line1.Color = getRainbowColor(baseOffset + yProgress * 0.5, "Box")
@@ -1221,9 +1188,9 @@ local function updateESP()
                         else
                             c.Line1.Color, c.Line2.Color = boxColor, boxColor
                         end
-                        c.Line1.Thickness = ESPSettings.Thickness or 1
-                        c.Line2.Thickness = ESPSettings.Thickness or 1
-                        c.Line1.Visible, c.Line2.Visible = true, true
+                            c.Line1.Thickness = ESPSettings.Thickness or 1
+                            c.Line2.Thickness = ESPSettings.Thickness or 1
+                            c.Line1.Visible, c.Line2.Visible = true, true
                     end
                 end
                 else
