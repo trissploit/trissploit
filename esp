@@ -413,7 +413,8 @@ local function getScreenRectForCharacter(char)
                 local padX = math.max(2, math.floor(w * 0.06))
                 h = math.min(vh * 0.95, h + padY * 2)
                 w = math.min(vw * 0.95, w + padX * 2)
-                local cx = (spTop.X + spBottom.X) / 2
+                local spHrp = Camera:WorldToViewportPoint(hrp.Position)
+                local cx = spHrp.Z > 0 and spHrp.X or ((spTop.X + spBottom.X) / 2)
                 local x = cx - w / 2
                 local y = topY - padY
                 return { x = x, y = y, w = w, h = h, cx = cx, cy = y + h/2 }
@@ -555,11 +556,12 @@ local function createESPObject()
     for side = 1, 4 do
         espObj.BoxLines[side] = {}
         for seg = 1, BOX_LINE_SEGMENTS do
-            local line = Drawing.new("Line")
-            line.Thickness = 2
-            line.Visible = false
-            line.ZIndex = 3
-            espObj.BoxLines[side][seg] = line
+            -- Use small filled squares for each segment to avoid 1px alpha seams
+            local sq = Drawing.new("Square")
+            sq.Filled = true
+            sq.Visible = false
+            sq.ZIndex = 3
+            espObj.BoxLines[side][seg] = sq
         end
     end
     
@@ -595,7 +597,7 @@ local function createESPObject()
     espObj.BoxOutline.Visible = false
     espObj.BoxOutline.Thickness = 1
     espObj.BoxOutline.Color = Color3.new(0,0,0)
-    espObj.BoxOutline.ZIndex = 2
+    espObj.BoxOutline.ZIndex = 5
     
     -- Outline square for gradient box rendering (2px thickness)
     espObj.OutlineSquare = Drawing.new("Square")
@@ -603,7 +605,7 @@ local function createESPObject()
     espObj.OutlineSquare.Visible = false
     espObj.OutlineSquare.Thickness = 2
     espObj.OutlineSquare.Color = ESPSettings.BoxColor or Color3.fromRGB(0,170,255)
-    espObj.OutlineSquare.ZIndex = 3
+    espObj.OutlineSquare.ZIndex = 4
     -- Corner filler squares to ensure no missing pixels at corners
     espObj.CornerSquares = {}
     for i = 1, 4 do
@@ -612,7 +614,7 @@ local function createESPObject()
         -- Slightly larger corner filler and higher ZIndex to ensure visibility
         cs.Size = Vector2.new(3, 3)
         cs.Visible = false
-        cs.ZIndex = 6
+        cs.ZIndex = 8
         espObj.CornerSquares[i] = cs
     end
     espObj.Name.Center = true
@@ -841,13 +843,13 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     local segCenter = (segTop + segBottom) * 0.5
                     local t = (segCenter - iy) / math.max(1, ih)
 
-                    -- overlap vertically to avoid 1px gaps
-                    local fromY = segTop - (i > 1 and 1 or 0)
-                    local toY = segBottom + (i < actualSegs and 1 or 0)
-
-                    lineSegs[i].From = Vector2.new(sx, fromY)
-                    lineSegs[i].To = Vector2.new(sx, toY)
-                    lineSegs[i].Thickness = th
+                    -- seg is a filled square used as a thin vertical rectangle
+                    local fromY = segTop - (i > 1 and 0 or 0)
+                    local toY = segBottom + (i < actualSegs and 0 or 0)
+                    local height = toY - fromY + 1
+                    local segX = math.floor(sx - th/2)
+                    lineSegs[i].Size = Vector2.new(th, height)
+                    lineSegs[i].Position = Vector2.new(segX, fromY)
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
@@ -875,12 +877,12 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     local segCenter = (segLeft + segRight) * 0.5
                     local t = (sy - iy) / math.max(1, ih)
 
-                    local fromX = segLeft - (i > 1 and 1 or 0)
-                    local toX = segRight + (i < actualSegs and 1 or 0)
-
-                    lineSegs[i].From = Vector2.new(fromX, sy)
-                    lineSegs[i].To = Vector2.new(toX, sy)
-                    lineSegs[i].Thickness = th
+                    local fromX = segLeft
+                    local toX = segRight
+                    local widthSeg = toX - fromX + 1
+                    local segY = math.floor(sy - th/2)
+                    lineSegs[i].Size = Vector2.new(widthSeg, th)
+                    lineSegs[i].Position = Vector2.new(fromX, segY)
                     lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     lineSegs[i].Transparency = 1
                     lineSegs[i].Visible = true
@@ -991,7 +993,7 @@ end
 
 local function hideBoxLines(espObj)
     for side = 1, 4 do
-        for _, line in ipairs(espObj.BoxLines[side] or {}) do line.Visible = false end
+        for _, seg in ipairs(espObj.BoxLines[side] or {}) do seg.Visible = false end
     end
 end
 
