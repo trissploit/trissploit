@@ -595,7 +595,8 @@ local function createESPObject()
     espObj.BoxOutline.Visible = false
     espObj.BoxOutline.Thickness = 1
     espObj.BoxOutline.Color = Color3.new(0,0,0)
-    espObj.BoxOutline.ZIndex = 2
+    -- Render outline above gradient segments and corner fillers
+    espObj.BoxOutline.ZIndex = 8
     
     -- (Removed duplicated colored outline square - gradient edges are authoritative)
     -- Corner filler squares to ensure no missing pixels at corners
@@ -1392,6 +1393,7 @@ local function updateESP()
                             -- Respect configured outline color and thickness
                             espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or espObj.BoxOutline.Color
                             espObj.BoxOutline.Thickness = math.max(1, tonumber(ESPSettings.Thickness) or espObj.BoxOutline.Thickness)
+                            espObj.BoxOutline.ZIndex = 8
                             espObj.BoxOutline.Visible = true
                         end
                         -- Let drawGradientBox use the shared rainbow/custom gradient system
