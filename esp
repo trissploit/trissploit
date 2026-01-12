@@ -216,18 +216,14 @@ local function getRainbowColor(offset, element)
     local c1 = colors[idx + 1]
     local c2 = colors[(idx + 1) % stops + 1]
 
-    -- Blending: 0 = sharp bands, 1 = smooth gradient
-    -- Use smoothstep with blending factor to control sharpness
-    local blend = ESPSettings.GradientBlending or 0.5
-    if blend >= 1 then
-        -- Full smoothstep for smooth blending
-        frac = frac * frac * (3 - 2 * frac)
-    elseif blend > 0 then
-        -- Mix between linear (sharp) and smoothstep (smooth)
+    -- Gradient blending: 0 = sharp bands (linear), 1 = smooth (smoothstep)
+    local blend = math.clamp(ESPSettings.GradientBlending or 0.5, 0, 1)
+    if blend > 0.01 then
+        -- Apply smoothstep interpolation
         local smooth = frac * frac * (3 - 2 * frac)
-        frac = frac + (smooth - frac) * blend
+        -- Lerp between linear and smoothstep based on blend value
+        frac = frac * (1 - blend) + smooth * blend
     end
-    -- blend = 0 uses linear frac (sharp color bands)
 
     return Color3.new(
         c1.R + (c2.R - c1.R) * frac,
@@ -274,16 +270,24 @@ local function getStaticGradientColor(baseOffset, element)
     
     local colors = pickColorsForElement(element)
     
-    -- Use ONLY baseOffset (no RainbowHue) for static gradient
-    local t = (baseOffset % 1) * stops
-    local idx = math.floor(t) % stops
-    local frac = t - math.floor(t)
+    -- Use baseOffset to pick a color from the gradient
+    -- Map baseOffset (0-1) across all 3 colors
+    local t = (baseOffset % 1) * (stops - 1)
+    local idx = math.floor(t)
+    local frac = t - idx
+    
+    -- Clamp idx to valid range
+    idx = math.max(0, math.min(idx, stops - 2))
     
     local c1 = colors[idx + 1]
-    local c2 = colors[(idx + 1) % stops + 1]
+    local c2 = colors[idx + 2]
     
-    -- Smoothstep interpolation
-    frac = frac * frac * (3 - 2 * frac)
+    -- Apply gradient blending
+    local blend = math.clamp(ESPSettings.GradientBlending or 0.5, 0, 1)
+    if blend > 0.01 then
+        local smooth = frac * frac * (3 - 2 * frac)
+        frac = frac * (1 - blend) + smooth * blend
+    end
     
     return Color3.new(
         c1.R + (c2.R - c1.R) * frac,
@@ -685,32 +689,28 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         return
     end
 
-    -- For smooth gradients: limit segment count to prevent visible bands
-    -- Use fewer segments with larger coverage for smoother appearance
-    -- Max 64 segments gives a good gradient without visible lines
-    local desiredSegs = math.min(64, ih)
-    local segCount = math.min(maxSegs, desiredSegs)
-    
-    -- Calculate segment heights - distribute evenly with 2px overlap
-    local baseH = math.max(2, math.ceil(ih / segCount))
-    segCount = math.ceil(ih / baseH)
+    -- Use more segments for smoother gradients (32 is enough for smooth blending)
+    local segCount = math.min(32, math.max(8, ih))
     segCount = math.min(segCount, maxSegs)
-
+    
+    -- Evenly distribute segments with proper overlap
+    local segHeight = ih / segCount
+    
     for i = 1, segCount do
-        local segTop = iy + (i - 1) * baseH
-        local segBottom = math.min(iy + ih, segTop + baseH + 2) -- 2px overlap
-        local segHeight = math.max(1, segBottom - segTop)
+        local segStart = (i - 1) / segCount
+        local segEnd = i / segCount
+        local segMid = (segStart + segEnd) * 0.5
         
-        -- Color based on segment center position
-        local segCenter = segTop + segHeight * 0.5
-        local t = (segCenter - iy) / math.max(1, ih)
-        local segColor = getRainbowColor(baseOffset + t * 0.5, element)
+        -- Position with 1px overlap
+        local yPos = iy + math.floor(segStart * ih)
+        local height = math.ceil(segEnd * ih) - math.floor(segStart * ih) + 1
         
-        -- Get interpolated transparency for this position
-        local segTransparency = getGradientTransparency(t, element)
+        -- Color and transparency based on segment center
+        local segColor = getRainbowColor(baseOffset + segMid * 0.5, element)
+        local segTransparency = getGradientTransparency(segMid, element)
 
-        segments[i].Size = Vector2.new(iw, segHeight)
-        segments[i].Position = Vector2.new(ix, segTop)
+        segments[i].Size = Vector2.new(iw, height)
+        segments[i].Position = Vector2.new(ix, yPos)
         segments[i].Color = segColor
         segments[i].Transparency = segTransparency
         segments[i].Visible = true
@@ -950,8 +950,8 @@ local function updateESP()
             if ESPSettings.Enabled then
                 -- Hide all text objects first to prevent leftover visibility
                 espObj.Name.Visible = false
-                espObj.HealthText.Visible = false
-                espObj.DistanceText.Visible = false
+                if espObj.HealthText then espObj.HealthText.Visible = false end
+                if espObj.DistanceText then espObj.DistanceText.Visible = false end
                 
                 -- Text: render Name, Health and Distance as separate Drawing.Text objects so
                 -- each can be positioned independently and receive per-element rainbow colors.
@@ -1749,44 +1749,26 @@ local function updateFOVCircle()
     -- Fill circle with improved rendering
     if ESPSettings.FOVCircleFilled then
         if ESPSettings.FOVCircleFillRainbow then
-            -- For rainbow fill: Use a solid base circle + gradient ring overlay
-            -- This avoids the cross/triangle overlap artifacts
+            -- Use triangle segments for rainbow fill - properly overlapped
+            FOVCircleFill.Visible = false
             
-            -- First, draw a solid fill as the base (no transparency issues)
-            FOVCircleFill.Position = center
-            FOVCircleFill.Radius = radius
-            FOVCircleFill.NumSides = segments
-            -- Use the average/middle color of the gradient as base
-            FOVCircleFill.Color = getRainbowColor(0.5, "FOV")
-            FOVCircleFill.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
-            FOVCircleFill.Filled = true
-            FOVCircleFill.Visible = true
-            
-            -- Now overlay thin ring segments for gradient effect at the edge
-            local ringWidth = math.max(radius * 0.3, 10) -- Inner ring for gradient
-            local innerR = radius - ringWidth
-            local outerR = radius + 1
-            
+            -- Use larger overlap to eliminate gaps
+            local overlapAngle = 0.015 -- Small angle overlap
             for i = 1, segments do
-                local angle1 = ((i - 1) / segments) * math.pi * 2
-                local angle2 = (i / segments) * math.pi * 2
-                -- Slight overlap to avoid seams
-                local overlapAngle = 0.02
-                angle1 = angle1 - overlapAngle
-                angle2 = angle2 + overlapAngle
+                local angle1 = ((i - 1) / segments) * math.pi * 2 - overlapAngle
+                local angle2 = (i / segments) * math.pi * 2 + overlapAngle
 
-                -- Create quad-like shape using inner/outer radius (not center)
-                local outerP1 = center + Vector2.new(math.cos(angle1) * outerR, math.sin(angle1) * outerR)
-                local outerP2 = center + Vector2.new(math.cos(angle2) * outerR, math.sin(angle2) * outerR)
-                local innerP1 = center + Vector2.new(math.cos(angle1) * innerR, math.sin(angle1) * innerR)
+                local p1 = center + Vector2.new(math.cos(angle1) * radius, math.sin(angle1) * radius)
+                local p2 = center + Vector2.new(math.cos(angle2) * radius, math.sin(angle2) * radius)
 
                 local seg = FOVFillGradientSegments[i]
-                seg.PointA = innerP1
-                seg.PointB = outerP1
-                seg.PointC = outerP2
+                seg.PointA = center
+                seg.PointB = p1
+                seg.PointC = p2
                 seg.Filled = true
                 seg.Transparency = 1 - (ESPSettings.FOVCircleFillTransparency or 0.8)
 
+                -- Use mid-angle for smooth color distribution
                 local t = (i - 0.5) / segments
                 seg.Color = getRainbowColor(t, "FOV")
                 seg.Visible = true
