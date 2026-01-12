@@ -752,13 +752,14 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         -- Color uses existing rainbow/custom logic (respects GradientBlending & RainbowSpeed)
         local segColor = getRainbowColor(baseOffset + t * 0.5, element)
 
-        -- Transparency: prefer per-color transparencies when available (sliders)
-        -- `getGradientTransparency` returns per-stop transparency for BoxFill when set
-        local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
-        if segTrans == nil then
-            -- Fall back to uniform transparency (e.g. BoxFillTransparency) when no
-            -- per-color transparencies are defined by the UI sliders.
+        -- Transparency: for BoxFill use the provided uniform transparency to avoid
+        -- visible half/overlap artifacts; other elements may use per-color transparency.
+        local segTrans
+        if element == "BoxFill" then
             segTrans = transparency or 0.5
+        else
+            segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
+            if segTrans == nil then segTrans = transparency or 0.5 end
         end
 
         -- Overlap segments to avoid 1px seams, but disable overlap for BoxFill
@@ -1050,11 +1051,10 @@ local function updateESP()
             -- Normalize world Y to 0-1 range (assuming typical world height 0-500)
             local baseOffset = (worldY % 500) / 500
             
-            -- For box gradients prefer explicit custom colors set by the UI;
-            -- fall back to rainbow-generated colors when not present.
-            local topColor = ESPSettings.BoxCustomColor1 or getRainbowColor(baseOffset, "Box")                    -- Top of box
-            local centerColor = ESPSettings.BoxCustomColor2 or getRainbowColor(baseOffset + 0.25, "Chams")          -- Center of box
-            local bottomColor = ESPSettings.BoxCustomColor3 or getRainbowColor(baseOffset + 0.5, "Tracer")           -- Bottom of box
+            -- For non-box elements, use their Y position relative to box
+            local topColor = getRainbowColor(baseOffset, "Box")                    -- Top of box
+            local centerColor = getRainbowColor(baseOffset + 0.25, "Chams")          -- Center of box
+            local bottomColor = getRainbowColor(baseOffset + 0.5, "Tracer")           -- Bottom of box
             
             local boxColor = topColor
             -- Tracer ends at bottom of box, so use bottom color (always gradient)
