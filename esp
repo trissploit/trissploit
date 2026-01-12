@@ -1381,21 +1381,11 @@ local function updateESP()
                     
                     if ESPSettings.BoxType == "Square" then
                         -- Always draw gradient box with black outline
-                        if espObj.BoxOutline then
-                            -- Outer black outline slightly larger so inner colored outline doesn't fully cover it
-                            espObj.BoxOutline.Size = Vector2.new(iw + 4, ih + 4)
-                            espObj.BoxOutline.Position = Vector2.new(ix - 2, iy - 2)
-                            espObj.BoxOutline.Visible = true
-                        end
+                        -- No outlines: draw only the gradient box segments
                         drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, topColor, bottomColor)
-                        if espObj.OutlineSquare then
-                            -- Inner colored outline (drawn atop the black outer outline)
-                            espObj.OutlineSquare.Size = Vector2.new(iw + 2, ih + 2)
-                            espObj.OutlineSquare.Position = Vector2.new(ix - 1, iy - 1)
-                            espObj.OutlineSquare.Color = boxColor or (ESPSettings.BoxColor or Color3.fromRGB(0,170,255))
-                            espObj.OutlineSquare.Thickness = 2
-                            espObj.OutlineSquare.Visible = true
-                        end
+                        -- Ensure legacy outline objects remain hidden
+                        if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
+                        if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                     else
                         -- Corner box - always gradient
@@ -1711,20 +1701,17 @@ local function updateObjectESP()
                 end
                 
                 -- Box
-                if config.ShowBox then
-                    -- Outer black outline slightly larger
-                    espObj.BoxOutline.Size = Vector2.new(rect.w + 4, rect.h + 4)
-                    espObj.BoxOutline.Position = Vector2.new(rect.x - 2, rect.y - 2)
-                    espObj.BoxOutline.Visible = true
-                    
-                    espObj.Box.Size = Vector2.new(rect.w + 2, rect.h + 2)
-                    espObj.Box.Position = Vector2.new(rect.x - 1, rect.y - 1)
-                    espObj.Box.Color = color
-                    espObj.Box.Visible = true
-                else
-                    espObj.Box.Visible = false
-                    espObj.BoxOutline.Visible = false
-                end
+                    if config.ShowBox then
+                        -- Draw only the colored box (no outlines)
+                        espObj.Box.Size = Vector2.new(rect.w, rect.h)
+                        espObj.Box.Position = Vector2.new(rect.x, rect.y)
+                        espObj.Box.Color = color
+                        espObj.Box.Visible = true
+                        espObj.BoxOutline.Visible = false
+                    else
+                        espObj.Box.Visible = false
+                        espObj.BoxOutline.Visible = false
+                    end
                 
                 -- Tracer
                 if config.ShowTracer then
