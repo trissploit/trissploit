@@ -809,6 +809,11 @@ local function updateESP()
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
 
             if ESPSettings.Enabled then
+                -- Hide all text objects first to prevent leftover visibility
+                espObj.Name.Visible = false
+                espObj.HealthText.Visible = false
+                espObj.DistanceText.Visible = false
+                
                 -- Text: render Name, Health and Distance as separate Drawing.Text objects so
                 -- each can be positioned independently and receive per-element rainbow colors.
                 local topList, bottomList, leftList, rightList = {}, {}, {}, {}
@@ -1263,25 +1268,26 @@ local function updateESP()
 
                     -- Health bar rendering with optimized gradient for rainbow
                     if ESPSettings.HealthBarRainbow then
-                        -- Use gradient segments for smooth rainbow blend
+                        -- Use gradient segments for smooth rainbow blend - MUST match normal health bar size
                         espObj.HealthBar.Visible = false
                         local segs = espObj.HealthBarGradient
                         local maxSegs = #segs
                         local isVertical = (pos == "Left" or pos == "Right")
                         
                         if isVertical then
-                            -- Vertical health bar - gradient goes down
+                            -- Vertical health bar - use FULL bar dimensions, then clip to health ratio
+                            local ibarH = math.floor(barH)
+                            local ibarW = math.floor(barW)
+                            local ibarX = math.floor(barX)
+                            local ibarY = math.floor(barY)
                             local ifillH = math.floor(fillH)
-                            local ifillW = math.floor(fillW)
-                            local ifillX = math.floor(fillX)
-                            local ifillY = math.floor(fillY)
                             
-                            if ifillH <= 0 or ifillW <= 0 then
+                            if ifillH <= 0 or ibarW <= 0 then
                                 for i = 1, maxSegs do segs[i].Visible = false end
                             else
                                 local segCount = math.clamp(math.floor(ifillH / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, ifillH))
 
-                                -- Use exact integer pixel distribution
+                                -- Use exact integer pixel distribution over fill height
                                 for i = 1, segCount do
                                     local pixelStart = math.floor((i - 1) * ifillH / segCount)
                                     local pixelEnd = (i == segCount) and ifillH or math.floor(i * ifillH / segCount)
@@ -1289,8 +1295,8 @@ local function updateESP()
                                     
                                     local t = (i - 0.5) / segCount
                                     local segColor = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-                                    segs[i].Size = Vector2.new(ifillW, pixelHeight)
-                                    segs[i].Position = Vector2.new(ifillX, ifillY + pixelStart)
+                                    segs[i].Size = Vector2.new(ibarW, pixelHeight)
+                                    segs[i].Position = Vector2.new(ibarX, ibarY + ibarH - ifillH + pixelStart)
                                     segs[i].Color = segColor
                                     segs[i].Transparency = 1
                                     segs[i].Visible = true
@@ -1301,18 +1307,19 @@ local function updateESP()
                                 end
                             end
                         else
-                            -- Horizontal health bar - gradient goes across
+                            -- Horizontal health bar - use FULL bar dimensions, then clip to health ratio
+                            local ibarW = math.floor(barW)
+                            local ibarH = math.floor(barH)
+                            local ibarX = math.floor(barX)
+                            local ibarY = math.floor(barY)
                             local ifillW = math.floor(fillW)
-                            local ifillH = math.floor(fillH)
-                            local ifillX = math.floor(fillX)
-                            local ifillY = math.floor(fillY)
                             
-                            if ifillW <= 0 or ifillH <= 0 then
+                            if ifillW <= 0 or ibarH <= 0 then
                                 for i = 1, maxSegs do segs[i].Visible = false end
                             else
                                 local segCount = math.clamp(math.floor(ifillW / 2), MIN_GRADIENT_SEGMENTS, math.min(maxSegs, ifillW))
 
-                                -- Use exact integer pixel distribution
+                                -- Use exact integer pixel distribution over fill width
                                 for i = 1, segCount do
                                     local pixelStart = math.floor((i - 1) * ifillW / segCount)
                                     local pixelEnd = (i == segCount) and ifillW or math.floor(i * ifillW / segCount)
@@ -1320,8 +1327,8 @@ local function updateESP()
                                     
                                     local t = (i - 0.5) / segCount
                                     local segColor = getRainbowColor(baseOffset + t * 0.5, "HealthBar")
-                                    segs[i].Size = Vector2.new(pixelWidth, ifillH)
-                                    segs[i].Position = Vector2.new(ifillX + pixelStart, ifillY)
+                                    segs[i].Size = Vector2.new(pixelWidth, ibarH)
+                                    segs[i].Position = Vector2.new(ibarX + pixelStart, ibarY)
                                     segs[i].Color = segColor
                                     segs[i].Transparency = 1
                                     segs[i].Visible = true
