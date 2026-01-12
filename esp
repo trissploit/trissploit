@@ -28,7 +28,6 @@ local RainbowHue = 0
 local ESPSettings = {
     Enabled = true,
     MaxDistance = 1500,
-    TextSize = 14,
     
     -- Filtering settings
     FilterMode = "All", -- "All", "Whitelist", "Blacklist"
@@ -70,6 +69,9 @@ local ESPSettings = {
     NameRainbow = false,
     HealthTextRainbow = false,
     DistanceRainbow = false,
+    
+    -- Custom text entry builder: add entries to TextEntries table
+    -- Example: TextEntries.Armor = { Enabled = true, Order = 4, GetText = function(player, char, hum, dist) return "Armor: 100" end }
     
     -- Rainbow settings (per element)
     RainbowSpeed = 1,
@@ -113,7 +115,7 @@ local ESPSettings = {
     BoxType = "Square",
     BoxColor = Color3.fromRGB(0, 170, 255),
     BoxRainbow = false,
-    Thickness = 3,
+    Thickness = 2,
     BoxOutlineColor = Color3.new(0, 0, 0),
     
     -- Box fill settings
@@ -132,10 +134,14 @@ local ESPSettings = {
     -- Health bar settings
     HealthBarEnabled = true,
     HealthBarPosition = "Left",
-    HealthBarThickness = 3,
+    HealthBarThickness = 6,
     HealthBarOutline = true,
     HealthBarOutlineColor = Color3.new(0, 0, 0),
     HealthBarRainbow = false,
+    
+    -- Text settings
+    TextFont = 2, -- 0=Legacy, 1=Arial, 2=SourceSans, 3=RobotoMono
+    UseDisplayName = false, -- true = display name, false = username
     
     -- Chams settings
     Highlight = true,
@@ -480,8 +486,8 @@ local function createESPObject()
             espObj.EquippedText.Center = true
             espObj.EquippedText.Outline = true
             espObj.EquippedText.OutlineColor = Color3.new(0,0,0)
-            espObj.EquippedText.Size = ESPSettings.TextSize
-            espObj.EquippedText.Font = 3
+            espObj.EquippedText.Size = 13
+            espObj.EquippedText.Font = ESPSettings.TextFont or 2
             espObj.EquippedText.Visible = false
     
             local okImg, img = pcall(function() return Drawing.new("Image") end)
@@ -500,24 +506,24 @@ local function createESPObject()
     espObj.Name.Center = true
     espObj.Name.Outline = true
     espObj.Name.OutlineColor = Color3.new(0,0,0)
-    espObj.Name.Size = ESPSettings.TextSize
-    espObj.Name.Font = 3
+    espObj.Name.Size = 13
+    espObj.Name.Font = ESPSettings.TextFont or 2
     espObj.Name.Visible = false
     -- Separate text objects for Name / Health / Distance (so they can be positioned independently)
     espObj.HealthText = Drawing.new("Text")
     espObj.HealthText.Center = true
     espObj.HealthText.Outline = true
     espObj.HealthText.OutlineColor = Color3.new(0,0,0)
-    espObj.HealthText.Size = ESPSettings.TextSize
-    espObj.HealthText.Font = 3
+    espObj.HealthText.Size = 13
+    espObj.HealthText.Font = ESPSettings.TextFont or 2
     espObj.HealthText.Visible = false
 
     espObj.DistanceText = Drawing.new("Text")
     espObj.DistanceText.Center = true
     espObj.DistanceText.Outline = true
     espObj.DistanceText.OutlineColor = Color3.new(0,0,0)
-    espObj.DistanceText.Size = ESPSettings.TextSize
-    espObj.DistanceText.Font = 3
+    espObj.DistanceText.Size = 13
+    espObj.DistanceText.Font = ESPSettings.TextFont or 2
     espObj.DistanceText.Visible = false
     
     espObj.Tracer.Thickness = ESPSettings.TracerThickness
@@ -808,7 +814,8 @@ local function updateESP()
                 local topList, bottomList, leftList, rightList = {}, {}, {}, {}
 
                 if ESPSettings.ShowName then
-                    table.insert((ESPSettings.NamePosition or "Top") == "Top" and topList or (ESPSettings.NamePosition == "Bottom" and bottomList or (ESPSettings.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = player.Name})
+                    local nameText = ESPSettings.UseDisplayName and player.DisplayName or player.Name
+                    table.insert((ESPSettings.NamePosition or "Top") == "Top" and topList or (ESPSettings.NamePosition == "Bottom" and bottomList or (ESPSettings.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = nameText})
                 end
                 if ESPSettings.ShowHealthText then
                     table.insert((ESPSettings.HealthTextPosition or "Top") == "Top" and topList or (ESPSettings.HealthTextPosition == "Bottom" and bottomList or (ESPSettings.HealthTextPosition == "Left" and leftList or rightList)), {key = "Health", text = math.floor(hum.Health) .. "HP"})
@@ -829,14 +836,13 @@ local function updateESP()
                 end
 
                 -- Positioning helpers
-                local lineHeight = (ESPSettings.TextSize or 14) + 4
+                local lineHeight = 17 -- Fixed line height for consistent spacing
 
                 -- Helper to detect collisions of multiple items in same anchor; when multiple
-                -- items (eg Name+Health) share the same anchor we fall back to the old combined
-                -- single-line behavior to preserve spacing and avoid overlap.
+                -- items share the same anchor use the | combined system for clean display
                 local function shouldCombine(list, anchor)
-                    -- Only use combined single-line fallback for Top anchor (preserves old UX)
-                    return anchor == "Top" and list and #list > 1
+                    -- Use combined single-line for Top and Bottom anchors (cleaner UX)
+                    return (anchor == "Top" or anchor == "Bottom") and list and #list > 1
                 end
 
                 local function renderCombined(list, anchor)
@@ -861,7 +867,8 @@ local function updateESP()
                         x = math.floor(rect.x + rect.w + 6)
                     end
                     espObj.Name.Center = (anchor == "Top" or anchor == "Bottom")
-                    espObj.Name.Size = ESPSettings.TextSize
+                    espObj.Name.Size = 13
+                    espObj.Name.Font = ESPSettings.TextFont or 2
                     espObj.Name.Text = combined
                     espObj.Name.Position = Vector2.new(x, y)
                     espObj.Name.Color = ESPSettings.NameColor
@@ -890,7 +897,8 @@ local function updateESP()
                             if item.key == "Name" then
                                 col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = true
-                                espObj.Name.Size = ESPSettings.TextSize
+                                espObj.Name.Size = 13
+                                espObj.Name.Font = ESPSettings.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -898,7 +906,8 @@ local function updateESP()
                             elseif item.key == "Health" then
                                 col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = true
-                                espObj.HealthText.Size = ESPSettings.TextSize
+                                espObj.HealthText.Size = 13
+                                espObj.HealthText.Font = ESPSettings.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -906,7 +915,8 @@ local function updateESP()
                             elseif item.key == "Distance" then
                                 col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = true
-                                espObj.DistanceText.Size = ESPSettings.TextSize
+                                espObj.DistanceText.Size = 13
+                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -921,7 +931,8 @@ local function updateESP()
                             if item.key == "Name" then
                                 col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = true
-                                espObj.Name.Size = ESPSettings.TextSize
+                                espObj.Name.Size = 13
+                                espObj.Name.Font = ESPSettings.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -929,7 +940,8 @@ local function updateESP()
                             elseif item.key == "Health" then
                                 col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = true
-                                espObj.HealthText.Size = ESPSettings.TextSize
+                                espObj.HealthText.Size = 13
+                                espObj.HealthText.Font = ESPSettings.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -937,7 +949,8 @@ local function updateESP()
                             elseif item.key == "Distance" then
                                 col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = true
-                                espObj.DistanceText.Size = ESPSettings.TextSize
+                                espObj.DistanceText.Size = 13
+                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -955,7 +968,8 @@ local function updateESP()
                             if item.key == "Name" then
                                 col = ESPSettings.NameRainbow and getRainbowColor(0 + baseOffset, "Name") or (ESPSettings.NameCustomColor1 or ESPSettings.NameColor)
                                 espObj.Name.Center = false
-                                espObj.Name.Size = ESPSettings.TextSize
+                                espObj.Name.Size = 13
+                                espObj.Name.Font = ESPSettings.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -963,7 +977,8 @@ local function updateESP()
                             elseif item.key == "Health" then
                                 col = ESPSettings.HealthTextRainbow and getRainbowColor(0 + baseOffset, "HealthBar") or (ESPSettings.HealthTextCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.HealthText.Center = false
-                                espObj.HealthText.Size = ESPSettings.TextSize
+                                espObj.HealthText.Size = 13
+                                espObj.HealthText.Font = ESPSettings.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -971,7 +986,8 @@ local function updateESP()
                             elseif item.key == "Distance" then
                                 col = ESPSettings.DistanceRainbow and getRainbowColor(0 + baseOffset, "Tracer") or (ESPSettings.DistanceCustomColor1 or Color3.fromRGB(255,255,255))
                                 espObj.DistanceText.Center = false
-                                espObj.DistanceText.Size = ESPSettings.TextSize
+                                espObj.DistanceText.Size = 13
+                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -993,7 +1009,8 @@ local function updateESP()
                         y = y - ESPSettings.HealthBarThickness - 4
                     end
                     espObj.Name.Center = true
-                    espObj.Name.Size = ESPSettings.TextSize
+                    espObj.Name.Size = 13
+                    espObj.Name.Font = ESPSettings.TextFont or 2
                     espObj.Name.Text = customTopConcat
                     espObj.Name.Position = Vector2.new(math.floor(rect.cx), y)
                     espObj.Name.Color = ESPSettings.NameColor
@@ -1044,7 +1061,8 @@ local function updateESP()
                         else
                             espObj.EquippedText.Position = Vector2.new(math.floor(rect.cx), math.floor(rect.y + rect.h + 12))
                             espObj.EquippedText.Color = nameColor
-                            espObj.EquippedText.Size = ESPSettings.TextSize
+                            espObj.EquippedText.Size = 13
+                            espObj.EquippedText.Font = ESPSettings.TextFont or 2
                             espObj.EquippedText.Visible = true
                         end
                     end
@@ -1207,36 +1225,36 @@ local function updateESP()
                 local barX, barY, barW, barH, fillX, fillY, fillW, fillH
                 local isVertical = (pos == "Left" or pos == "Right")
                     
-                    -- Use actual box dimensions - no arbitrary clamping
+                    -- Use actual box dimensions - health bar 4 pixels away from box
                     if pos == "Left" then
-                        barX, barY = x - thickness - 2, y
+                        barX, barY = x - thickness - 4, y
                         barW, barH = thickness, h
-                        fillW = thickness - 2
+                        fillW = math.max(1, thickness - 2)
                         fillH = math.max(1, math.floor(h * ratio))
                         fillX, fillY = barX + 1, y + h - fillH
                     elseif pos == "Right" then
-                        barX, barY = x + w + 2, y
+                        barX, barY = x + w + 4, y
                         barW, barH = thickness, h
-                        fillW = thickness - 2
+                        fillW = math.max(1, thickness - 2)
                         fillH = math.max(1, math.floor(h * ratio))
                         fillX, fillY = barX + 1, y + h - fillH
                     elseif pos == "Top" then
-                        barX, barY = x, y - thickness - 2
+                        barX, barY = x, y - thickness - 4
                         barW, barH = w, thickness
                         fillW = math.max(1, math.floor(w * ratio))
-                        fillH = thickness - 2
+                        fillH = math.max(1, thickness - 2)
                         fillX, fillY = x, barY + 1
                     else -- Bottom
-                        barX, barY = x, y + h + 2
+                        barX, barY = x, y + h + 4
                         barW, barH = w, thickness
                         fillW = math.max(1, math.floor(w * ratio))
-                        fillH = thickness - 2
+                        fillH = math.max(1, thickness - 2)
                         fillX, fillY = x, barY + 1
                     end
 
                     if ESPSettings.HealthBarOutline then
-                        espObj.HealthBarOutline.Size = Vector2.new(barW, barH)
-                        espObj.HealthBarOutline.Position = Vector2.new(barX, barY)
+                        espObj.HealthBarOutline.Size = Vector2.new(barW + 2, barH + 2)
+                        espObj.HealthBarOutline.Position = Vector2.new(barX - 1, barY - 1)
                         espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
                         espObj.HealthBarOutline.Visible = true
                     else
@@ -1416,8 +1434,8 @@ local function addObjectToESP(configName, obj, displayName)
     espObj.Name.Center = true
     espObj.Name.Outline = true
     espObj.Name.OutlineColor = Color3.new(0, 0, 0)
-    espObj.Name.Size = ESPSettings.TextSize
-    espObj.Name.Font = 3
+    espObj.Name.Size = 13
+    espObj.Name.Font = ESPSettings.TextFont or 2
     espObj.Name.Visible = false
     
     espObj.Box.Thickness = 1
@@ -2011,14 +2029,15 @@ end
     SETTINGS (access via ESP.Settings.SETTING_NAME):
         Enabled = true/false                    -- Master toggle
         MaxDistance = 1500                      -- Max render distance
-        TextSize = 14                           -- Text size
+        TextFont = 2                            -- Font (0=Legacy, 1=Arial, 2=SourceSans, 3=RobotoMono)
+        UseDisplayName = false                  -- Use display name instead of username
         
         -- Boxes
         Boxes = true/false                      -- Enable boxes
         BoxType = "Square" / "Corner"           -- Box type
         BoxColor = Color3                       -- Box color
         BoxRainbow = true/false                 -- Rainbow boxes
-        Thickness = 3                           -- Line thickness
+        Thickness = 2                           -- Box line thickness (hardcoded)
         BoxFill = true/false                    -- Enable fill
         BoxFillColor = Color3                   -- Fill color
         BoxFillRainbow = true/false             -- Rainbow fill
@@ -2037,7 +2056,7 @@ end
         -- Health Bar
         HealthBarEnabled = true/false           -- Enable health bar
         HealthBarPosition = "Left"/"Right"/"Top"/"Bottom"
-        HealthBarThickness = 3                  -- Bar thickness
+        HealthBarThickness = 6                  -- Bar thickness (hardcoded)
         HealthBarRainbow = true/false           -- Rainbow health bar
         HealthBarOutline = true/false           -- Show outline
         HealthBarOutlineColor = Color3          -- Outline color
