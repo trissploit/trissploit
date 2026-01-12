@@ -134,7 +134,7 @@ local ESPSettings = {
     -- Health bar settings
     HealthBarEnabled = true,
     HealthBarPosition = "Left",
-    HealthBarThickness = 6,
+    HealthBarThickness = 4,
     HealthBarOutline = true,
     HealthBarOutlineColor = Color3.new(0, 0, 0),
     HealthBarRainbow = false,
@@ -484,6 +484,7 @@ local function createESPObject()
             espObj.EquippedText.Size = 13
             espObj.EquippedText.Font = ESPSettings.TextFont or 2
             espObj.EquippedText.Visible = false
+            espObj.EquippedText.ZIndex = 999
     
             local okImg, img = pcall(function() return Drawing.new("Image") end)
             if okImg and img then
@@ -505,6 +506,7 @@ local function createESPObject()
     espObj.Name.Size = 13
     espObj.Name.Font = ESPSettings.TextFont or 2
     espObj.Name.Visible = false
+    espObj.Name.ZIndex = 999
     -- Separate text objects for Name / Health / Distance (so they can be positioned independently)
     espObj.HealthText = Drawing.new("Text")
     espObj.HealthText.Center = true
@@ -513,6 +515,7 @@ local function createESPObject()
     espObj.HealthText.Size = 13
     espObj.HealthText.Font = ESPSettings.TextFont or 2
     espObj.HealthText.Visible = false
+    espObj.HealthText.ZIndex = 999
 
     espObj.DistanceText = Drawing.new("Text")
     espObj.DistanceText.Center = true
@@ -521,6 +524,7 @@ local function createESPObject()
     espObj.DistanceText.Size = 13
     espObj.DistanceText.Font = ESPSettings.TextFont or 2
     espObj.DistanceText.Visible = false
+    espObj.DistanceText.ZIndex = 999
     
     espObj.Tracer.Thickness = ESPSettings.TracerThickness
     espObj.Tracer.Visible = false
@@ -613,9 +617,11 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         return
     end
 
-    -- Determine how many segments we can use and their pixel coverage.
+    -- Determine how many segments we should use to avoid visible banding at large sizes.
     local totalRows = ih
-    local segCount = math.min(maxSegs, totalRows)
+    local desiredPixelPerSegment = 4 -- aim for ~4px per gradient segment for smoothness
+    local segCount = math.min(maxSegs, math.max(MIN_GRADIENT_SEGMENTS, math.floor(totalRows / desiredPixelPerSegment)))
+    segCount = math.max(1, math.min(segCount, totalRows))
     local baseH = math.floor(totalRows / segCount)
     local remainder = totalRows - baseH * segCount
 
@@ -755,9 +761,11 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
     end
     
     if isVertical then
-        -- Vertical bar: allow segmentation to cover entire height even when iw/ih > pool
+        -- Vertical bar: reduce segmentation density for smoothness at large sizes
         local totalRows = ih
-        local segCount = math.min(maxSegs, totalRows)
+        local desiredPixelPerSegment = 4
+        local segCount = math.min(maxSegs, math.max(MIN_GRADIENT_SEGMENTS, math.floor(totalRows / desiredPixelPerSegment)))
+        segCount = math.max(1, math.min(segCount, totalRows))
         local baseH = math.floor(totalRows / segCount)
         local remainder = totalRows - baseH * segCount
         local curY = iy
@@ -779,9 +787,11 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
 
         for i = segCount + 1, maxSegs do segs[i].Visible = false end
     else
-        -- Horizontal bar: allow segmentation to cover entire width
+        -- Horizontal bar: reduce segmentation density for smoothness at large sizes
         local totalCols = iw
-        local segCount = math.min(maxSegs, totalCols)
+        local desiredPixelPerSegment = 4
+        local segCount = math.min(maxSegs, math.max(MIN_GRADIENT_SEGMENTS, math.floor(totalCols / desiredPixelPerSegment)))
+        segCount = math.max(1, math.min(segCount, totalCols))
         local baseW = math.floor(totalCols / segCount)
         local remainder = totalCols - baseW * segCount
         local curX = ix
@@ -1440,6 +1450,7 @@ local function addObjectToESP(configName, obj, displayName)
     espObj.Name.Size = 13
     espObj.Name.Font = ESPSettings.TextFont or 2
     espObj.Name.Visible = false
+    espObj.Name.ZIndex = 999
     
     espObj.Box.Thickness = 1
     espObj.Box.Filled = false
