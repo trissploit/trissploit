@@ -416,7 +416,7 @@ end
 -- Segments are precisely positioned with NO overlap to prevent transparency artifacts.
 local MAX_GRADIENT_SEGMENTS = 500  -- Reduced from 2000 for better performance
 local MIN_GRADIENT_SEGMENTS = 10   -- Minimum segments for very small boxes
-local BOX_LINE_SEGMENTS = 50       -- Reduced from 100 for better performance
+local BOX_LINE_SEGMENTS = 400      -- Increased to allow per-pixel segments for long box edges (improves rainbow sharpness)
 
 local function createESPObject()
     local espObj = {
@@ -1168,12 +1168,14 @@ local function updateESP()
                     if espObj.OutlineSquare then espObj.OutlineSquare.Visible = false end
                     hideBoxLines(espObj)
                     
-                    local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
+                    -- Horizontal corner length (small L). Vertical lines are extended to half box height
+                    local Lh = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
+                    local Lv = math.clamp(math.floor(h * 0.5), Lh, math.floor(h))
                     local corners = {
-                        {x, y, x + L, y, x, y + L},                     -- top-left
-                        {x + w, y, x + w - L, y, x + w, y + L},         -- top-right
-                        {x, y + h, x + L, y + h, x, y + h - L},         -- bottom-left
-                        {x + w, y + h, x + w - L, y + h, x + w, y + h - L} -- bottom-right
+                        {x, y, x + Lh, y, x, y + Lv},                     -- top-left
+                        {x + w, y, x + w - Lh, y, x + w, y + Lv},         -- top-right
+                        {x, y + h, x + Lh, y + h, x, y + h - Lv},         -- bottom-left
+                        {x + w, y + h, x + w - Lh, y + h, x + w, y + h - Lv} -- bottom-right
                     }
                     
                     -- Y positions for vertical rainbow gradient
