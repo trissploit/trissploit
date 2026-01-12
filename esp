@@ -752,15 +752,13 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         -- Color uses existing rainbow/custom logic (respects GradientBlending & RainbowSpeed)
         local segColor = getRainbowColor(baseOffset + t * 0.5, element)
 
-        -- Transparency: prefer per-color transparency interpolation if available
-        -- For BoxFill we use the per-stop transparencies (from colorpicker sliders)
+        -- Transparency: use per-color transparency where available, fallback to uniform
         local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
         if segTrans == nil then segTrans = transparency or 0.5 end
 
-        -- Overlap segments to avoid 1px seams; disable overlap for BoxFill to avoid
-        -- double-draw alpha blending artifacts (we rely on per-stop transparency instead).
-        local overlapTop = (element ~= "BoxFill" and i > 1) and 1 or 0
-        local overlapBottom = (element ~= "BoxFill" and i < segCount) and 1 or 0
+        -- Overlap segments to avoid 1px seams
+        local overlapTop = (i > 1) and 1 or 0
+        local overlapBottom = (i < segCount) and 1 or 0
 
         local fromY = segTop - overlapTop
         local toY = segBottom + overlapBottom
