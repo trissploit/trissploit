@@ -803,7 +803,8 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local segTrans
         if transStops and #transStops >= 3 then
             local stops = 3
-            local tt = ((RainbowHue + baseOffset + t * 0.5) % 1) * stops
+            local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
+            local tt = ((RainbowHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
             local idx = math.floor(tt) % stops
             local frac = tt - math.floor(tt)
             frac = frac * frac * (3 - 2 * frac)
