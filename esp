@@ -601,7 +601,7 @@ local function createESPObject()
     espObj.OutlineLines = {}
     for i = 1, 4 do
         local l = Drawing.new("Line")
-        l.Thickness = 1
+        l.Thickness = 0.5
         l.Visible = false
         l.ZIndex = 9
         espObj.OutlineLines[i] = l
@@ -1474,40 +1474,32 @@ local function updateESP()
                         if espObj.OutlineLines then
                             local col = boxOutlineColor or Color3.new(0,0,0)
                             -- top
-                            espObj.OutlineLines[1].From = Vector2.new(ix - 0.5, iy - 0.5)
-                            espObj.OutlineLines[1].To = Vector2.new(right + 0.5, iy - 0.5)
+                            espObj.OutlineLines[1].From = Vector2.new(ix + 0.5, iy + 0.5)
+                            espObj.OutlineLines[1].To = Vector2.new(right - 0.5, iy + 0.5)
                             espObj.OutlineLines[1].Color = col
-                            espObj.OutlineLines[1].Thickness = 1
+                            espObj.OutlineLines[1].Thickness = 0.5
                             espObj.OutlineLines[1].Visible = true
                             -- right
-                            espObj.OutlineLines[2].From = Vector2.new(right + 0.5, iy - 0.5)
-                            espObj.OutlineLines[2].To = Vector2.new(right + 0.5, bottom + 0.5)
+                            espObj.OutlineLines[2].From = Vector2.new(right - 0.5, iy + 0.5)
+                            espObj.OutlineLines[2].To = Vector2.new(right - 0.5, bottom - 0.5)
                             espObj.OutlineLines[2].Color = col
-                            espObj.OutlineLines[2].Thickness = 1
+                            espObj.OutlineLines[2].Thickness = 0.5
                             espObj.OutlineLines[2].Visible = true
                             -- bottom
-                            espObj.OutlineLines[3].From = Vector2.new(right + 0.5, bottom + 0.5)
-                            espObj.OutlineLines[3].To = Vector2.new(ix - 0.5, bottom + 0.5)
+                            espObj.OutlineLines[3].From = Vector2.new(right - 0.5, bottom - 0.5)
+                            espObj.OutlineLines[3].To = Vector2.new(ix + 0.5, bottom - 0.5)
                             espObj.OutlineLines[3].Color = col
-                            espObj.OutlineLines[3].Thickness = 1
+                            espObj.OutlineLines[3].Thickness = 0.5
                             espObj.OutlineLines[3].Visible = true
                             -- left
-                            espObj.OutlineLines[4].From = Vector2.new(ix - 0.5, bottom + 0.5)
-                            espObj.OutlineLines[4].To = Vector2.new(ix - 0.5, iy - 0.5)
+                            espObj.OutlineLines[4].From = Vector2.new(ix + 0.5, bottom - 0.5)
+                            espObj.OutlineLines[4].To = Vector2.new(ix + 0.5, iy + 0.5)
                             espObj.OutlineLines[4].Color = col
-                            espObj.OutlineLines[4].Thickness = 1
+                            espObj.OutlineLines[4].Thickness = 0.5
                             espObj.OutlineLines[4].Visible = true
                         end
-                        -- Show an inner 1px BoxOutline so the inside edge is visible
-                        if espObj.BoxOutline then
-                            -- Position/size slightly inset so the outline appears on the inside edge
-                            espObj.BoxOutline.Position = Vector2.new(ix + 0.5, iy + 0.5)
-                            espObj.BoxOutline.Size = Vector2.new(math.max(0, iw - 1), math.max(0, ih - 1))
-                            espObj.BoxOutline.Color = boxOutlineColor or Color3.new(0,0,0)
-                            espObj.BoxOutline.Thickness = 1
-                            espObj.BoxOutline.ZIndex = 10
-                            espObj.BoxOutline.Visible = true
-                        end
+                        -- Hide the old square outline so gradients remain authoritative
+                        if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                         -- Let drawGradientBox use the shared rainbow/custom gradient system
                         drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, boxColorStops)
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
