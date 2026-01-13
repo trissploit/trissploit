@@ -1473,27 +1473,34 @@ local function updateESP()
                         local bottom = iy + ih - 1
                         if espObj.OutlineLines then
                             local col = boxOutlineColor or Color3.new(0,0,0)
+                            -- compute inner edge positions using float box coordinates for symmetry
+                            local fx, fy, fw, fh = x, y, w, h
+                            local leftX = fx + 0.5
+                            local rightX = fx + fw - 0.5
+                            local topY = fy + 0.5
+                            local bottomY = fy + fh - 0.5
+
                             -- top
-                            espObj.OutlineLines[1].From = Vector2.new(ix - 0.5, iy - 0.5)
-                            espObj.OutlineLines[1].To = Vector2.new(right + 0.5, iy - 0.5)
+                            espObj.OutlineLines[1].From = Vector2.new(leftX, topY)
+                            espObj.OutlineLines[1].To = Vector2.new(rightX, topY)
                             espObj.OutlineLines[1].Color = col
                             espObj.OutlineLines[1].Thickness = 0.5
                             espObj.OutlineLines[1].Visible = true
                             -- right
-                            espObj.OutlineLines[2].From = Vector2.new(right + 0.5, iy - 0.5)
-                            espObj.OutlineLines[2].To = Vector2.new(right + 0.5, bottom + 0.5)
+                            espObj.OutlineLines[2].From = Vector2.new(rightX, topY)
+                            espObj.OutlineLines[2].To = Vector2.new(rightX, bottomY)
                             espObj.OutlineLines[2].Color = col
                             espObj.OutlineLines[2].Thickness = 0.5
                             espObj.OutlineLines[2].Visible = true
                             -- bottom
-                            espObj.OutlineLines[3].From = Vector2.new(right + 0.5, bottom + 0.5)
-                            espObj.OutlineLines[3].To = Vector2.new(ix - 0.5, bottom + 0.5)
+                            espObj.OutlineLines[3].From = Vector2.new(rightX, bottomY)
+                            espObj.OutlineLines[3].To = Vector2.new(leftX, bottomY)
                             espObj.OutlineLines[3].Color = col
                             espObj.OutlineLines[3].Thickness = 0.5
                             espObj.OutlineLines[3].Visible = true
                             -- left
-                            espObj.OutlineLines[4].From = Vector2.new(ix - 0.5, bottom + 0.5)
-                            espObj.OutlineLines[4].To = Vector2.new(ix - 0.5, iy - 0.5)
+                            espObj.OutlineLines[4].From = Vector2.new(leftX, bottomY)
+                            espObj.OutlineLines[4].To = Vector2.new(leftX, topY)
                             espObj.OutlineLines[4].Color = col
                             espObj.OutlineLines[4].Thickness = 0.5
                             espObj.OutlineLines[4].Visible = true
