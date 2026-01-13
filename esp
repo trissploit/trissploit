@@ -127,9 +127,6 @@ local ESPSettings = {
     BoxColor = Color3.fromRGB(0, 170, 255),
     Thickness = 2,
     BoxOutlineColor = Color3.new(0, 0, 0),
-    -- When false, ESP objects will NOT be auto-created for every player on join/startup.
-    -- Call `getgenv().TrisESP.AddPlayer(player)` or set this to true to enable auto-creation.
-    AutoAddPlayers = false,
     
     -- Box fill settings
     BoxFill = false,
@@ -740,7 +737,7 @@ end
 -- Principle: Gradients are IDENTICAL to normal ESP, just with color variation
 
 -- Draw a filled rectangle with vertical gradient (same size/position as normal fill)
-local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, element)
+local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, element, colorStops, transStops)
     local segments = espObj.GradientSegments
     local maxSegs = #segments
 
@@ -764,13 +761,39 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local segCenter = (segTop + segBottom) * 0.5
         local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
 
-        -- Color uses existing rainbow/custom logic (respects GradientBlending & RainbowSpeed)
-        local segColor = getRainbowColor(baseOffset + t * 0.5, element)
+        -- Color: prefer explicit colorStops when provided (3 stops), otherwise use rainbow/custom element colors
+        local segColor
+        if colorStops and #colorStops >= 3 then
+            local stops = 3
+            local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
+            local baseHue = ESPSettings.Moving and RainbowHue or 0
+            local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
+            local idx = math.floor(tt) % stops
+            local frac = tt - math.floor(tt)
+            local c1 = colorStops[idx + 1]
+            local c2 = colorStops[(idx + 1) % stops + 1]
+            local blending = ESPSettings.GradientBlending or 1
+            if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
+            segColor = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
+        else
+            segColor = getRainbowColor(baseOffset + t * 0.5, element)
+        end
 
-        -- Transparency: prefer per-stop transparencies when available (e.g. BoxFill)
-        -- otherwise fall back to the provided uniform transparency parameter.
-        local segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
-        if segTrans == nil then segTrans = transparency or 0.5 end
+        -- Transparency: prefer explicit transStops when provided, otherwise per-element transparencies or uniform parameter
+        local segTrans
+        if transStops and #transStops >= 3 then
+            local stops = 3
+            local tt = ((RainbowHue + baseOffset + t * 0.5) % 1) * stops
+            local idx = math.floor(tt) % stops
+            local frac = tt - math.floor(tt)
+            frac = frac * frac * (3 - 2 * frac)
+            local t1 = transStops[idx + 1]
+            local t2 = transStops[(idx + 1) % stops + 1]
+            segTrans = t1 + (t2 - t1) * frac
+        else
+            segTrans = getGradientTransparency(baseOffset + t * 0.5, element)
+            if segTrans == nil then segTrans = transparency or 0.5 end
+        end
 
         -- Overlap segments to avoid 1px seams, but disable overlap for BoxFill
         -- since overlapping semi-transparent squares can make overlap pixels appear
@@ -805,7 +828,7 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
 end
 
 -- Draw box outline with gradient (same thickness/position as normal outline)
-local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomColor)
+local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
     -- 4 sides: top, right, bottom, left - each drawn as segments
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
     local th = 2
@@ -853,9 +876,19 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
-                    -- interpolate between provided topColor and bottomColor for true vertical gradient
-                    if topColor and bottomColor then
-                        lineSegs[i].Color = lerpColor(topColor, bottomColor, math.clamp(t, 0, 1))
+                    -- interpolate between provided 3-stop colorStops when provided
+                    if colorStops and #colorStops >= 3 then
+                        local stops = 3
+                        local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
+                        local baseHue = ESPSettings.Moving and RainbowHue or 0
+                        local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
+                        local idx = math.floor(tt) % stops
+                        local frac = tt - math.floor(tt)
+                        local c1 = colorStops[idx + 1]
+                        local c2 = colorStops[(idx + 1) % stops + 1]
+                        local blending = ESPSettings.GradientBlending or 1
+                        if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
+                        lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
                     else
                         lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     end
@@ -892,8 +925,18 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
                     lineSegs[i].From = Vector2.new(fromX, sy)
                     lineSegs[i].To = Vector2.new(toX, sy)
                     lineSegs[i].Thickness = th
-                    if topColor and bottomColor then
-                        lineSegs[i].Color = lerpColor(topColor, bottomColor, math.clamp(t, 0, 1))
+                    if colorStops and #colorStops >= 3 then
+                        local stops = 3
+                        local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
+                        local baseHue = ESPSettings.Moving and RainbowHue or 0
+                        local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
+                        local idx = math.floor(tt) % stops
+                        local frac = tt - math.floor(tt)
+                        local c1 = colorStops[idx + 1]
+                        local c2 = colorStops[(idx + 1) % stops + 1]
+                        local blending = ESPSettings.GradientBlending or 1
+                        if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
+                        lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
                     else
                         lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     end
@@ -922,10 +965,22 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, topColor, bottomC
             cs.Size = Vector2.new(3, 3)
             cs.Position = Vector2.new(math.max(0, pos.X - 1), math.max(0, pos.Y - 1))
             -- top corners use top color, bottom corners use bottom color for smooth transition
-            if topColor and bottomColor then
-                cs.Color = (i <= 2) and topColor or bottomColor
-            elseif topColor then
-                cs.Color = topColor
+            if colorStops and #colorStops >= 3 then
+                -- sample top (t=0) and bottom (t=1)
+                local function sampleAt(t)
+                    local stops = 3
+                    local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
+                    local baseHue = ESPSettings.Moving and RainbowHue or 0
+                    local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
+                    local idx = math.floor(tt) % stops
+                    local frac = tt - math.floor(tt)
+                    local c1 = colorStops[idx + 1]
+                    local c2 = colorStops[(idx + 1) % stops + 1]
+                    local blending = ESPSettings.GradientBlending or 1
+                    if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
+                    return Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
+                end
+                cs.Color = (i <= 2) and sampleAt(0) or sampleAt(1)
             else
                 local cornerColor = (i <= 2) and getRainbowColor(baseOffset, "Box") or getRainbowColor(baseOffset + 0.5, "Box")
                 cs.Color = cornerColor
@@ -1076,16 +1131,6 @@ local function updateESP()
             
             -- Apply per-player overrides if set
             local playerOverride = ESPSettings.PlayerOverrides[player.Name]
-            -- Create a per-player settings proxy `S` that falls back to global ESPSettings
-            local S = setmetatable({}, {
-                __index = function(_, k)
-                    if playerOverride and playerOverride[k] ~= nil then
-                        return playerOverride[k]
-                    end
-                    return ESPSettings[k]
-                end
-            })
-
             if playerOverride then
                 if playerOverride.BoxColor then
                     boxColor = playerOverride.BoxColor
@@ -1101,10 +1146,67 @@ local function updateESP()
                 end
             end
 
+            -- prepare optional per-player/custom color stops for box edges and fills
+            local boxColorStops = nil
+            local boxFillCustomColors = nil
+            local boxFillCustomTrans = nil
+            -- player override custom stops take precedence
+            if playerOverride then
+                if playerOverride.BoxCustomColor1 and playerOverride.BoxCustomColor2 and playerOverride.BoxCustomColor3 then
+                    boxColorStops = {playerOverride.BoxCustomColor1, playerOverride.BoxCustomColor2, playerOverride.BoxCustomColor3}
+                end
+                if playerOverride.BoxFillCustomColor1 and playerOverride.BoxFillCustomColor2 and playerOverride.BoxFillCustomColor3 then
+                    boxFillCustomColors = {playerOverride.BoxFillCustomColor1, playerOverride.BoxFillCustomColor2, playerOverride.BoxFillCustomColor3}
+                end
+                if playerOverride.BoxFillColor1Trans or playerOverride.BoxFillColor2Trans or playerOverride.BoxFillColor3Trans then
+                    boxFillCustomTrans = {playerOverride.BoxFillColor1Trans or ESPSettings.BoxFillColor1Trans, playerOverride.BoxFillColor2Trans or ESPSettings.BoxFillColor2Trans, playerOverride.BoxFillColor3Trans or ESPSettings.BoxFillColor3Trans}
+                end
+            end
+            -- fallback to global per-element custom gradients when enabled
+            if not boxColorStops and ESPSettings.UseCustomGradient then
+                boxColorStops = {ESPSettings.BoxCustomColor1, ESPSettings.BoxCustomColor2, ESPSettings.BoxCustomColor3}
+            end
+            if not boxFillCustomColors and ESPSettings.UseCustomGradient then
+                boxFillCustomColors = {ESPSettings.BoxFillCustomColor1, ESPSettings.BoxFillCustomColor2, ESPSettings.BoxFillCustomColor3}
+            end
+            if not boxFillCustomTrans then
+                boxFillCustomTrans = {ESPSettings.BoxFillColor1Trans or 0.5, ESPSettings.BoxFillColor2Trans or 0.5, ESPSettings.BoxFillColor3Trans or 0.5}
+            end
+
+            -- Merge per-player override settings for render-time flags
+            local boxesEnabled = ESPSettings.Boxes
+            local boxType = ESPSettings.BoxType
+            local boxThickness = ESPSettings.Thickness
+            local boxOutlineColor = ESPSettings.BoxOutlineColor
+            local boxFillEnabled = ESPSettings.BoxFill
+            local boxFillTransparency = ESPSettings.BoxFillTransparency
+            local tracersEnabled = ESPSettings.Tracers
+            local tracerThickness = ESPSettings.TracerThickness
+            local tracerFrom = ESPSettings.TracerFrom
+            local textFont = ESPSettings.TextFont
+
+            if playerOverride then
+                if playerOverride.BoxRainbow then boxColor = getRainbowColor(baseOffset, "Box") end
+                if playerOverride.TracerRainbow then tracerColor = getRainbowColor(baseOffset + 0.5, "Tracer") end
+                if playerOverride.ChamsRainbow then chamColor = getRainbowColor(baseOffset + 0.25, "Chams") end
+                if playerOverride.NameRainbow then nameColor = getRainbowColor(baseOffset + 0.1, "Name") end
+
+                boxesEnabled = (playerOverride.Boxes ~= nil) and playerOverride.Boxes or boxesEnabled
+                boxType = playerOverride.BoxType or boxType
+                boxThickness = playerOverride.Thickness or boxThickness
+                boxOutlineColor = playerOverride.BoxOutlineColor or boxOutlineColor
+                boxFillEnabled = (playerOverride.BoxFill ~= nil) and playerOverride.BoxFill or boxFillEnabled
+                boxFillTransparency = playerOverride.BoxFillTransparency or boxFillTransparency
+                tracersEnabled = (playerOverride.Tracers ~= nil) and playerOverride.Tracers or tracersEnabled
+                tracerThickness = playerOverride.TracerThickness or tracerThickness
+                tracerFrom = playerOverride.TracerFrom or tracerFrom
+                textFont = playerOverride.TextFont or textFont
+            end
+
             -- precompute box coordinates so healthbar/chams can render even when ESP visuals are disabled
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
 
-            if S.Enabled then
+            if ESPSettings.Enabled then
                 -- Hide all text objects first to prevent leftover visibility
                 espObj.Name.Visible = false
                 espObj.HealthText.Visible = false
@@ -1114,13 +1216,13 @@ local function updateESP()
                 -- each can be positioned independently and receive per-element rainbow colors.
                 local topList, bottomList, leftList, rightList = {}, {}, {}, {}
 
-                if S.ShowName then
-                    local nameText = S.UseDisplayName and player.DisplayName or player.Name
-                    table.insert((S.NamePosition or "Top") == "Top" and topList or (S.NamePosition == "Bottom" and bottomList or (S.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = nameText})
+                if ESPSettings.ShowName then
+                    local nameText = ESPSettings.UseDisplayName and player.DisplayName or player.Name
+                    table.insert((ESPSettings.NamePosition or "Top") == "Top" and topList or (ESPSettings.NamePosition == "Bottom" and bottomList or (ESPSettings.NamePosition == "Left" and leftList or rightList)), {key = "Name", text = nameText})
                 end
                 -- Health text is now positioned relative to the health bar (handled below)
-                if S.ShowDistance then
-                    table.insert((S.DistancePosition or "Top") == "Top" and topList or (S.DistancePosition == "Bottom" and bottomList or (S.DistancePosition == "Left" and leftList or rightList)), {key = "Distance", text = math.floor(distance) .. "m"})
+                if ESPSettings.ShowDistance then
+                    table.insert((ESPSettings.DistancePosition or "Top") == "Top" and topList or (ESPSettings.DistancePosition == "Bottom" and bottomList or (ESPSettings.DistancePosition == "Left" and leftList or rightList)), {key = "Distance", text = math.floor(distance) .. "m"})
                 end
 
                 -- Collect simple custom text entries and append to top by default
@@ -1153,7 +1255,7 @@ local function updateESP()
                     local y
                     if anchor == "Top" then
                         y = math.floor(rect.y - 18)
-                        if S.HealthBarEnabled and S.HealthBarPosition == "Top" then
+                        if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
                             y = y - 2 - 3
                         end
                     elseif anchor == "Bottom" then
@@ -1167,10 +1269,10 @@ local function updateESP()
                     end
                     espObj.Name.Center = (anchor == "Top" or anchor == "Bottom")
                     espObj.Name.Size = 13
-                    espObj.Name.Font = S.TextFont or 2
+                    espObj.Name.Font = ESPSettings.TextFont or 2
                     espObj.Name.Text = combined
                     espObj.Name.Position = Vector2.new(x, y)
-                    espObj.Name.Color = S.NameColor
+                    espObj.Name.Color = ESPSettings.NameColor
                     espObj.Name.Visible = true
                     -- hide individual texts when combined
                     if espObj.HealthText then espObj.HealthText.Visible = false end
@@ -1188,7 +1290,7 @@ local function updateESP()
                         -- stack upward: first item just above box (matching previous default)
                         for i, item in ipairs(list) do
                             local y = math.floor(rect.y - 18 - (i - 1) * lineHeight)
-                            if S.HealthBarEnabled and S.HealthBarPosition == "Top" then
+                            if ESPSettings.HealthBarEnabled and ESPSettings.HealthBarPosition == "Top" then
                                 y = y - 2 - 3
                             end
                             local x = math.floor(rect.cx)
@@ -1197,7 +1299,7 @@ local function updateESP()
                                 col = getRainbowColor(0.1 + baseOffset, "Name")
                                 espObj.Name.Center = true
                                 espObj.Name.Size = 13
-                                espObj.Name.Font = S.TextFont or 2
+                                espObj.Name.Font = ESPSettings.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -1206,7 +1308,7 @@ local function updateESP()
                                 col = getRainbowColor(0.3 + baseOffset, "HealthText")
                                 espObj.HealthText.Center = true
                                 espObj.HealthText.Size = 13
-                                espObj.HealthText.Font = S.TextFont or 2
+                                espObj.HealthText.Font = ESPSettings.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -1215,7 +1317,7 @@ local function updateESP()
                                 col = getRainbowColor(0.6 + baseOffset, "Distance")
                                 espObj.DistanceText.Center = true
                                 espObj.DistanceText.Size = 13
-                                espObj.DistanceText.Font = S.TextFont or 2
+                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -1231,7 +1333,7 @@ local function updateESP()
                                 col = getRainbowColor(0.1 + baseOffset, "Name")
                                 espObj.Name.Center = true
                                 espObj.Name.Size = 13
-                                espObj.Name.Font = S.TextFont or 2
+                                espObj.Name.Font = ESPSettings.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -1240,7 +1342,7 @@ local function updateESP()
                                 col = getRainbowColor(0.3 + baseOffset, "HealthText")
                                 espObj.HealthText.Center = true
                                 espObj.HealthText.Size = 13
-                                espObj.HealthText.Font = S.TextFont or 2
+                                espObj.HealthText.Font = ESPSettings.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -1249,7 +1351,7 @@ local function updateESP()
                                 col = getRainbowColor(0.6 + baseOffset, "Distance")
                                 espObj.DistanceText.Center = true
                                 espObj.DistanceText.Size = 13
-                                espObj.DistanceText.Font = S.TextFont or 2
+                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -1268,7 +1370,7 @@ local function updateESP()
                                 col = getRainbowColor(0.1 + baseOffset, "Name")
                                 espObj.Name.Center = false
                                 espObj.Name.Size = 13
-                                espObj.Name.Font = S.TextFont or 2
+                                espObj.Name.Font = ESPSettings.TextFont or 2
                                 espObj.Name.Text = item.text
                                 espObj.Name.Position = Vector2.new(x, y)
                                 espObj.Name.Color = col
@@ -1277,7 +1379,7 @@ local function updateESP()
                                 col = getRainbowColor(0.3 + baseOffset, "HealthText")
                                 espObj.HealthText.Center = false
                                 espObj.HealthText.Size = 13
-                                espObj.HealthText.Font = S.TextFont or 2
+                                espObj.HealthText.Font = ESPSettings.TextFont or 2
                                 espObj.HealthText.Text = item.text
                                 espObj.HealthText.Position = Vector2.new(x, y)
                                 espObj.HealthText.Color = col
@@ -1286,7 +1388,7 @@ local function updateESP()
                                 col = getRainbowColor(0.6 + baseOffset, "Distance")
                                 espObj.DistanceText.Center = false
                                 espObj.DistanceText.Size = 13
-                                espObj.DistanceText.Font = S.TextFont or 2
+                                espObj.DistanceText.Font = ESPSettings.TextFont or 2
                                 espObj.DistanceText.Text = item.text
                                 espObj.DistanceText.Position = Vector2.new(x, y)
                                 espObj.DistanceText.Color = col
@@ -1309,15 +1411,15 @@ local function updateESP()
                     end
                     espObj.Name.Center = true
                     espObj.Name.Size = 13
-                    espObj.Name.Font = S.TextFont or 2
+                    espObj.Name.Font = ESPSettings.TextFont or 2
                     espObj.Name.Text = customTopConcat
                     espObj.Name.Position = Vector2.new(math.floor(rect.cx), y)
-                    espObj.Name.Color = S.NameColor
+                    espObj.Name.Color = ESPSettings.NameColor
                     espObj.Name.Visible = true
                 end
 
                 -- Equipped display (Bottom / Image handling)
-                if S.EquippedEnabled then
+                if ESPSettings.EquippedEnabled then
                     -- If image mode and image support exists, try to show image; otherwise fall back to text showing tool name or 'None'
                     local showImage = (ESPSettings.EquippedMode == "Image") and espObj.EquippedImage ~= nil
                     local mappedImage = nil
@@ -1335,15 +1437,15 @@ local function updateESP()
                             end
                         end
                         -- fallback to global EquippedImage setting
-                        if not mappedImage and S.EquippedImage and S.EquippedImage ~= "" then mappedImage = S.EquippedImage end
+                        if not mappedImage and ESPSettings.EquippedImage and ESPSettings.EquippedImage ~= "" then mappedImage = ESPSettings.EquippedImage end
                     end
 
-                    if S.EquippedMode == "Image" and showImage and mappedImage then
+                    if ESPSettings.EquippedMode == "Image" and showImage and mappedImage then
                         -- Hide text and show image
                         espObj.EquippedText.Visible = false
                         espObj.EquippedImage.Data = mappedImage
                         espObj.EquippedImage.Size = Vector2.new(32, 32)
-                        if S.EquippedPosition == "Inline" then
+                        if ESPSettings.EquippedPosition == "Inline" then
                             espObj.EquippedImage.Position = Vector2.new(rect.cx, rect.y - 32)
                         else
                             espObj.EquippedImage.Position = Vector2.new(rect.cx, rect.y + rect.h + 6)
@@ -1354,14 +1456,14 @@ local function updateESP()
                         espObj.EquippedImage.Visible = false
                         local txt = equippedName or "None"
                         espObj.EquippedText.Text = txt
-                        if S.EquippedPosition == "Inline" then
+                        if ESPSettings.EquippedPosition == "Inline" then
                             -- inline already included in name, hide separate equipped text
                             espObj.EquippedText.Visible = false
                         else
                             espObj.EquippedText.Position = Vector2.new(math.floor(rect.cx), math.floor(rect.y + rect.h + 12))
                             espObj.EquippedText.Color = nameColor
                             espObj.EquippedText.Size = 13
-                            espObj.EquippedText.Font = S.TextFont or 2
+                            espObj.EquippedText.Font = ESPSettings.TextFont or 2
                             espObj.EquippedText.Visible = true
                         end
                     end
@@ -1371,14 +1473,14 @@ local function updateESP()
                 end
 
                 -- Tracers
-                if S.Tracers then
+                if tracersEnabled then
                     local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                     local fromPos
-                    if S.TracerFrom == "Bottom" then
+                    if ESPSettings.TracerFrom == "Bottom" then
                         fromPos = Vector2.new(vw/2, vh)
-                    elseif S.TracerFrom == "Top" then
+                    elseif ESPSettings.TracerFrom == "Top" then
                         fromPos = Vector2.new(vw/2, 0)
-                    elseif S.TracerFrom == "Mouse" then
+                    elseif ESPSettings.TracerFrom == "Mouse" then
                         fromPos = UserInputService:GetMouseLocation()
                     else
                         fromPos = Vector2.new(vw/2, vh/2)
@@ -1386,19 +1488,23 @@ local function updateESP()
                     espObj.Tracer.From = fromPos
                     espObj.Tracer.To = Vector2.new(rect.cx, rect.y + rect.h)
                     espObj.Tracer.Color = tracerColor
-                    espObj.Tracer.Thickness = S.TracerThickness
+                    espObj.Tracer.Thickness = tracerThickness
                     espObj.Tracer.Visible = true
                 else
                     espObj.Tracer.Visible = false
                 end
 
                 -- Box fill (independent from Box ESP) - always use gradients
-                if S.BoxFill then
+                if boxFillEnabled then
                     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
                     
                     -- Always draw gradient fill
                     -- Use the configured transparency directly (0 = opaque, 1 = fully transparent)
-                    drawGradientFill(espObj, ix, iy, iw, ih, S.BoxFillTransparency, baseOffset, "BoxFill")
+                    -- prefer per-player custom box-fill stops when available
+                    local boxFillStops, boxFillTransStops = nil, nil
+                    if boxFillCustomColors then boxFillStops = boxFillCustomColors end
+                    if boxFillCustomTrans then boxFillTransStops = boxFillCustomTrans end
+                    drawGradientFill(espObj, ix, iy, iw, ih, boxFillTransparency, baseOffset, "BoxFill", boxFillStops, boxFillTransStops)
                     espObj.BoxFill.Visible = false
                 else
                     espObj.BoxFill.Visible = false
@@ -1406,15 +1512,15 @@ local function updateESP()
                 end
 
                 -- Boxes (outline) - always use gradients
-                if S.Boxes then
+                if boxesEnabled then
                     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
                     
-                    if S.BoxType == "Square" then
+                    if boxType == "Square" then
                         -- Draw crisp 1px outline using explicit lines (drawn above gradients)
                         local right = ix + iw - 1
                         local bottom = iy + ih - 1
                         if espObj.OutlineLines then
-                            local col = S.BoxOutlineColor or Color3.new(0,0,0)
+                            local col = boxOutlineColor or Color3.new(0,0,0)
                             -- top
                             espObj.OutlineLines[1].From = Vector2.new(ix - 1, iy - 1)
                             espObj.OutlineLines[1].To = Vector2.new(right + 1, iy - 1)
@@ -1443,7 +1549,7 @@ local function updateESP()
                         -- Hide the old square outline so gradients remain authoritative
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                         -- Let drawGradientBox use the shared rainbow/custom gradient system
-                        drawGradientBox(espObj, ix, iy, iw, ih, baseOffset)
+                        drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, boxColorStops)
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                     else
                         -- Corner box - always gradient
@@ -1503,11 +1609,11 @@ local function updateESP()
             end
 
             -- Health bar
-            if S.Enabled and S.HealthBarEnabled and rect then
+            if ESPSettings.Enabled and ESPSettings.HealthBarEnabled and rect then
                 local maxHealth = math.max(1, hum.MaxHealth or 100)
                 local ratio = math.clamp(hum.Health / maxHealth, 0, 1)
                 local thickness = 2
-                local pos = S.HealthBarPosition
+                local pos = ESPSettings.HealthBarPosition
                 local isVertical = (pos == "Left" or pos == "Right")
                 
                 -- Calculate bar and fill dimensions
@@ -1542,14 +1648,14 @@ local function updateESP()
                 fillW, fillH = math.floor(fillW), math.floor(fillH)
 
                 -- Outline (1px): follow the filled portion so it moves with health
-                if S.HealthBarOutline then
+                if ESPSettings.HealthBarOutline then
                     local outlineX = fillX - 1
                     local outlineY = fillY - 1
                     local outlineW = math.max(1, fillW + 2)
                     local outlineH = math.max(1, fillH + 2)
                     espObj.HealthBarOutline.Size = Vector2.new(outlineW, outlineH)
                     espObj.HealthBarOutline.Position = Vector2.new(outlineX, outlineY)
-                    espObj.HealthBarOutline.Color = S.HealthBarOutlineColor
+                    espObj.HealthBarOutline.Color = ESPSettings.HealthBarOutlineColor
                     espObj.HealthBarOutline.Visible = true
                 else
                     espObj.HealthBarOutline.Visible = false
@@ -1560,14 +1666,14 @@ local function updateESP()
                 drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVertical, baseOffset)
 
                 -- Health text: positioned above the filled portion and moves with health - gradient
-                if S.ShowHealthText and espObj.HealthText then
+                if ESPSettings.ShowHealthText and espObj.HealthText then
                     local txt = tostring(math.floor(hum.Health))
                     espObj.HealthText.Text = txt
                     local tx = math.floor(fillX + (fillW / 2))
                     local ty = math.floor(fillY - 6)
                     espObj.HealthText.Center = true
                     espObj.HealthText.Size = 13
-                    espObj.HealthText.Font = S.TextFont or 2
+                    espObj.HealthText.Font = ESPSettings.TextFont or 2
                     espObj.HealthText.Position = Vector2.new(tx, ty)
                     espObj.HealthText.Color = getRainbowColor(baseOffset + 0.3, "HealthText")
                     espObj.HealthText.Visible = true
@@ -1579,10 +1685,10 @@ local function updateESP()
                 espObj.HealthBarOutline.Visible = false
                 for _, seg in ipairs(espObj.HealthBarGradient) do seg.Visible = false end
                 if espObj.HealthText then espObj.HealthText.Visible = false end
-                end
+            end
 
             -- Chams/Highlight
-            if S.Enabled and S.Highlight then
+            if ESPSettings.Enabled and ESPSettings.Highlight then
                 if not espObj.Highlight or espObj.Highlight.Parent ~= char then
                     if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
                     espObj.Highlight = Instance.new("Highlight")
@@ -1591,8 +1697,8 @@ local function updateESP()
                 end
                 espObj.Highlight.FillColor = chamColor
                 espObj.Highlight.OutlineColor = chamColor
-                espObj.Highlight.FillTransparency = S.FillTransparency
-                espObj.Highlight.OutlineTransparency = S.OutlineTransparency
+                espObj.Highlight.FillTransparency = ESPSettings.FillTransparency
+                espObj.Highlight.OutlineTransparency = ESPSettings.OutlineTransparency
                 espObj.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 espObj.Highlight.Enabled = true
             elseif espObj.Highlight then
@@ -1660,12 +1766,18 @@ local function createObjectESPConfig(name, options)
         Name = name,
         Enabled = options.Enabled or false,
         Color = options.Color or Color3.fromRGB(255, 255, 0),
+        Rainbow = options.Rainbow or false,
         ShowName = options.ShowName ~= false,
         ShowDistance = options.ShowDistance ~= false,
         ShowBox = options.ShowBox ~= false,
+        ShowBoxFill = options.ShowBoxFill or false,
+        BoxFillTransparency = options.BoxFillTransparency or 0.5,
+        BoxThickness = options.BoxThickness or 1,
+        BoxOutlineColor = options.BoxOutlineColor or Color3.new(0,0,0),
         ShowTracer = options.ShowTracer or false,
+        TracerThickness = options.TracerThickness or 2,
+        TracerColor = options.TracerColor or options.Color or Color3.fromRGB(255,255,0),
         MaxDistance = options.MaxDistance or 500,
-        Rainbow = options.Rainbow or false,
         Objects = {},
         ESPInstances = {},
         FindFunction = options.FindFunction -- Custom function to find objects
@@ -1791,30 +1903,69 @@ local function updateObjectESP()
                 local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                 local baseOffset = 0
                 if rect and vh and vh > 0 then baseOffset = (rect.cy / vh) end
+                -- Determine colors/stops for this object config (allow 3-stop gradients)
                 local color = config.Rainbow and getRainbowColor(baseOffset, "Object") or config.Color
-                
-                -- Name
-                if config.ShowName or config.ShowDistance then
-                    local text = {}
-                    if config.ShowName then table.insert(text, displayName) end
-                    if config.ShowDistance then table.insert(text, math.floor(rect.distance) .. "m") end
-                    espObj.Name.Text = table.concat(text, " | ")
-                    espObj.Name.Position = Vector2.new(rect.cx, rect.y - 18)
-                    espObj.Name.Color = color
-                    espObj.Name.Visible = true
-                else
-                    espObj.Name.Visible = false
+                local cfgBoxColorStops = nil
+                local cfgBoxFillStops = nil
+                local cfgBoxFillTrans = nil
+                if config.BoxCustomColor1 and config.BoxCustomColor2 and config.BoxCustomColor3 then
+                    cfgBoxColorStops = {config.BoxCustomColor1, config.BoxCustomColor2, config.BoxCustomColor3}
+                elseif ESPSettings.UseCustomGradient then
+                    cfgBoxColorStops = {ESPSettings.BoxCustomColor1, ESPSettings.BoxCustomColor2, ESPSettings.BoxCustomColor3}
                 end
+                if config.BoxFillCustomColor1 and config.BoxFillCustomColor2 and config.BoxFillCustomColor3 then
+                    cfgBoxFillStops = {config.BoxFillCustomColor1, config.BoxFillCustomColor2, config.BoxFillCustomColor3}
+                elseif ESPSettings.UseCustomGradient then
+                    cfgBoxFillStops = {ESPSettings.BoxFillCustomColor1, ESPSettings.BoxFillCustomColor2, ESPSettings.BoxFillCustomColor3}
+                end
+                cfgBoxFillTrans = {config.BoxFillColor1Trans or ESPSettings.BoxFillColor1Trans or 0.5, config.BoxFillColor2Trans or ESPSettings.BoxFillColor2Trans or 0.5, config.BoxFillColor3Trans or ESPSettings.BoxFillColor3Trans or 0.5}
                 
                 -- Box
                 if config.ShowBox then
                     espObj.BoxOutline.Size = Vector2.new(rect.w + 2, rect.h + 2)
                     espObj.BoxOutline.Position = Vector2.new(rect.x - 1, rect.y - 1)
+                    espObj.BoxOutline.Color = config.BoxOutlineColor or Color3.new(0,0,0)
+                    espObj.BoxOutline.Visible = true
+
+                    -- If we have gradient stops or the user asked for fill, use gradient draw helpers
+                    if cfgBoxColorStops or cfgBoxFillStops or config.ShowBoxFill then
+                        -- hide the simple square and use gradient helpers
+                        espObj.Box.Visible = false
+                        local ix, iy, iw, ih = math.floor(rect.x), math.floor(rect.y), math.floor(rect.w), math.floor(rect.h)
+                        -- outline sides use box color stops if provided
+                        drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, cfgBoxColorStops)
+                        -- fill
+                        if config.ShowBoxFill then
+                            drawGradientFill(espObj, ix, iy, iw, ih, config.BoxFillTransparency or 0.5, baseOffset, "BoxFill", cfgBoxFillStops, cfgBoxFillTrans)
+                        else
+                            espObj.BoxFill.Visible = false
+                        end
+                    else
+                        espObj.Box.Size = Vector2.new(rect.w, rect.h)
+                        espObj.Box.Position = Vector2.new(rect.x, rect.y)
+                        espObj.Box.Color = color
+                        espObj.Box.Thickness = config.BoxThickness or 1
+                        espObj.Box.Filled = false
+                        espObj.Box.Visible = true
+                    end
+                else
+                    espObj.Box.Visible = false
+                    espObj.BoxOutline.Visible = false
+                end
+                if config.ShowBox then
+                    espObj.BoxOutline.Size = Vector2.new(rect.w + 2, rect.h + 2)
+                    espObj.BoxOutline.Position = Vector2.new(rect.x - 1, rect.y - 1)
+                    espObj.BoxOutline.Color = config.BoxOutlineColor or Color3.new(0,0,0)
                     espObj.BoxOutline.Visible = true
                     
                     espObj.Box.Size = Vector2.new(rect.w, rect.h)
                     espObj.Box.Position = Vector2.new(rect.x, rect.y)
-                    espObj.Box.Color = color
+                    espObj.Box.Color = config.Rainbow and getRainbowColor(baseOffset, "Object") or (config.Color or color)
+                    espObj.Box.Thickness = config.BoxThickness or 1
+                    espObj.Box.Filled = config.ShowBoxFill or false
+                    if espObj.Box.Filled then
+                        espObj.Box.Transparency = 1 - (config.BoxFillTransparency or 0.5)
+                    end
                     espObj.Box.Visible = true
                 else
                     espObj.Box.Visible = false
@@ -1826,7 +1977,8 @@ local function updateObjectESP()
                     local vw, vh = Camera.ViewportSize.X, Camera.ViewportSize.Y
                     espObj.Tracer.From = Vector2.new(vw/2, vh)
                     espObj.Tracer.To = Vector2.new(rect.cx, rect.y + rect.h)
-                    espObj.Tracer.Color = color
+                    espObj.Tracer.Color = config.TracerColor or color
+                    espObj.Tracer.Thickness = config.TracerThickness or 2
                     espObj.Tracer.Visible = true
                 else
                     espObj.Tracer.Visible = false
@@ -2134,12 +2286,8 @@ end
 if renderConn then renderConn:Disconnect() end
 renderConn = RunService.RenderStepped:Connect(mainUpdate)
 
-for _, p in ipairs(Players:GetPlayers()) do
-    if ESPSettings.AutoAddPlayers then addESP(p) end
-end
-Players.PlayerAdded:Connect(function(p)
-    if ESPSettings.AutoAddPlayers then addESP(p) end
-end)
+for _, p in ipairs(Players:GetPlayers()) do addESP(p) end
+Players.PlayerAdded:Connect(addESP)
 Players.PlayerRemoving:Connect(removePlayerESP)
 
 -- ==================== HELPER FUNCTIONS ====================
@@ -2469,6 +2617,24 @@ getgenv().TrisESP = {
     CreateObjectConfig = createObjectESPConfig,
     AddObject = addObjectToESP,
     RemoveObject = removeObjectFromESP,
+    RemoveObjectConfig = function(configName)
+        local cfg = ObjectESPConfigs[configName]
+        if not cfg then return end
+        -- clean up esp instances
+        for obj, espObj in pairs(cfg.ESPInstances or {}) do
+            pcall(function()
+                if espObj._connections then
+                    for _, conn in pairs(espObj._connections) do pcall(function() if conn and conn.Disconnect then conn:Disconnect() end end) end
+                    espObj._connections = nil
+                end
+                if espObj.Name then pcall(function() espObj.Name:Remove() end) end
+                if espObj.Box then pcall(function() espObj.Box:Remove() end) end
+                if espObj.BoxOutline then pcall(function() espObj.BoxOutline:Remove() end) end
+                if espObj.Tracer then pcall(function() espObj.Tracer:Remove() end) end
+            end)
+        end
+        ObjectESPConfigs[configName] = nil
+    end,
     GetConfigs = function() return ObjectESPConfigs end
 }
 
