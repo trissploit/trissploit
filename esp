@@ -819,104 +819,154 @@ end
 -- Draw box outline with gradient (same thickness/position as normal outline)
 local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
     -- 4 sides: top, right, bottom, left - each drawn as segments
-    -- Use floating inner coordinates so gradient segments sit exactly on the inset edge
+    local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
+    local th = 1
+    -- floating inner coordinates (align to 0.5 inset so outline + segments render symmetrically)
     local fx, fy, fw, fh = x, y, w, h
     local leftX = fx + 0.5
     local rightX = fx + fw - 0.5
     local topY = fy + 0.5
     local bottomY = fy + fh - 0.5
+    -- inner drawing bounds (leave a 1px gap from outline so gradients don't paint over it)
+    local innerLeftX = fx + 1.0
+    local innerRightX = fx + fw - 1.0
+    local innerTopY = fy + 1.0
+    local innerBottomY = fy + fh - 1.0
 
-    -- For each side, compute total length in float space and distribute segments evenly
+    -- Use inclusive pixel coordinates for edges (convert width/height to last pixel indices)
+    local right = ix + iw - 1
+    local bottom = iy + ih - 1
+
+    -- Side definitions: {startX, startY, endX, endY, isVertical}
     local sides = {
-        { leftX, topY, rightX, topY, false },    -- top
-        { rightX, topY, rightX, bottomY, true }, -- right
-        { leftX, bottomY, rightX, bottomY, false }, -- bottom
-        { leftX, topY, leftX, bottomY, true }    -- left
+        {ix, iy, right, iy, false},           -- top
+        {right, iy, right, bottom, true},     -- right
+        {ix, bottom, right, bottom, false},   -- bottom
+        {ix, iy, ix, bottom, true}            -- left
     }
-
+    
     for sideIdx, side in ipairs(sides) do
         local sx, sy, ex, ey, isVert = side[1], side[2], side[3], side[4], side[5]
         local lineSegs = espObj.BoxLines[sideIdx]
-        if not lineSegs then goto continue_side end
+        local segCount = #lineSegs
+        
+                if isVert then
+            -- Vertical line: inclusive length
+            local startY = math.min(sy, ey)
+            local lineLen = math.abs(ey - sy) + 1
+            local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, lineLen))
+            if actualSegs == 0 then
+                for i = 1, #lineSegs do lineSegs[i].Visible = false end
+            else
+                local baseLen = math.floor(lineLen / actualSegs)
+                local rem = lineLen - baseLen * actualSegs
+                local cur = startY
+                for i = 1, actualSegs do
+                    local thisLen = baseLen + (i <= rem and 1 or 0)
+                    local segTop = cur
+                    local segBottom = cur + thisLen - 1
+                    local segCenter = (segTop + segBottom) * 0.5
+                    -- vertical fraction (0=top,1=bottom)
+                    local t = (segCenter - iy) / math.max(1, ih)
 
-        if isVert then
-            local totalLen = math.abs(ey - sy)
-            local actualSegs = math.min(#lineSegs, math.max(1, math.floor(totalLen)))
-            local segLen = totalLen / actualSegs
-            local cur = 0
-            for i = 1, actualSegs do
-                local segTopF = sy + cur
-                local segBottomF = segTopF + segLen
-                local segCenter = (segTopF + segBottomF) * 0.5
-                local t = (segCenter - topY) / math.max(1, fh)
+                    -- overlap vertically to avoid 1px gaps
+                    local fromY = segTop - (i > 1 and 1 or 0)
+                    local toY = segBottom + (i < actualSegs and 1 or 0)
 
-                local fromY = segTopF
-                local toY = segBottomF
+                    -- use inner X position so vertical segments sit inside the outline and don't overlap
+                    local xPos = (sx == ix) and innerLeftX or innerRightX
+                    -- clamp Y to inner bounds so vertical segments don't overrun the outline
+                    local finalFromY = math.max(fromY, innerTopY)
+                    local finalToY = math.min(toY, innerBottomY)
+                    if finalToY < finalFromY then
+                        lineSegs[i].Visible = false
+                    else
+                        lineSegs[i].From = Vector2.new(xPos, finalFromY)
+                        lineSegs[i].To = Vector2.new(xPos, finalToY)
+                        lineSegs[i].Visible = true
+                    end
+                    lineSegs[i].Thickness = th
+                    -- interpolate between provided 3-stop colorStops when provided
+                    if colorStops and #colorStops >= 3 then
+                        local stops = 3
+                        local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
+                        local baseHue = ESPSettings.Moving and RainbowHue or 0
+                        local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
+                        local idx = math.floor(tt) % stops
+                        local frac = tt - math.floor(tt)
+                        local c1 = colorStops[idx + 1]
+                        local c2 = colorStops[(idx + 1) % stops + 1]
+                        local blending = ESPSettings.GradientBlending or 1
+                        if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
+                        lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
+                    else
+                        lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    end
+                    lineSegs[i].Transparency = 1
+                    lineSegs[i].Visible = true
 
-                lineSegs[i].From = Vector2.new(sx, fromY)
-                lineSegs[i].To = Vector2.new(sx, toY)
-                lineSegs[i].Thickness = 1
-
-                if colorStops and #colorStops >= 3 then
-                    local stops = 3
-                    local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
-                    local baseHue = ESPSettings.Moving and RainbowHue or 0
-                    local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
-                    local idx = math.floor(tt) % stops
-                    local frac = tt - math.floor(tt)
-                    local c1 = colorStops[idx + 1]
-                    local c2 = colorStops[(idx + 1) % stops + 1]
-                    local blending = ESPSettings.GradientBlending or 1
-                    if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
-                    lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
-                else
-                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    cur = cur + thisLen
                 end
-                lineSegs[i].Transparency = 1
-                lineSegs[i].Visible = true
 
-                cur = cur + segLen
+                for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
             end
-            for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
-        else
-            local totalLen = math.abs(ex - sx)
-            local actualSegs = math.min(#lineSegs, math.max(1, math.floor(totalLen)))
-            local segLen = totalLen / actualSegs
-            local cur = 0
-            for i = 1, actualSegs do
-                local segLeftF = sx + cur
-                local segRightF = segLeftF + segLen
-                local segCenterX = (segLeftF + segRightF) * 0.5
-                local segCenterY = sy
-                local t = (segCenterY - topY) / math.max(1, fh)
-
-                lineSegs[i].From = Vector2.new(segLeftF, sy)
-                lineSegs[i].To = Vector2.new(segRightF, sy)
-                lineSegs[i].Thickness = 1
-
-                if colorStops and #colorStops >= 3 then
-                    local stops = 3
-                    local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
-                    local baseHue = ESPSettings.Moving and RainbowHue or 0
-                    local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
-                    local idx = math.floor(tt) % stops
-                    local frac = tt - math.floor(tt)
-                    local c1 = colorStops[idx + 1]
-                    local c2 = colorStops[(idx + 1) % stops + 1]
-                    local blending = ESPSettings.GradientBlending or 1
-                    if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
-                    lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
                 else
-                    lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
-                end
-                lineSegs[i].Transparency = 1
-                lineSegs[i].Visible = true
+            -- Horizontal line: inclusive length
+            local startX = math.min(sx, ex)
+            local lineLen = math.abs(ex - sx) + 1
+            local actualSegs = math.min(lineSegs and #lineSegs or 0, math.max(1, lineLen))
+            if actualSegs == 0 then
+                for i = 1, #lineSegs do lineSegs[i].Visible = false end
+            else
+                local baseLen = math.floor(lineLen / actualSegs)
+                local rem = lineLen - baseLen * actualSegs
+                local cur = startX
+                for i = 1, actualSegs do
+                    local thisLen = baseLen + (i <= rem and 1 or 0)
+                    local segLeft = cur
+                    local segRight = cur + thisLen - 1
+                    -- use the vertical position of this horizontal side to compute gradient t
+                    -- use inner Y position so horizontal segments sit inside the outline and don't overlap
+                    local segCenterY = (sy == iy) and innerTopY or innerBottomY
+                    local t = (segCenterY - iy) / math.max(1, ih)
 
-                cur = cur + segLen
+                    local fromX = segLeft - (i > 1 and 1 or 0)
+                    local toX = segRight + (i < actualSegs and 1 or 0)
+                    -- clamp horizontal segment X range to inner bounds
+                    local finalFromX = math.max(fromX, innerLeftX)
+                    local finalToX = math.min(toX, innerRightX)
+                    if finalToX < finalFromX then
+                        lineSegs[i].Visible = false
+                    else
+                        lineSegs[i].From = Vector2.new(finalFromX, (sy == iy) and innerTopY or innerBottomY)
+                        lineSegs[i].To = Vector2.new(finalToX, (sy == iy) and innerTopY or innerBottomY)
+                        lineSegs[i].Thickness = th
+                        lineSegs[i].Visible = true
+                    end
+                    if colorStops and #colorStops >= 3 then
+                        local stops = 3
+                        local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
+                        local baseHue = ESPSettings.Moving and RainbowHue or 0
+                        local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
+                        local idx = math.floor(tt) % stops
+                        local frac = tt - math.floor(tt)
+                        local c1 = colorStops[idx + 1]
+                        local c2 = colorStops[(idx + 1) % stops + 1]
+                        local blending = ESPSettings.GradientBlending or 1
+                        if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
+                        lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
+                    else
+                        lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
+                    end
+                    lineSegs[i].Transparency = 1
+                    lineSegs[i].Visible = true
+
+                    cur = cur + thisLen
+                end
+
+                for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
             end
-            for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
         end
-        ::continue_side::
     end
 
     -- corner filler squares removed; gradient segments cover corners
@@ -1428,18 +1478,14 @@ local function updateESP()
                 -- Box fill (independent from Box ESP) - always use gradients
                 if boxFillEnabled then
                     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-                    -- inset fill by 1px to avoid overlapping the 0.5px inner outline
-                    local fillX = ix + 1
-                    local fillY = iy + 1
-                    local fillW = math.max(1, iw - 2)
-                    local fillH = math.max(1, ih - 2)
+                    
                     -- Always draw gradient fill
                     -- Use the configured transparency directly (0 = opaque, 1 = fully transparent)
                     -- prefer per-player custom box-fill stops when available
                     local boxFillStops, boxFillTransStops = nil, nil
                     if boxFillCustomColors then boxFillStops = boxFillCustomColors end
                     if boxFillCustomTrans then boxFillTransStops = boxFillCustomTrans end
-                    drawGradientFill(espObj, fillX, fillY, fillW, fillH, boxFillTransparency, baseOffset, "BoxFill", boxFillStops, boxFillTransStops)
+                    drawGradientFill(espObj, ix, iy, iw, ih, boxFillTransparency, baseOffset, "BoxFill", boxFillStops, boxFillTransStops)
                     espObj.BoxFill.Visible = false
                 else
                     espObj.BoxFill.Visible = false
@@ -1880,11 +1926,7 @@ local function updateObjectESP()
                         drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, cfgBoxColorStops)
                         -- fill
                         if config.ShowBoxFill then
-                            local fillX = ix + 1
-                            local fillY = iy + 1
-                            local fillW = math.max(1, iw - 2)
-                            local fillH = math.max(1, ih - 2)
-                            drawGradientFill(espObj, fillX, fillY, fillW, fillH, config.BoxFillTransparency or 0.5, baseOffset, "BoxFill", cfgBoxFillStops, cfgBoxFillTrans)
+                            drawGradientFill(espObj, ix, iy, iw, ih, config.BoxFillTransparency or 0.5, baseOffset, "BoxFill", cfgBoxFillStops, cfgBoxFillTrans)
                         else
                             espObj.BoxFill.Visible = false
                         end
