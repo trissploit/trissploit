@@ -607,14 +607,15 @@ local function createESPObject()
         espObj.OutlineLines[i] = l
     end
     
-    -- Inner 1px outline lines (drawn just inside the box) for a both-sides outline effect
-    espObj.InnerOutlineLines = {}
+    -- (Removed duplicated colored outline square - gradient edges are authoritative)
+    -- Explicit inner 1px outline lines (drawn inside the box) to complement outer outline
+    espObj.OutlineInnerLines = {}
     for i = 1, 4 do
         local l = Drawing.new("Line")
         l.Thickness = 1
         l.Visible = false
-        l.ZIndex = 8
-        espObj.InnerOutlineLines[i] = l
+        l.ZIndex = 9
+        espObj.OutlineInnerLines[i] = l
     end
     espObj.Name.Center = true
     espObj.Name.Outline = true
@@ -687,7 +688,6 @@ local function removeESP(espObj)
         for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
     end
     for _, l in ipairs(espObj.OutlineLines or {}) do pcall(function() l:Remove() end) end
-    for _, l in ipairs(espObj.InnerOutlineLines or {}) do pcall(function() l:Remove() end) end
     pcall(function() espObj.BoxFill:Remove() end)
     for _, seg in ipairs(espObj.GradientSegments or {}) do
         pcall(function() seg:Remove() end)
@@ -702,7 +702,7 @@ local function removeESP(espObj)
         pcall(function() c.Line2:Remove() end)
     end
     pcall(function() if espObj.BoxOutline then espObj.BoxOutline:Remove() end end)
-    pcall(function() if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs:Remove() end end end)
+    pcall(function() if espObj.OutlineInnerLines then for _, l in ipairs(espObj.OutlineInnerLines) do pcall(function() l:Remove() end) end end end)
     if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
     pcall(function() if espObj.EquippedText then espObj.EquippedText:Remove() end end)
     pcall(function() if espObj.EquippedImage then espObj.EquippedImage:Remove() end end)
@@ -727,9 +727,8 @@ local function hideESP(espObj)
     if espObj.EquippedText then espObj.EquippedText.Visible = false end
     if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
     -- OutlineSquare removed earlier; ensure nothing tries to show it
-    if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
+    if espObj.OutlineInnerLines then for _, l in ipairs(espObj.OutlineInnerLines) do l.Visible = false end end
     if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
-    if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
 end
 
 -- SIMPLIFIED GRADIENT SYSTEM
@@ -950,44 +949,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
         end
     end
 
-    -- Draw tiny filled corner squares to guarantee corner pixels are covered
-    if espObj.CornerSquares then
-        local cornerPositions = {
-            Vector2.new(ix, iy),           -- top-left
-            Vector2.new(right, iy),        -- top-right
-            Vector2.new(ix, bottom),       -- bottom-left
-            Vector2.new(right, bottom)     -- bottom-right
-        }
-        for i, cs in ipairs(espObj.CornerSquares) do
-            local pos = cornerPositions[i]
-            -- Slight offset to ensure full corner coverage (covers inclusive edge pixels)
-            cs.Size = Vector2.new(3, 3)
-            cs.Position = Vector2.new(math.max(0, pos.X - 1), math.max(0, pos.Y - 1))
-            -- top corners use top color, bottom corners use bottom color for smooth transition
-            if colorStops and #colorStops >= 3 then
-                -- sample top (t=0) and bottom (t=1)
-                local function sampleAt(t)
-                    local stops = 3
-                    local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
-                    local baseHue = ESPSettings.Moving and RainbowHue or 0
-                    local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
-                    local idx = math.floor(tt) % stops
-                    local frac = tt - math.floor(tt)
-                    local c1 = colorStops[idx + 1]
-                    local c2 = colorStops[(idx + 1) % stops + 1]
-                    local blending = ESPSettings.GradientBlending or 1
-                    if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
-                    return Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
-                end
-                cs.Color = (i <= 2) and sampleAt(0) or sampleAt(1)
-            else
-                local cornerColor = (i <= 2) and getRainbowColor(baseOffset, "Box") or getRainbowColor(baseOffset + 0.5, "Box")
-                cs.Color = cornerColor
-            end
-            cs.Transparency = 1
-            cs.Visible = true
-        end
-    end
+    -- corner filler squares removed (outline handled by inner/outer lines)
 end
 
 -- Draw health bar fill with gradient (same size/position as normal fill)
@@ -1544,34 +1506,34 @@ local function updateESP()
                             espObj.OutlineLines[4].Color = col
                             espObj.OutlineLines[4].Thickness = 1
                             espObj.OutlineLines[4].Visible = true
-                            -- inner (inside) 1px outline
-                            if espObj.InnerOutlineLines then
-                                -- top inner
-                                espObj.InnerOutlineLines[1].From = Vector2.new(ix, iy)
-                                espObj.InnerOutlineLines[1].To = Vector2.new(right, iy)
-                                espObj.InnerOutlineLines[1].Color = col
-                                espObj.InnerOutlineLines[1].Thickness = 1
-                                espObj.InnerOutlineLines[1].Visible = true
-                                -- right inner
-                                espObj.InnerOutlineLines[2].From = Vector2.new(right, iy)
-                                espObj.InnerOutlineLines[2].To = Vector2.new(right, bottom)
-                                espObj.InnerOutlineLines[2].Color = col
-                                espObj.InnerOutlineLines[2].Thickness = 1
-                                espObj.InnerOutlineLines[2].Visible = true
-                                -- bottom inner
-                                espObj.InnerOutlineLines[3].From = Vector2.new(right, bottom)
-                                espObj.InnerOutlineLines[3].To = Vector2.new(ix, bottom)
-                                espObj.InnerOutlineLines[3].Color = col
-                                espObj.InnerOutlineLines[3].Thickness = 1
-                                espObj.InnerOutlineLines[3].Visible = true
-                                -- left inner
-                                espObj.InnerOutlineLines[4].From = Vector2.new(ix, bottom)
-                                espObj.InnerOutlineLines[4].To = Vector2.new(ix, iy)
-                                espObj.InnerOutlineLines[4].Color = col
-                                espObj.InnerOutlineLines[4].Thickness = 1
-                                espObj.InnerOutlineLines[4].Visible = true
-                            end
                         end
+                            -- Inner outline (1px) drawn inside the box to create a double-sided outline
+                            if espObj.OutlineInnerLines then
+                                -- top
+                                espObj.OutlineInnerLines[1].From = Vector2.new(ix, iy)
+                                espObj.OutlineInnerLines[1].To = Vector2.new(right, iy)
+                                espObj.OutlineInnerLines[1].Color = col
+                                espObj.OutlineInnerLines[1].Thickness = 1
+                                espObj.OutlineInnerLines[1].Visible = true
+                                -- right
+                                espObj.OutlineInnerLines[2].From = Vector2.new(right, iy)
+                                espObj.OutlineInnerLines[2].To = Vector2.new(right, bottom)
+                                espObj.OutlineInnerLines[2].Color = col
+                                espObj.OutlineInnerLines[2].Thickness = 1
+                                espObj.OutlineInnerLines[2].Visible = true
+                                -- bottom
+                                espObj.OutlineInnerLines[3].From = Vector2.new(right, bottom)
+                                espObj.OutlineInnerLines[3].To = Vector2.new(ix, bottom)
+                                espObj.OutlineInnerLines[3].Color = col
+                                espObj.OutlineInnerLines[3].Thickness = 1
+                                espObj.OutlineInnerLines[3].Visible = true
+                                -- left
+                                espObj.OutlineInnerLines[4].From = Vector2.new(ix, bottom)
+                                espObj.OutlineInnerLines[4].To = Vector2.new(ix, iy)
+                                espObj.OutlineInnerLines[4].Color = col
+                                espObj.OutlineInnerLines[4].Thickness = 1
+                                espObj.OutlineInnerLines[4].Visible = true
+                            end
                         -- Hide the old square outline so gradients remain authoritative
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                         -- Let drawGradientBox use the shared rainbow/custom gradient system
@@ -1582,8 +1544,7 @@ local function updateESP()
                         -- ensure any removed outline square/lines remain hidden
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                         if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
-                        if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
-                        if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
+                        if espObj.OutlineInnerLines then for _, l in ipairs(espObj.OutlineInnerLines) do l.Visible = false end end
                         hideBoxLines(espObj)
                         
                         local L = math.clamp(math.floor(math.min(w, h) * 0.25), 2, 50)
@@ -1615,10 +1576,9 @@ local function updateESP()
                     -- Hide box outlines when Boxes disabled
                     hideBoxLines(espObj)
                     -- OutlineSquare removed earlier; nothing to toggle
-                    if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
+                    if espObj.OutlineInnerLines then for _, l in ipairs(espObj.OutlineInnerLines) do l.Visible = false end end
                     if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                     if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
-                    if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
                     for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                 end
                 
@@ -1634,7 +1594,6 @@ local function updateESP()
                 if espObj.EquippedText then espObj.EquippedText.Visible = false end
                 if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
                 if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
-                if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
             end
 
             -- Health bar
