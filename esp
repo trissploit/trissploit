@@ -556,7 +556,7 @@ local function createESPObject()
         espObj.BoxLines[side] = {}
         for seg = 1, BOX_LINE_SEGMENTS do
             local line = Drawing.new("Line")
-            line.Thickness = 2
+            line.Thickness = 1
             line.Visible = false
             line.ZIndex = 3
             espObj.BoxLines[side][seg] = line
@@ -820,7 +820,13 @@ end
 local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
     -- 4 sides: top, right, bottom, left - each drawn as segments
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-    local th = 2
+    local th = 1
+    -- floating inner coordinates (align to 0.5 inset so outline + segments render symmetrically)
+    local fx, fy, fw, fh = x, y, w, h
+    local leftX = fx + 0.5
+    local rightX = fx + fw - 0.5
+    local topY = fy + 0.5
+    local bottomY = fy + fh - 0.5
 
     -- Use inclusive pixel coordinates for edges (convert width/height to last pixel indices)
     local right = ix + iw - 1
@@ -839,7 +845,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
         local lineSegs = espObj.BoxLines[sideIdx]
         local segCount = #lineSegs
         
-        if isVert then
+                if isVert then
             -- Vertical line: inclusive length
             local startY = math.min(sy, ey)
             local lineLen = math.abs(ey - sy) + 1
@@ -862,8 +868,10 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local fromY = segTop - (i > 1 and 1 or 0)
                     local toY = segBottom + (i < actualSegs and 1 or 0)
 
-                    lineSegs[i].From = Vector2.new(sx, fromY)
-                    lineSegs[i].To = Vector2.new(sx, toY)
+                    -- use inner X position so vertical segments sit exactly on the inset edge
+                    local xPos = (sx == ix) and leftX or rightX
+                    lineSegs[i].From = Vector2.new(xPos, fromY)
+                    lineSegs[i].To = Vector2.new(xPos, toY)
                     lineSegs[i].Thickness = th
                     -- interpolate between provided 3-stop colorStops when provided
                     if colorStops and #colorStops >= 3 then
@@ -889,7 +897,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
 
                 for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
             end
-        else
+                else
             -- Horizontal line: inclusive length
             local startX = math.min(sx, ex)
             local lineLen = math.abs(ex - sx) + 1
@@ -905,14 +913,15 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
                     -- use the vertical position of this horizontal side to compute gradient t
-                    local segCenterY = sy
+                    -- use inner Y position so horizontal segments sit exactly on the inset edge
+                    local segCenterY = (sy == iy) and topY or bottomY
                     local t = (segCenterY - iy) / math.max(1, ih)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
 
-                    lineSegs[i].From = Vector2.new(fromX, sy)
-                    lineSegs[i].To = Vector2.new(toX, sy)
+                    lineSegs[i].From = Vector2.new(fromX, (sy == iy) and topY or bottomY)
+                    lineSegs[i].To = Vector2.new(toX, (sy == iy) and topY or bottomY)
                     lineSegs[i].Thickness = th
                     if colorStops and #colorStops >= 3 then
                         local stops = 3
