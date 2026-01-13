@@ -1498,8 +1498,16 @@ local function updateESP()
                             espObj.OutlineLines[4].Thickness = 1
                             espObj.OutlineLines[4].Visible = true
                         end
-                        -- Hide the old square outline so gradients remain authoritative
-                        if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
+                        -- Show an inner 1px BoxOutline so the inside edge is visible
+                        if espObj.BoxOutline then
+                            -- Position/size slightly inset so the outline appears on the inside edge
+                            espObj.BoxOutline.Position = Vector2.new(ix + 0.5, iy + 0.5)
+                            espObj.BoxOutline.Size = Vector2.new(math.max(0, iw - 1), math.max(0, ih - 1))
+                            espObj.BoxOutline.Color = boxOutlineColor or Color3.new(0,0,0)
+                            espObj.BoxOutline.Thickness = 1
+                            espObj.BoxOutline.ZIndex = 10
+                            espObj.BoxOutline.Visible = true
+                        end
                         -- Let drawGradientBox use the shared rainbow/custom gradient system
                         drawGradientBox(espObj, ix, iy, iw, ih, baseOffset, boxColorStops)
                         for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
