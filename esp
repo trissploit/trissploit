@@ -607,8 +607,7 @@ local function createESPObject()
         espObj.OutlineLines[i] = l
     end
     
-    -- (Removed duplicated colored outline square - gradient edges are authoritative)
-    -- Explicit inner 1px outline lines (drawn inside the gradient)
+    -- Inner outline lines for inside the box
     espObj.InnerOutlineLines = {}
     for i = 1, 4 do
         local l = Drawing.new("Line")
@@ -616,6 +615,19 @@ local function createESPObject()
         l.Visible = false
         l.ZIndex = 9
         espObj.InnerOutlineLines[i] = l
+    end
+    
+    -- (Removed duplicated colored outline square - gradient edges are authoritative)
+    -- Corner filler squares to ensure no missing pixels at corners
+    espObj.CornerSquares = {}
+    for i = 1, 4 do
+        local cs = Drawing.new("Square")
+        cs.Filled = true
+        -- Slightly larger corner filler and higher ZIndex to ensure visibility
+        cs.Size = Vector2.new(3, 3)
+        cs.Visible = false
+        cs.ZIndex = 6
+        espObj.CornerSquares[i] = cs
     end
     espObj.Name.Center = true
     espObj.Name.Outline = true
@@ -688,6 +700,7 @@ local function removeESP(espObj)
         for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
     end
     for _, l in ipairs(espObj.OutlineLines or {}) do pcall(function() l:Remove() end) end
+    for _, l in ipairs(espObj.InnerOutlineLines or {}) do pcall(function() l:Remove() end) end
     pcall(function() espObj.BoxFill:Remove() end)
     for _, seg in ipairs(espObj.GradientSegments or {}) do
         pcall(function() seg:Remove() end)
@@ -702,7 +715,7 @@ local function removeESP(espObj)
         pcall(function() c.Line2:Remove() end)
     end
     pcall(function() if espObj.BoxOutline then espObj.BoxOutline:Remove() end end)
-    pcall(function() if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l:Remove() end end end)
+    pcall(function() if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs:Remove() end end end)
     if espObj.Highlight then pcall(function() espObj.Highlight:Destroy() end) end
     pcall(function() if espObj.EquippedText then espObj.EquippedText:Remove() end end)
     pcall(function() if espObj.EquippedImage then espObj.EquippedImage:Remove() end end)
@@ -727,6 +740,7 @@ local function hideESP(espObj)
     if espObj.EquippedText then espObj.EquippedText.Visible = false end
     if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
     -- OutlineSquare removed earlier; ensure nothing tries to show it
+    if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
     if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
     if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
 end
@@ -949,7 +963,8 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
         end
     end
 
-    -- corner squares removed: gradient sides and inner outline cover corners
+    -- Corner squares removed as requested
+end
 end
 
 -- Draw health bar fill with gradient (same size/position as normal fill)
@@ -1506,33 +1521,33 @@ local function updateESP()
                             espObj.OutlineLines[4].Color = col
                             espObj.OutlineLines[4].Thickness = 1
                             espObj.OutlineLines[4].Visible = true
-                            -- inner 1px outline (inside the gradient)
-                            if espObj.InnerOutlineLines then
-                                -- top
-                                espObj.InnerOutlineLines[1].From = Vector2.new(ix, iy)
-                                espObj.InnerOutlineLines[1].To = Vector2.new(right, iy)
-                                espObj.InnerOutlineLines[1].Color = col
-                                espObj.InnerOutlineLines[1].Thickness = 1
-                                espObj.InnerOutlineLines[1].Visible = true
-                                -- right
-                                espObj.InnerOutlineLines[2].From = Vector2.new(right, iy)
-                                espObj.InnerOutlineLines[2].To = Vector2.new(right, bottom)
-                                espObj.InnerOutlineLines[2].Color = col
-                                espObj.InnerOutlineLines[2].Thickness = 1
-                                espObj.InnerOutlineLines[2].Visible = true
-                                -- bottom
-                                espObj.InnerOutlineLines[3].From = Vector2.new(right, bottom)
-                                espObj.InnerOutlineLines[3].To = Vector2.new(ix, bottom)
-                                espObj.InnerOutlineLines[3].Color = col
-                                espObj.InnerOutlineLines[3].Thickness = 1
-                                espObj.InnerOutlineLines[3].Visible = true
-                                -- left
-                                espObj.InnerOutlineLines[4].From = Vector2.new(ix, bottom)
-                                espObj.InnerOutlineLines[4].To = Vector2.new(ix, iy)
-                                espObj.InnerOutlineLines[4].Color = col
-                                espObj.InnerOutlineLines[4].Thickness = 1
-                                espObj.InnerOutlineLines[4].Visible = true
-                            end
+                        end
+                        -- Draw inner outline lines
+                        if espObj.InnerOutlineLines then
+                            -- top inner
+                            espObj.InnerOutlineLines[1].From = Vector2.new(ix, iy)
+                            espObj.InnerOutlineLines[1].To = Vector2.new(right, iy)
+                            espObj.InnerOutlineLines[1].Color = col
+                            espObj.InnerOutlineLines[1].Thickness = 1
+                            espObj.InnerOutlineLines[1].Visible = true
+                            -- right inner
+                            espObj.InnerOutlineLines[2].From = Vector2.new(right, iy)
+                            espObj.InnerOutlineLines[2].To = Vector2.new(right, bottom)
+                            espObj.InnerOutlineLines[2].Color = col
+                            espObj.InnerOutlineLines[2].Thickness = 1
+                            espObj.InnerOutlineLines[2].Visible = true
+                            -- bottom inner
+                            espObj.InnerOutlineLines[3].From = Vector2.new(right, bottom)
+                            espObj.InnerOutlineLines[3].To = Vector2.new(ix, bottom)
+                            espObj.InnerOutlineLines[3].Color = col
+                            espObj.InnerOutlineLines[3].Thickness = 1
+                            espObj.InnerOutlineLines[3].Visible = true
+                            -- left inner
+                            espObj.InnerOutlineLines[4].From = Vector2.new(ix, bottom)
+                            espObj.InnerOutlineLines[4].To = Vector2.new(ix, iy)
+                            espObj.InnerOutlineLines[4].Color = col
+                            espObj.InnerOutlineLines[4].Thickness = 1
+                            espObj.InnerOutlineLines[4].Visible = true
                         end
                         -- Hide the old square outline so gradients remain authoritative
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
@@ -1544,6 +1559,7 @@ local function updateESP()
                         -- ensure any removed outline square/lines remain hidden
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                         if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
+                        if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
                         if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
                         hideBoxLines(espObj)
                         
@@ -1594,6 +1610,7 @@ local function updateESP()
                 if espObj.EquippedText then espObj.EquippedText.Visible = false end
                 if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
                 if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
+                if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
             end
 
             -- Health bar
