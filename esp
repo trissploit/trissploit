@@ -607,17 +607,14 @@ local function createESPObject()
         espObj.OutlineLines[i] = l
     end
     
-    -- (Removed duplicated colored outline square - gradient edges are authoritative)
-    -- Corner filler squares to ensure no missing pixels at corners
-    espObj.CornerSquares = {}
+    -- Inner 1px outline lines (drawn just inside the box) for a both-sides outline effect
+    espObj.InnerOutlineLines = {}
     for i = 1, 4 do
-        local cs = Drawing.new("Square")
-        cs.Filled = true
-        -- Slightly larger corner filler and higher ZIndex to ensure visibility
-        cs.Size = Vector2.new(3, 3)
-        cs.Visible = false
-        cs.ZIndex = 6
-        espObj.CornerSquares[i] = cs
+        local l = Drawing.new("Line")
+        l.Thickness = 1
+        l.Visible = false
+        l.ZIndex = 8
+        espObj.InnerOutlineLines[i] = l
     end
     espObj.Name.Center = true
     espObj.Name.Outline = true
@@ -690,6 +687,7 @@ local function removeESP(espObj)
         for _, line in ipairs(espObj.BoxLines[side] or {}) do pcall(function() line:Remove() end) end
     end
     for _, l in ipairs(espObj.OutlineLines or {}) do pcall(function() l:Remove() end) end
+    for _, l in ipairs(espObj.InnerOutlineLines or {}) do pcall(function() l:Remove() end) end
     pcall(function() espObj.BoxFill:Remove() end)
     for _, seg in ipairs(espObj.GradientSegments or {}) do
         pcall(function() seg:Remove() end)
@@ -731,6 +729,7 @@ local function hideESP(espObj)
     -- OutlineSquare removed earlier; ensure nothing tries to show it
     if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
     if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
+    if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
 end
 
 -- SIMPLIFIED GRADIENT SYSTEM
@@ -753,36 +752,13 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
     local baseH = math.floor(totalRows / segCount)
     local remainder = totalRows - baseH * segCount
 
-    -- Precompute rotated gradient axis and projection range based on GradientRotation (degrees)
-    local angleDeg = (ESPSettings.GradientRotation or 0) % 360
-    local angleRad = math.rad(angleDeg)
-    local vx, vy = math.cos(angleRad), math.sin(angleRad)
-    -- projecting normalized rectangle [0,1]x[0,1] corners
-    local p00 = 0
-    local p10 = vx
-    local p01 = vy
-    local p11 = vx + vy
-    local minP = math.min(p00, p10, p01, p11)
-    local maxP = math.max(p00, p10, p01, p11)
-    local rangeP = maxP - minP
-
-    local function projT(px, py)
-        -- px/py are absolute pixel coordinates; normalize to [0,1] inside rect
-        local rx = (px - ix) / math.max(1, iw)
-        local ry = (py - iy) / math.max(1, ih)
-        local proj = rx * vx + ry * vy
-        if rangeP == 0 then return 0 end
-        return (proj - minP) / rangeP
-    end
-
     local curY = iy
     for i = 1, segCount do
         local thisH = baseH + (i <= remainder and 1 or 0)
         local segTop = curY
         local segBottom = curY + thisH - 1
-        local segCenterY = (segTop + segBottom) * 0.5
-        local segCenterX = ix + iw * 0.5
-        local t = projT(segCenterX, segCenterY)
+        local segCenter = (segTop + segBottom) * 0.5
+        local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
 
         -- Color: prefer explicit colorStops when provided (3 stops), otherwise use rainbow/custom element colors
         local segColor
@@ -867,26 +843,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
         {ix, bottom, right, bottom, false},   -- bottom
         {ix, iy, ix, bottom, true}            -- left
     }
-
-    -- Precompute rotated gradient axis and projection range based on GradientRotation
-    local angleDeg = (ESPSettings.GradientRotation or 0) % 360
-    local angleRad = math.rad(angleDeg)
-    local vx, vy = math.cos(angleRad), math.sin(angleRad)
-    local p00 = 0
-    local p10 = vx
-    local p01 = vy
-    local p11 = vx + vy
-    local minP = math.min(p00, p10, p01, p11)
-    local maxP = math.max(p00, p10, p01, p11)
-    local rangeP = maxP - minP
-    local function projT(px, py)
-        local rx = (px - ix) / math.max(1, iw)
-        local ry = (py - iy) / math.max(1, ih)
-        local proj = rx * vx + ry * vy
-        if rangeP == 0 then return 0 end
-        return (proj - minP) / rangeP
-    end
-
+    
     for sideIdx, side in ipairs(sides) do
         local sx, sy, ex, ey, isVert = side[1], side[2], side[3], side[4], side[5]
         local lineSegs = espObj.BoxLines[sideIdx]
@@ -908,10 +865,8 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local segTop = cur
                     local segBottom = cur + thisLen - 1
                     local segCenter = (segTop + segBottom) * 0.5
-                    -- compute gradient t using rotated axis
-                    local segCenterX = sx
-                    local segCenterY = segCenter
-                    local t = projT(segCenterX, segCenterY)
+                    -- vertical fraction (0=top,1=bottom)
+                    local t = (segCenter - iy) / math.max(1, ih)
 
                     -- overlap vertically to avoid 1px gaps
                     local fromY = segTop - (i > 1 and 1 or 0)
@@ -920,7 +875,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
-                    -- interpolate between provided colorStops when available
+                    -- interpolate between provided 3-stop colorStops when provided
                     if colorStops and #colorStops >= 3 then
                         local stops = 3
                         local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
@@ -934,7 +889,6 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                         if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
                         lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
                     else
-                        -- fallback to rainbow-based color
                         lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     end
                     lineSegs[i].Transparency = 1
@@ -960,10 +914,9 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local thisLen = baseLen + (i <= rem and 1 or 0)
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
-                    -- compute gradient t using rotated axis (segment center)
-                    local segCenterX = (segLeft + segRight) * 0.5
+                    -- use the vertical position of this horizontal side to compute gradient t
                     local segCenterY = sy
-                    local t = projT(segCenterX, segCenterY)
+                    local t = (segCenterY - iy) / math.max(1, ih)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
@@ -1026,8 +979,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
                     return Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
                 end
-                local cornerT = projT(pos.X, pos.Y)
-                cs.Color = sampleAt(cornerT)
+                cs.Color = (i <= 2) and sampleAt(0) or sampleAt(1)
             else
                 local cornerColor = (i <= 2) and getRainbowColor(baseOffset, "Box") or getRainbowColor(baseOffset + 0.5, "Box")
                 cs.Color = cornerColor
@@ -1051,25 +1003,6 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
         return
     end
     
-    -- Precompute rotated gradient axis and projection range for health bar
-    local angleDeg = (ESPSettings.GradientRotation or 0) % 360
-    local angleRad = math.rad(angleDeg)
-    local vx, vy = math.cos(angleRad), math.sin(angleRad)
-    local p00 = 0
-    local p10 = vx
-    local p01 = vy
-    local p11 = vx + vy
-    local minP = math.min(p00, p10, p01, p11)
-    local maxP = math.max(p00, p10, p01, p11)
-    local rangeP = maxP - minP
-    local function projT(px, py)
-        local rx = (px - ix) / math.max(1, iw)
-        local ry = (py - iy) / math.max(1, ih)
-        local proj = rx * vx + ry * vy
-        if rangeP == 0 then return 0 end
-        return (proj - minP) / rangeP
-    end
-
     if isVertical then
         -- Vertical bar: allow segmentation to cover entire height even when iw/ih > pool
         local totalRows = ih
@@ -1081,9 +1014,8 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local thisH = baseH + (i <= remainder and 1 or 0)
             local segTop = curY
             local segBottom = curY + thisH - 1
-            local segCenterY = (segTop + segBottom) * 0.5
-            local segCenterX = ix + iw * 0.5
-            local t = projT(segCenterX, segCenterY)
+            local segCenter = (segTop + segBottom) * 0.5
+            local t = ((segCenter - iy) + 0.5) / math.max(1, totalRows)
 
             segs[i].Size = Vector2.new(iw, segBottom - segTop + 1)
             segs[i].Position = Vector2.new(ix, segTop)
@@ -1106,9 +1038,8 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local thisW = baseW + (i <= remainder and 1 or 0)
             local segLeft = curX
             local segRight = curX + thisW - 1
-            local segCenterX = (segLeft + segRight) * 0.5
-            local segCenterY = iy + ih * 0.5
-            local t = projT(segCenterX, segCenterY)
+            local segCenter = (segLeft + segRight) * 0.5
+            local t = ((segCenter - ix) + 0.5) / math.max(1, totalCols)
 
             segs[i].Size = Vector2.new(segRight - segLeft + 1, ih)
             segs[i].Position = Vector2.new(segLeft, iy)
@@ -1613,6 +1544,33 @@ local function updateESP()
                             espObj.OutlineLines[4].Color = col
                             espObj.OutlineLines[4].Thickness = 1
                             espObj.OutlineLines[4].Visible = true
+                            -- inner (inside) 1px outline
+                            if espObj.InnerOutlineLines then
+                                -- top inner
+                                espObj.InnerOutlineLines[1].From = Vector2.new(ix, iy)
+                                espObj.InnerOutlineLines[1].To = Vector2.new(right, iy)
+                                espObj.InnerOutlineLines[1].Color = col
+                                espObj.InnerOutlineLines[1].Thickness = 1
+                                espObj.InnerOutlineLines[1].Visible = true
+                                -- right inner
+                                espObj.InnerOutlineLines[2].From = Vector2.new(right, iy)
+                                espObj.InnerOutlineLines[2].To = Vector2.new(right, bottom)
+                                espObj.InnerOutlineLines[2].Color = col
+                                espObj.InnerOutlineLines[2].Thickness = 1
+                                espObj.InnerOutlineLines[2].Visible = true
+                                -- bottom inner
+                                espObj.InnerOutlineLines[3].From = Vector2.new(right, bottom)
+                                espObj.InnerOutlineLines[3].To = Vector2.new(ix, bottom)
+                                espObj.InnerOutlineLines[3].Color = col
+                                espObj.InnerOutlineLines[3].Thickness = 1
+                                espObj.InnerOutlineLines[3].Visible = true
+                                -- left inner
+                                espObj.InnerOutlineLines[4].From = Vector2.new(ix, bottom)
+                                espObj.InnerOutlineLines[4].To = Vector2.new(ix, iy)
+                                espObj.InnerOutlineLines[4].Color = col
+                                espObj.InnerOutlineLines[4].Thickness = 1
+                                espObj.InnerOutlineLines[4].Visible = true
+                            end
                         end
                         -- Hide the old square outline so gradients remain authoritative
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
@@ -1624,6 +1582,7 @@ local function updateESP()
                         -- ensure any removed outline square/lines remain hidden
                         if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                         if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
+                        if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
                         if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
                         hideBoxLines(espObj)
                         
@@ -1659,6 +1618,7 @@ local function updateESP()
                     if espObj.CornerSquares then for _, cs in ipairs(espObj.CornerSquares) do cs.Visible = false end end
                     if espObj.BoxOutline then espObj.BoxOutline.Visible = false end
                     if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
+                    if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
                     for _, c in ipairs(espObj.Corners) do c.Line1.Visible, c.Line2.Visible = false, false end
                 end
                 
@@ -1674,6 +1634,7 @@ local function updateESP()
                 if espObj.EquippedText then espObj.EquippedText.Visible = false end
                 if espObj.EquippedImage then espObj.EquippedImage.Visible = false end
                 if espObj.OutlineLines then for _, l in ipairs(espObj.OutlineLines) do l.Visible = false end end
+                if espObj.InnerOutlineLines then for _, l in ipairs(espObj.InnerOutlineLines) do l.Visible = false end end
             end
 
             -- Health bar
