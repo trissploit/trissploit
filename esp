@@ -556,7 +556,7 @@ local function createESPObject()
         espObj.BoxLines[side] = {}
         for seg = 1, BOX_LINE_SEGMENTS do
             local line = Drawing.new("Line")
-            line.Thickness = 1
+            line.Thickness = 2
             line.Visible = false
             line.ZIndex = 3
             espObj.BoxLines[side][seg] = line
@@ -820,18 +820,7 @@ end
 local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
     -- 4 sides: top, right, bottom, left - each drawn as segments
     local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-    local th = 1
-    -- floating inner coordinates (align to 0.5 inset so outline + segments render symmetrically)
-    local fx, fy, fw, fh = x, y, w, h
-    local leftX = fx + 0.5
-    local rightX = fx + fw - 0.5
-    local topY = fy + 0.5
-    local bottomY = fy + fh - 0.5
-    -- inner drawing bounds (leave a 1px gap from outline so gradients don't paint over it)
-    local innerLeftX = fx + 1.0
-    local innerRightX = fx + fw - 1.0
-    local innerTopY = fy + 1.0
-    local innerBottomY = fy + fh - 1.0
+    local th = 2
 
     -- Use inclusive pixel coordinates for edges (convert width/height to last pixel indices)
     local right = ix + iw - 1
@@ -850,7 +839,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
         local lineSegs = espObj.BoxLines[sideIdx]
         local segCount = #lineSegs
         
-                if isVert then
+        if isVert then
             -- Vertical line: inclusive length
             local startY = math.min(sy, ey)
             local lineLen = math.abs(ey - sy) + 1
@@ -873,18 +862,8 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local fromY = segTop - (i > 1 and 1 or 0)
                     local toY = segBottom + (i < actualSegs and 1 or 0)
 
-                    -- use inner X position so vertical segments sit inside the outline and don't overlap
-                    local xPos = (sx == ix) and innerLeftX or innerRightX
-                    -- clamp Y to inner bounds so vertical segments don't overrun the outline
-                    local finalFromY = math.max(fromY, innerTopY)
-                    local finalToY = math.min(toY, innerBottomY)
-                    if finalToY < finalFromY then
-                        lineSegs[i].Visible = false
-                    else
-                        lineSegs[i].From = Vector2.new(xPos, finalFromY)
-                        lineSegs[i].To = Vector2.new(xPos, finalToY)
-                        lineSegs[i].Visible = true
-                    end
+                    lineSegs[i].From = Vector2.new(sx, fromY)
+                    lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
                     -- interpolate between provided 3-stop colorStops when provided
                     if colorStops and #colorStops >= 3 then
@@ -910,7 +889,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
 
                 for i = actualSegs + 1, #lineSegs do lineSegs[i].Visible = false end
             end
-                else
+        else
             -- Horizontal line: inclusive length
             local startX = math.min(sx, ex)
             local lineLen = math.abs(ex - sx) + 1
@@ -926,23 +905,15 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
                     -- use the vertical position of this horizontal side to compute gradient t
-                    -- use inner Y position so horizontal segments sit inside the outline and don't overlap
-                    local segCenterY = (sy == iy) and innerTopY or innerBottomY
+                    local segCenterY = sy
                     local t = (segCenterY - iy) / math.max(1, ih)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
-                    -- clamp horizontal segment X range to inner bounds
-                    local finalFromX = math.max(fromX, innerLeftX)
-                    local finalToX = math.min(toX, innerRightX)
-                    if finalToX < finalFromX then
-                        lineSegs[i].Visible = false
-                    else
-                        lineSegs[i].From = Vector2.new(finalFromX, (sy == iy) and innerTopY or innerBottomY)
-                        lineSegs[i].To = Vector2.new(finalToX, (sy == iy) and innerTopY or innerBottomY)
-                        lineSegs[i].Thickness = th
-                        lineSegs[i].Visible = true
-                    end
+
+                    lineSegs[i].From = Vector2.new(fromX, sy)
+                    lineSegs[i].To = Vector2.new(toX, sy)
+                    lineSegs[i].Thickness = th
                     if colorStops and #colorStops >= 3 then
                         local stops = 3
                         local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
@@ -1502,34 +1473,27 @@ local function updateESP()
                         local bottom = iy + ih - 1
                         if espObj.OutlineLines then
                             local col = boxOutlineColor or Color3.new(0,0,0)
-                            -- compute inner edge positions using float box coordinates for symmetry
-                            local fx, fy, fw, fh = x, y, w, h
-                            local leftX = fx + 0.5
-                            local rightX = fx + fw - 0.5
-                            local topY = fy + 0.5
-                            local bottomY = fy + fh - 0.5
-
-                            -- top
-                            espObj.OutlineLines[1].From = Vector2.new(leftX, topY)
-                            espObj.OutlineLines[1].To = Vector2.new(rightX, topY)
+                            -- top (0.5px inside)
+                            espObj.OutlineLines[1].From = Vector2.new(ix + 0.5, iy + 0.5)
+                            espObj.OutlineLines[1].To = Vector2.new(right - 0.5, iy + 0.5)
                             espObj.OutlineLines[1].Color = col
                             espObj.OutlineLines[1].Thickness = 0.5
                             espObj.OutlineLines[1].Visible = true
-                            -- right
-                            espObj.OutlineLines[2].From = Vector2.new(rightX, topY)
-                            espObj.OutlineLines[2].To = Vector2.new(rightX, bottomY)
+                            -- right (0.5px inside)
+                            espObj.OutlineLines[2].From = Vector2.new(right - 0.5, iy + 0.5)
+                            espObj.OutlineLines[2].To = Vector2.new(right - 0.5, bottom - 0.5)
                             espObj.OutlineLines[2].Color = col
                             espObj.OutlineLines[2].Thickness = 0.5
                             espObj.OutlineLines[2].Visible = true
-                            -- bottom
-                            espObj.OutlineLines[3].From = Vector2.new(rightX, bottomY)
-                            espObj.OutlineLines[3].To = Vector2.new(leftX, bottomY)
+                            -- bottom (0.5px inside)
+                            espObj.OutlineLines[3].From = Vector2.new(right - 0.5, bottom - 0.5)
+                            espObj.OutlineLines[3].To = Vector2.new(ix + 0.5, bottom - 0.5)
                             espObj.OutlineLines[3].Color = col
                             espObj.OutlineLines[3].Thickness = 0.5
                             espObj.OutlineLines[3].Visible = true
-                            -- left
-                            espObj.OutlineLines[4].From = Vector2.new(leftX, bottomY)
-                            espObj.OutlineLines[4].To = Vector2.new(leftX, topY)
+                            -- left (0.5px inside)
+                            espObj.OutlineLines[4].From = Vector2.new(ix + 0.5, bottom - 0.5)
+                            espObj.OutlineLines[4].To = Vector2.new(ix + 0.5, iy + 0.5)
                             espObj.OutlineLines[4].Color = col
                             espObj.OutlineLines[4].Thickness = 0.5
                             espObj.OutlineLines[4].Visible = true
