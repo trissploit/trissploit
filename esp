@@ -826,12 +826,24 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
     local right = ix + iw - 1
     local bottom = iy + ih - 1
 
+    -- Inset the gradient edge segments slightly so 0.5px inner outlines
+    -- don't fully occlude the top/left gradient segments. Use a 1px inset
+    -- when the box is large enough, otherwise fall back to inclusive edges.
+    local inset = 1
+    local leftX = ix + inset
+    local topY = iy + inset
+    local rightX = right - inset
+    local bottomY = bottom - inset
+    if rightX <= leftX or bottomY <= topY then
+        leftX, topY, rightX, bottomY = ix, iy, right, bottom
+    end
+
     -- Side definitions: {startX, startY, endX, endY, isVertical}
     local sides = {
-        {ix, iy, right, iy, false},           -- top
-        {right, iy, right, bottom, true},     -- right
-        {ix, bottom, right, bottom, false},   -- bottom
-        {ix, iy, ix, bottom, true}            -- left
+        {leftX, topY, rightX, topY, false},           -- top
+        {rightX, topY, rightX, bottomY, true},        -- right
+        {leftX, bottomY, rightX, bottomY, false},     -- bottom
+        {leftX, topY, leftX, bottomY, true}           -- left
     }
     
     for sideIdx, side in ipairs(sides) do
