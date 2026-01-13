@@ -753,27 +753,26 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
     local baseH = math.floor(totalRows / segCount)
     local remainder = totalRows - baseH * segCount
 
-    -- Precompute gradient axis projection for arbitrary rotation
-    local angleDeg = ESPSettings.GradientRotation or 0
+    -- Precompute rotated gradient axis and projection range based on GradientRotation (degrees)
+    local angleDeg = (ESPSettings.GradientRotation or 0) % 360
     local angleRad = math.rad(angleDeg)
-    local dir = Vector2.new(math.cos(angleRad), math.sin(angleRad))
-    -- rectangle corners
-    local corners = {
-        Vector2.new(ix, iy),
-        Vector2.new(ix + iw - 1, iy),
-        Vector2.new(ix, iy + ih - 1),
-        Vector2.new(ix + iw - 1, iy + ih - 1)
-    }
-    local minProj, maxProj
-    for _, c in ipairs(corners) do
-        local p = c.X * dir.X + c.Y * dir.Y
-        if not minProj or p < minProj then minProj = p end
-        if not maxProj or p > maxProj then maxProj = p end
-    end
-    -- fallback if degenerate
-    if not minProj or not maxProj or math.abs(maxProj - minProj) < 1e-6 then
-        minProj = iy
-        maxProj = iy + ih
+    local vx, vy = math.cos(angleRad), math.sin(angleRad)
+    -- projecting normalized rectangle [0,1]x[0,1] corners
+    local p00 = 0
+    local p10 = vx
+    local p01 = vy
+    local p11 = vx + vy
+    local minP = math.min(p00, p10, p01, p11)
+    local maxP = math.max(p00, p10, p01, p11)
+    local rangeP = maxP - minP
+
+    local function projT(px, py)
+        -- px/py are absolute pixel coordinates; normalize to [0,1] inside rect
+        local rx = (px - ix) / math.max(1, iw)
+        local ry = (py - iy) / math.max(1, ih)
+        local proj = rx * vx + ry * vy
+        if rangeP == 0 then return 0 end
+        return (proj - minP) / rangeP
     end
 
     local curY = iy
@@ -782,11 +781,8 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local segTop = curY
         local segBottom = curY + thisH - 1
         local segCenterY = (segTop + segBottom) * 0.5
-        local segCenterX = ix + (iw - 1) * 0.5
-        local segCenter = Vector2.new(segCenterX, segCenterY)
-        local proj = segCenter.X * dir.X + segCenter.Y * dir.Y
-        local t = (proj - minProj) / math.max(1e-6, (maxProj - minProj))
-        t = math.clamp(t, 0, 1)
+        local segCenterX = ix + iw * 0.5
+        local t = projT(segCenterX, segCenterY)
 
         -- Color: prefer explicit colorStops when provided (3 stops), otherwise use rainbow/custom element colors
         local segColor
@@ -794,7 +790,7 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
             local stops = 3
             local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
             local baseHue = ESPSettings.Moving and RainbowHue or 0
-            local tt = ((baseHue + baseOffset + t + rotationOffset) % 1) * stops
+            local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
             local idx = math.floor(tt) % stops
             local frac = tt - math.floor(tt)
             local c1 = colorStops[idx + 1]
@@ -810,7 +806,7 @@ local function drawGradientFill(espObj, x, y, w, h, transparency, baseOffset, el
         local segTrans
         if transStops and #transStops >= 3 then
             local stops = 3
-            local tt = ((RainbowHue + baseOffset + t) % 1) * stops
+            local tt = ((RainbowHue + baseOffset + t * 0.5) % 1) * stops
             local idx = math.floor(tt) % stops
             local frac = tt - math.floor(tt)
             frac = frac * frac * (3 - 2 * frac)
@@ -871,26 +867,24 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
         {ix, bottom, right, bottom, false},   -- bottom
         {ix, iy, ix, bottom, true}            -- left
     }
-    
-    -- Precompute gradient axis projection for arbitrary rotation (shared across sides)
-    local angleDeg = ESPSettings.GradientRotation or 0
+
+    -- Precompute rotated gradient axis and projection range based on GradientRotation
+    local angleDeg = (ESPSettings.GradientRotation or 0) % 360
     local angleRad = math.rad(angleDeg)
-    local dir = Vector2.new(math.cos(angleRad), math.sin(angleRad))
-    local corners = {
-        Vector2.new(ix, iy),
-        Vector2.new(right, iy),
-        Vector2.new(ix, bottom),
-        Vector2.new(right, bottom)
-    }
-    local minProj, maxProj
-    for _, c in ipairs(corners) do
-        local p = c.X * dir.X + c.Y * dir.Y
-        if not minProj or p < minProj then minProj = p end
-        if not maxProj or p > maxProj then maxProj = p end
-    end
-    if not minProj or not maxProj or math.abs(maxProj - minProj) < 1e-6 then
-        minProj = iy
-        maxProj = bottom
+    local vx, vy = math.cos(angleRad), math.sin(angleRad)
+    local p00 = 0
+    local p10 = vx
+    local p01 = vy
+    local p11 = vx + vy
+    local minP = math.min(p00, p10, p01, p11)
+    local maxP = math.max(p00, p10, p01, p11)
+    local rangeP = maxP - minP
+    local function projT(px, py)
+        local rx = (px - ix) / math.max(1, iw)
+        local ry = (py - iy) / math.max(1, ih)
+        local proj = rx * vx + ry * vy
+        if rangeP == 0 then return 0 end
+        return (proj - minP) / rangeP
     end
 
     for sideIdx, side in ipairs(sides) do
@@ -913,12 +907,11 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local thisLen = baseLen + (i <= rem and 1 or 0)
                     local segTop = cur
                     local segBottom = cur + thisLen - 1
-                    local segCenterY = (segTop + segBottom) * 0.5
+                    local segCenter = (segTop + segBottom) * 0.5
+                    -- compute gradient t using rotated axis
                     local segCenterX = sx
-                    local segCenter = Vector2.new(segCenterX, segCenterY)
-                    local proj = segCenter.X * dir.X + segCenter.Y * dir.Y
-                    local t = (proj - minProj) / math.max(1e-6, (maxProj - minProj))
-                    t = math.clamp(t, 0, 1)
+                    local segCenterY = segCenter
+                    local t = projT(segCenterX, segCenterY)
 
                     -- overlap vertically to avoid 1px gaps
                     local fromY = segTop - (i > 1 and 1 or 0)
@@ -927,7 +920,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     lineSegs[i].From = Vector2.new(sx, fromY)
                     lineSegs[i].To = Vector2.new(sx, toY)
                     lineSegs[i].Thickness = th
-                    -- interpolate between provided 3-stop colorStops when provided
+                    -- interpolate between provided colorStops when available
                     if colorStops and #colorStops >= 3 then
                         local stops = 3
                         local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
@@ -941,6 +934,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                         if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
                         lineSegs[i].Color = Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
                     else
+                        -- fallback to rainbow-based color
                         lineSegs[i].Color = getRainbowColor(baseOffset + t * 0.5, "Box")
                     end
                     lineSegs[i].Transparency = 1
@@ -966,13 +960,10 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     local thisLen = baseLen + (i <= rem and 1 or 0)
                     local segLeft = cur
                     local segRight = cur + thisLen - 1
-                    -- use the vertical position of this horizontal side to compute gradient t
-                    local segCenterY = sy
+                    -- compute gradient t using rotated axis (segment center)
                     local segCenterX = (segLeft + segRight) * 0.5
-                    local segCenter = Vector2.new(segCenterX, sy)
-                    local proj = segCenter.X * dir.X + segCenter.Y * dir.Y
-                    local t = (proj - minProj) / math.max(1e-6, (maxProj - minProj))
-                    t = math.clamp(t, 0, 1)
+                    local segCenterY = sy
+                    local t = projT(segCenterX, segCenterY)
 
                     local fromX = segLeft - (i > 1 and 1 or 0)
                     local toX = segRight + (i < actualSegs and 1 or 0)
@@ -984,7 +975,7 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                         local stops = 3
                         local rotationOffset = (ESPSettings.GradientRotation or 0) / 360
                         local baseHue = ESPSettings.Moving and RainbowHue or 0
-                        local tt = ((baseHue + baseOffset + t + rotationOffset) % 1) * stops
+                        local tt = ((baseHue + baseOffset + t * 0.5 + rotationOffset) % 1) * stops
                         local idx = math.floor(tt) % stops
                         local frac = tt - math.floor(tt)
                         local c1 = colorStops[idx + 1]
@@ -1035,7 +1026,8 @@ local function drawGradientBox(espObj, x, y, w, h, baseOffset, colorStops)
                     if blending >= 1 then for _ = 1, math.floor(blending) do frac = frac * frac * (3 - 2 * frac) end end
                     return Color3.new(c1.R + (c2.R - c1.R) * frac, c1.G + (c2.G - c1.G) * frac, c1.B + (c2.B - c1.B) * frac)
                 end
-                cs.Color = (i <= 2) and sampleAt(0) or sampleAt(1)
+                local cornerT = projT(pos.X, pos.Y)
+                cs.Color = sampleAt(cornerT)
             else
                 local cornerColor = (i <= 2) and getRainbowColor(baseOffset, "Box") or getRainbowColor(baseOffset + 0.5, "Box")
                 cs.Color = cornerColor
@@ -1059,22 +1051,23 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
         return
     end
     
-    -- Support rotated gradient for health bar as well using global angle
-    local angleDeg = ESPSettings.GradientRotation or 0
+    -- Precompute rotated gradient axis and projection range for health bar
+    local angleDeg = (ESPSettings.GradientRotation or 0) % 360
     local angleRad = math.rad(angleDeg)
-    local dir = Vector2.new(math.cos(angleRad), math.sin(angleRad))
-    local ix, iy = math.floor(fillX), math.floor(fillY)
-    local right, bottom = ix + math.floor(fillW) - 1, iy + math.floor(fillH) - 1
-    local corners = { Vector2.new(ix, iy), Vector2.new(right, iy), Vector2.new(ix, bottom), Vector2.new(right, bottom) }
-    local minProj, maxProj
-    for _, c in ipairs(corners) do
-        local p = c.X * dir.X + c.Y * dir.Y
-        if not minProj or p < minProj then minProj = p end
-        if not maxProj or p > maxProj then maxProj = p end
-    end
-    if not minProj or not maxProj or math.abs(maxProj - minProj) < 1e-6 then
-        minProj = iy
-        maxProj = bottom
+    local vx, vy = math.cos(angleRad), math.sin(angleRad)
+    local p00 = 0
+    local p10 = vx
+    local p01 = vy
+    local p11 = vx + vy
+    local minP = math.min(p00, p10, p01, p11)
+    local maxP = math.max(p00, p10, p01, p11)
+    local rangeP = maxP - minP
+    local function projT(px, py)
+        local rx = (px - ix) / math.max(1, iw)
+        local ry = (py - iy) / math.max(1, ih)
+        local proj = rx * vx + ry * vy
+        if rangeP == 0 then return 0 end
+        return (proj - minP) / rangeP
     end
 
     if isVertical then
@@ -1088,12 +1081,9 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local thisH = baseH + (i <= remainder and 1 or 0)
             local segTop = curY
             local segBottom = curY + thisH - 1
-            local segCenter = (segTop + segBottom) * 0.5
-            local segCenterX = ix + (iw - 1) * 0.5
-            local segCenterY = ((segTop + segBottom) * 0.5)
-            local proj = segCenterX * dir.X + segCenterY * dir.Y
-            local t = (proj - minProj) / math.max(1e-6, (maxProj - minProj))
-            t = math.clamp(t, 0, 1)
+            local segCenterY = (segTop + segBottom) * 0.5
+            local segCenterX = ix + iw * 0.5
+            local t = projT(segCenterX, segCenterY)
 
             segs[i].Size = Vector2.new(iw, segBottom - segTop + 1)
             segs[i].Position = Vector2.new(ix, segTop)
@@ -1116,12 +1106,9 @@ local function drawGradientHealthBar(espObj, fillX, fillY, fillW, fillH, isVerti
             local thisW = baseW + (i <= remainder and 1 or 0)
             local segLeft = curX
             local segRight = curX + thisW - 1
-            local segCenter = (segLeft + segRight) * 0.5
-            local segCenterY = iy + (ih - 1) * 0.5
-            local segCenterX = ((segLeft + segRight) * 0.5)
-            local proj = segCenterX * dir.X + segCenterY * dir.Y
-            local t = (proj - minProj) / math.max(1e-6, (maxProj - minProj))
-            t = math.clamp(t, 0, 1)
+            local segCenterX = (segLeft + segRight) * 0.5
+            local segCenterY = iy + ih * 0.5
+            local t = projT(segCenterX, segCenterY)
 
             segs[i].Size = Vector2.new(segRight - segLeft + 1, ih)
             segs[i].Position = Vector2.new(segLeft, iy)
