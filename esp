@@ -959,6 +959,10 @@ getgenv().TrisESP = {
     -- Helper to resolve a player reference (player object, userId number, or player name)
     _resolvePlayer = function(ref)
         if not ref then return nil end
+        -- Accept Player instance directly
+        if typeof and typeof(ref) == "Instance" then
+            if ref:IsA and ref:IsA("Player") then return ref end
+        end
         if type(ref) == "table" and ref.UserId then return ref end
         if type(ref) == "number" then
             for _,p in ipairs(Players:GetPlayers()) do
