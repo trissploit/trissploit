@@ -640,8 +640,12 @@ local function updateESP(deltaTime)
                         local multiplier = perpSpan / averageSpan
                         local effectiveSpeed = AUTOROTATE_SPEED * multiplier
 
-                        espObj.GradientAngle = (espObj.GradientAngle or 0 + 0) -- ensure non-nil
-                        espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        espObj.GradientAngle = espObj.GradientAngle or 0
+                        if ESPSettings.AnimateBoxRotation then
+                            espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        else
+                            espObj.GradientAngle = 0
+                        end
                         espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle) % 360
                         -- persist per-player gradient angle
                         if espObj.Player and espObj.Player.UserId then
