@@ -434,17 +434,18 @@ end
 
 -- Hide ESP
 local function hideESP(espObj)
-    if espObj.Name then espObj.Name.Visible = false end
-    if espObj.Distance then espObj.Distance.Visible = false end
-    if espObj.Weapon then espObj.Weapon.Visible = false end
+    if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
+    if espObj.Distance then espObj.Distance.Visible = false espObj.Distance.Text = "" end
+    if espObj.Weapon then espObj.Weapon.Visible = false espObj.Weapon.Text = "" end
     if espObj.Box then espObj.Box.Visible = false end
     if espObj.Tracer then espObj.Tracer.Visible = false end
     if espObj.HealthBar then espObj.HealthBar.Visible = false end
     if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
-    if espObj.HealthText then espObj.HealthText.Visible = false end
+    if espObj.HealthText then espObj.HealthText.Visible = false espObj.HealthText.Text = "" end
     if espObj.CustomTextLabels then
         for _, lbl in ipairs(espObj.CustomTextLabels) do
             lbl.Visible = false
+            if lbl:IsA("TextLabel") then lbl.Text = "" end
         end
     end
     if espObj.Corners then
@@ -540,7 +541,7 @@ local function updateESP(deltaTime)
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
                     espObj.Name.Visible = true
                 else
-                    if espObj.Name then espObj.Name.Visible = false end
+                    if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
                 end
                 
                 -- Distance
@@ -549,7 +550,7 @@ local function updateESP(deltaTime)
                     espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
                     espObj.Distance.Visible = true
                 else
-                    if espObj.Distance then espObj.Distance.Visible = false end
+                    if espObj.Distance then espObj.Distance.Visible = false espObj.Distance.Text = "" end
                 end
                 
                 -- Weapon (placeholder)
@@ -557,6 +558,7 @@ local function updateESP(deltaTime)
                     espObj.Weapon.Text = "none"
                     espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 20)
                     espObj.Weapon.Visible = false
+                    espObj.Weapon.Text = ""
                 end
                 
                 -- Box
@@ -715,7 +717,10 @@ local function updateESP(deltaTime)
                         end
                     else
                         if espObj.CustomTextLabels then
-                            for _, lbl in ipairs(espObj.CustomTextLabels) do lbl.Visible = false end
+                            for _, lbl in ipairs(espObj.CustomTextLabels) do
+                                lbl.Visible = false
+                                if lbl:IsA("TextLabel") then lbl.Text = "" end
+                            end
                         end
                     end
 
@@ -851,7 +856,7 @@ local function updateESP(deltaTime)
                     -- hide health elements when disabled
                     if espObj.HealthBar then espObj.HealthBar.Visible = false end
                     if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
-                    if espObj.HealthText then espObj.HealthText.Visible = false end
+                    if espObj.HealthText then espObj.HealthText.Visible = false espObj.HealthText.Text = "" end
                 end
                 
                 -- Tracer
@@ -980,6 +985,28 @@ getgenv().TrisESP = {
         -- trim leading/trailing whitespace
         s = s:gsub("^%s+", ""):gsub("%s+$", "")
         table.insert(esp.CustomTexts, s)
+        -- ensure a TextLabel exists for this custom text immediately so it appears without waiting
+        esp.CustomTextLabels = esp.CustomTextLabels or {}
+        local idx = #esp.CustomTexts
+        local lbl = esp.CustomTextLabels[idx]
+        if not lbl then
+            lbl = Instance.new("TextLabel")
+            lbl.BackgroundTransparency = 1
+            lbl.Font = Enum.Font.Code
+            lbl.TextSize = 13
+            lbl.TextColor3 = Color3.fromRGB(255,255,255)
+            lbl.TextStrokeTransparency = 0
+            lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+            lbl.ZIndex = 11
+            if esp.Container then
+                lbl.Parent = esp.Container
+            else
+                lbl.Parent = ESPHolder
+            end
+            esp.CustomTextLabels[idx] = lbl
+        end
+        lbl.Text = s
+        lbl.Visible = true
         return true
     end,
 
@@ -990,6 +1017,15 @@ getgenv().TrisESP = {
         esp.CustomTexts = esp.CustomTexts or {}
         if type(idxOrText) == "number" then
             if idxOrText >= 1 and idxOrText <= #esp.CustomTexts then
+                -- remove corresponding label if present
+                if esp.CustomTextLabels and esp.CustomTextLabels[idxOrText] then
+                    pcall(function()
+                        esp.CustomTextLabels[idxOrText].Visible = false
+                        esp.CustomTextLabels[idxOrText].Text = ""
+                        esp.CustomTextLabels[idxOrText]:Destroy()
+                    end)
+                    table.remove(esp.CustomTextLabels, idxOrText)
+                end
                 table.remove(esp.CustomTexts, idxOrText)
                 return true
             end
@@ -997,6 +1033,14 @@ getgenv().TrisESP = {
         else
             for i, v in ipairs(esp.CustomTexts) do
                 if v == tostring(idxOrText) then
+                    if esp.CustomTextLabels and esp.CustomTextLabels[i] then
+                        pcall(function()
+                            esp.CustomTextLabels[i].Visible = false
+                            esp.CustomTextLabels[i].Text = ""
+                            esp.CustomTextLabels[i]:Destroy()
+                        end)
+                        table.remove(esp.CustomTextLabels, i)
+                    end
                     table.remove(esp.CustomTexts, i)
                     return true
                 end
@@ -1010,6 +1054,16 @@ getgenv().TrisESP = {
         if not p or not ESPObjects[p] then return false end
         local esp = ESPObjects[p]
         esp.CustomTexts = {}
+        if esp.CustomTextLabels then
+            for _, lbl in ipairs(esp.CustomTextLabels) do
+                pcall(function()
+                    lbl.Visible = false
+                    lbl.Text = ""
+                    lbl:Destroy()
+                end)
+            end
+            esp.CustomTextLabels = {}
+        end
         return true
     end,
 
