@@ -526,10 +526,11 @@ local function updateESP(deltaTime)
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
             local Dist = distance / 3.5714285714
             
-            -- Render custom texts independently so external callers (kills, tags) can show
+            -- Render custom texts (e.g., kills) even when global ESP master toggle is off
             if espObj.CustomTexts and #espObj.CustomTexts > 0 then
                 local startX = x + w + 6 -- place to the right of the box
                 local lineHeight = 16
+                espObj.CustomTextLabels = espObj.CustomTextLabels or {}
                 for i, txt in ipairs(espObj.CustomTexts) do
                     local lbl = espObj.CustomTextLabels[i]
                     if not lbl then
@@ -541,7 +542,7 @@ local function updateESP(deltaTime)
                         lbl.TextStrokeTransparency = 0
                         lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
                         lbl.ZIndex = 11
-                        lbl.Parent = espObj.Container or ESPHolder
+                        lbl.Parent = espObj.Container
                         espObj.CustomTextLabels[i] = lbl
                     end
                     lbl.Text = tostring(txt or "")
@@ -552,7 +553,9 @@ local function updateESP(deltaTime)
                 for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
                     if espObj.CustomTextLabels[j] then
                         espObj.CustomTextLabels[j].Visible = false
-                        if espObj.CustomTextLabels[j]:IsA("TextLabel") then espObj.CustomTextLabels[j].Text = "" end
+                        if espObj.CustomTextLabels[j]:IsA("TextLabel") then
+                            espObj.CustomTextLabels[j].Text = ""
+                        end
                     end
                 end
             else
@@ -727,7 +730,6 @@ local function updateESP(deltaTime)
                 end
 
                 -- Health bar
-
                     if ESPSettings.HealthBarEnabled and espObj.HealthBar then
                     local healthRatio = 1
                     if hum.MaxHealth and hum.MaxHealth > 0 then
@@ -965,7 +967,7 @@ getgenv().TrisESP = {
         if not ref then return nil end
         -- Accept Player instance directly
         if typeof and typeof(ref) == "Instance" then
-            if ref:IsA and ref:IsA("Player") then return ref end
+            if ref and ref.IsA and ref:IsA("Player") then return ref end
         end
         if type(ref) == "table" and ref.UserId then return ref end
         if type(ref) == "number" then
@@ -1014,7 +1016,19 @@ getgenv().TrisESP = {
             esp.CustomTextLabels[idx] = lbl
         end
         lbl.Text = s
-        lbl.Visible = true
+        -- Try to position immediately based on character screen rect so it appears without waiting
+        local lineHeight = 16
+        local rect = nil
+        if p and p.Character then
+            rect = getScreenRectForCharacter(p.Character)
+        end
+        if rect then
+            local sx, sy, sw = rect.x, rect.y, rect.w
+            lbl.Position = UDim2.new(0, sx + sw + 6, 0, sy + (#esp.CustomTexts-1) * lineHeight)
+            lbl.Visible = true
+        else
+            lbl.Visible = false
+        end
         return true
     end,
 
