@@ -526,6 +526,44 @@ local function updateESP(deltaTime)
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
             local Dist = distance / 3.5714285714
             
+            -- Render custom texts independently so external callers (kills, tags) can show
+            if espObj.CustomTexts and #espObj.CustomTexts > 0 then
+                local startX = x + w + 6 -- place to the right of the box
+                local lineHeight = 16
+                for i, txt in ipairs(espObj.CustomTexts) do
+                    local lbl = espObj.CustomTextLabels[i]
+                    if not lbl then
+                        lbl = Instance.new("TextLabel")
+                        lbl.BackgroundTransparency = 1
+                        lbl.Font = Enum.Font.Code
+                        lbl.TextSize = 13
+                        lbl.TextColor3 = Color3.fromRGB(255,255,255)
+                        lbl.TextStrokeTransparency = 0
+                        lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+                        lbl.ZIndex = 11
+                        lbl.Parent = espObj.Container or ESPHolder
+                        espObj.CustomTextLabels[i] = lbl
+                    end
+                    lbl.Text = tostring(txt or "")
+                    lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
+                    lbl.Visible = true
+                end
+                -- hide any surplus labels
+                for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
+                    if espObj.CustomTextLabels[j] then
+                        espObj.CustomTextLabels[j].Visible = false
+                        if espObj.CustomTextLabels[j]:IsA("TextLabel") then espObj.CustomTextLabels[j].Text = "" end
+                    end
+                end
+            else
+                if espObj.CustomTextLabels then
+                    for _, lbl in ipairs(espObj.CustomTextLabels) do
+                        lbl.Visible = false
+                        if lbl:IsA("TextLabel") then lbl.Text = "" end
+                    end
+                end
+            end
+
             if ESPSettings.Enabled then
                 -- Name
                 if ESPSettings.ShowName and espObj.Name then
@@ -689,40 +727,6 @@ local function updateESP(deltaTime)
                 end
 
                 -- Health bar
-                    -- Custom text ESP: create/update right-side stacked labels
-                    if espObj.CustomTexts and #espObj.CustomTexts > 0 then
-                        local startX = x + w + 6 -- place to the right of the box
-                        local lineHeight = 16
-                        for i, txt in ipairs(espObj.CustomTexts) do
-                            local lbl = espObj.CustomTextLabels[i]
-                            if not lbl then
-                                lbl = Instance.new("TextLabel")
-                                lbl.BackgroundTransparency = 1
-                                lbl.Font = Enum.Font.Code
-                                lbl.TextSize = 13
-                                lbl.TextColor3 = Color3.fromRGB(255,255,255)
-                                lbl.TextStrokeTransparency = 0
-                                lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-                                lbl.ZIndex = 11
-                                lbl.Parent = espObj.Container
-                                espObj.CustomTextLabels[i] = lbl
-                            end
-                            lbl.Text = tostring(txt or "")
-                            lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
-                            lbl.Visible = true
-                        end
-                        -- hide any surplus labels
-                        for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
-                            if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
-                        end
-                    else
-                        if espObj.CustomTextLabels then
-                            for _, lbl in ipairs(espObj.CustomTextLabels) do
-                                lbl.Visible = false
-                                if lbl:IsA("TextLabel") then lbl.Text = "" end
-                            end
-                        end
-                    end
 
                     if ESPSettings.HealthBarEnabled and espObj.HealthBar then
                     local healthRatio = 1
