@@ -114,7 +114,13 @@ local ESPSettings = {
     OutlineTransparency = 0,
 }
 
+local Options = rawget(getgenv(), "Library") and getgenv().Library.Options or nil
 local function readFillAlpha(idx)
+    -- Prefer live value from Obsidian Options table if present
+    local optKey = "ESPBoxFillColor" .. idx
+    if Options and Options[optKey] and type(Options[optKey].Transparency) == "number" then
+        return math.clamp(Options[optKey].Transparency, 0, 1)
+    end
     local keys = {
         "BoxFillCustomColor" .. idx .. "Transparency",
         "BoxFillCustomColor" .. idx .. "Trans",
