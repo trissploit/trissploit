@@ -48,6 +48,8 @@ local ESPSettings = {
     -- Box animation settings
     AnimateBoxRotation = true,
     BoxRotationSpeed = 300,
+    -- Static rotation to use when animation is disabled (degrees)
+    BoxRotation = -90,
     
     -- Filtering
     FilterMode = "All",
@@ -259,7 +261,8 @@ local function createESPObject()
     espObj.Name.Name = "NameLabel"
     espObj.Name.BackgroundTransparency = 1
     espObj.Name.Size = UDim2.new(0, 100, 0, 20)
-    espObj.Name.AnchorPoint = Vector2.new(0.5, 0.5)
+    -- anchor the name to the bottom-center so it sits directly above the box
+    espObj.Name.AnchorPoint = Vector2.new(0.5, 1)
     espObj.Name.Font = Enum.Font.Code
     espObj.Name.TextSize = 13
     espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -489,7 +492,8 @@ local function updateESP(deltaTime)
         SpinAngle = (SpinAngle + speed * dt) % 360
         RotationAngle = SpinAngle
     else
-        RotationAngle = -90
+        -- when animation is disabled, respect the configured static rotation
+        RotationAngle = (ESPSettings.BoxRotation or RotationAngle or -90) % 360
     end
     -- persist spin angle across reloads
     PERSIST.SpinAngle = SpinAngle
@@ -582,7 +586,8 @@ local function updateESP(deltaTime)
                         nameText = (player.Name or player.DisplayName or "")
                     end
                     espObj.Name.Text = nameText
-                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
+                    -- with AnchorPoint (0.5,1) position the name so its bottom sits just above the box
+                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 5)
                     espObj.Name.Visible = true
                 else
                     if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
@@ -617,7 +622,8 @@ local function updateESP(deltaTime)
                         local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
                         local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
                         -- Base rotation for the gradient: box rotation (if enabled) plus internal autorotation (time-based)
-                        local baseRotation = ESPSettings.AnimateBoxRotation and (RotationAngle % 360) or -90
+                        -- use the computed RotationAngle (either animated or static)
+                        local baseRotation = RotationAngle % 360
                         -- Compensate gradient angular velocity by the projected perpendicular span
                         -- so travel speed of colors appears uniform across rotations/box shapes.
                         -- Use the box's base rotation for span calculation so the
