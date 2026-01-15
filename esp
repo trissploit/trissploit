@@ -586,8 +586,8 @@ local function updateESP(deltaTime)
                         nameText = (player.Name or player.DisplayName or "")
                     end
                     espObj.Name.Text = nameText
-                    -- with AnchorPoint (0.5,1) position the name so its bottom sits just above the box
-                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 5)
+                    -- with AnchorPoint (0.5,1) position the name so its bottom aligns to the box top
+                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y)
                     espObj.Name.Visible = true
                 else
                     if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
@@ -611,8 +611,9 @@ local function updateESP(deltaTime)
                 end
                 
                 -- Box
-                if ESPSettings.Boxes and espObj.Box then
-                    if ESPSettings.BoxType == "Square" then
+                if espObj.Box then
+                    if ESPSettings.Boxes then
+                        if ESPSettings.BoxType == "Square" then
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
@@ -685,7 +686,7 @@ local function updateESP(deltaTime)
                         for _, corner in ipairs(espObj.Corners) do
                             corner.Visible = false
                         end
-                    elseif ESPSettings.BoxType == "Corner" then
+                        elseif ESPSettings.BoxType == "Corner" then
                         espObj.Box.Visible = false
                         
                         -- Corner boxes
@@ -726,6 +727,51 @@ local function updateESP(deltaTime)
                         espObj.Corners[8].Position = UDim2.new(0, x + w - 1, 0, y + h - cornerLen)
                         espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
                         espObj.Corners[8].Visible = true
+                        end
+                    elseif ESPSettings.BoxFill then
+                        -- Render fill even when box outlines/corners are disabled
+                        espObj.Box.Position = UDim2.new(0, x, 0, y)
+                        espObj.Box.Size = UDim2.new(0, w, 0, h)
+                        espObj.Box.Visible = true
+
+                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
+                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
+                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
+                        local baseRotation = RotationAngle % 360
+                        local rad = math.rad(baseRotation % 360)
+                        local absSin = math.abs(math.sin(rad))
+                        local absCos = math.abs(math.cos(rad))
+                        local perpSpan = w * absSin + h * absCos
+                        local averageSpan = (2 / math.pi) * (w + h)
+                        if averageSpan == 0 then averageSpan = 1 end
+                        local multiplier = perpSpan / averageSpan
+                        local effectiveSpeed = AUTOROTATE_SPEED * multiplier
+
+                        espObj.GradientAngle = espObj.GradientAngle or 0
+                        if ESPSettings.AnimateBoxRotation then
+                            espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        else
+                            espObj.GradientAngle = 0
+                        end
+                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle + 180) % 360
+
+                        local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
+                        local gc2 = c2 or ESPSettings.BoxFillColor or gc1
+                        local gc3 = c3 or ESPSettings.BoxFillColor or gc2
+                        espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                        espObj.BoxGradient.Enabled = true
+
+                        if ESPSettings.BoxFill then
+                            espObj.Box.BackgroundTransparency = math.clamp(ESPSettings.BoxFillTransparency or 0.5, 0, 1)
+                            espObj.Box.BackgroundColor3 = Color3.new(1,1,1)
+                        else
+                            espObj.Box.BackgroundTransparency = 1
+                        end
+
+                        -- disable outline and corners when only fill is requested
+                        if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
+                        if espObj.OutlineGradient then espObj.OutlineGradient.Enabled = false end
+                        for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
                     end
                 else
                     -- ensure box elements are hidden when boxes disabled
