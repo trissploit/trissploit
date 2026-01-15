@@ -770,31 +770,46 @@ local function updateESP(deltaTime)
                     local samplePhase = ESPSettings.HealthGradientEnabled and (espObj.HealthGradientPhase or 0) or 0
                     local samplePosForText = (healthRatio - samplePhase) % 1
                     local healthTextColor = sampleBase(samplePosForText)
-                    -- Add a thin border to the health bar background to act as outline
-                    local outlineThickness = 1
-                    if ESPSettings.HealthOutlineFollow then
-                        outlineThickness = math.max(1, math.floor((barHeight or 1) / 8))
-                    end
+
+                    -- Outline: fixed thickness (derived from health bar thickness), with option
+                    -- to make the outline follow the filled portion's height.
+                    local outlineThickness = math.max(1, math.floor((ESPSettings.HealthBarThickness or 2.5)))
                     espObj.HealthBarBG.BorderSizePixel = outlineThickness
                     espObj.HealthBarBG.BorderColor3 = ESPSettings.BoxOutlineColor or Color3.fromRGB(0,0,0)
 
-                    local thickness = ESPSettings.HealthBarThickness or 2
+                    local thickness = ESPSettings.HealthBarThickness or 2.5
                     local padding = 4
 
-                    -- Position background/fill based on configured side
-                    if ESPSettings.HealthBarPosition == "Right" then
-                        local bgX = x + w + padding
-                        espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
-                        espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                    if ESPSettings.HealthOutlineFollow then
+                        -- Position the background/outline to match the filled portion height
+                        if ESPSettings.HealthBarPosition == "Right" then
+                            local bgX = x + w + padding
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        else
+                            local bgX = x - (thickness + padding)
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        end
+
+                        espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, barHeight)
+                        espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
                     else
-                        -- Default to Left
-                        local bgX = x - (thickness + padding)
-                        espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
-                        espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        -- Background remains full height; filled bar sits inside it
+                        if ESPSettings.HealthBarPosition == "Right" then
+                            local bgX = x + w + padding
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        else
+                            local bgX = x - (thickness + padding)
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        end
+
+                        espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
+                        espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
                     end
 
-                    espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
-                    espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
                     espObj.HealthBarBG.Visible = true
                     espObj.HealthBar.Visible = true
 
