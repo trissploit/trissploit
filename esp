@@ -114,9 +114,7 @@ local ESPSettings = {
     HealthGradientEnabled = true,
     -- Number of samples used when building the animated gradient (fixed default)
     -- (setting removed; defaults to 12 samples)
-    -- Health gradient blending: "linear" | "smooth" | "ease"
-    -- "smooth" uses smoothstep, "ease" uses cosine ease in/out
-    HealthGradientBlend = "linear",
+    -- Health gradient blending is fixed to linear (setting removed)
     -- Whether the healthbar outline thickness scales with the filled height
     HealthOutlineFollow = false,
     
@@ -760,22 +758,17 @@ local function updateESP(deltaTime)
                         PERSIST.HealthPhase[tostring(espObj.Player.UserId)] = espObj.HealthGradientPhase
                     end
 
-                    -- Health gradient colors
-                    local hc1 = ESPSettings.HealthBarColor1 or Color3.fromRGB(255, 0, 0)
+                    -- Health gradient colors (fix ordering so Color1 is the top/filled color)
+                    -- swap 1 <-> 3 to correct previous inversion
+                    local hc1 = ESPSettings.HealthBarColor3 or Color3.fromRGB(0, 255, 0)
                     local hc2 = ESPSettings.HealthBarColor2 or Color3.fromRGB(255, 170, 0)
-                    local hc3 = ESPSettings.HealthBarColor3 or Color3.fromRGB(0, 255, 0)
+                    local hc3 = ESPSettings.HealthBarColor1 or Color3.fromRGB(255, 0, 0)
 
-                    -- Setup blending/sampling helper (used by static and animated modes)
-                    local blendMode = ESPSettings.HealthGradientBlend or "linear"
+                    -- Setup blending/sampling helper (fixed linear blending)
                     local function applyBlend(t)
                         t = math.clamp(t, 0, 1)
-                        if blendMode == "smooth" then
-                            return t * t * (3 - 2 * t)
-                        elseif blendMode == "ease" then
-                            return 0.5 * (1 - math.cos(math.pi * t))
-                        else
-                            return t
-                        end
+                        -- linear blending only
+                        return t
                     end
 
                     local function sampleBase(u)
