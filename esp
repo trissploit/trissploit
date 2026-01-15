@@ -51,32 +51,18 @@ local ESPSettings = {
     -- Static rotation to use when animation is disabled (degrees)
     BoxRotation = -90,
     
-    -- Filtering
     FilterMode = "All",
     WhitelistedPlayers = {},
     BlacklistedPlayers = {},
     TeamCheckEnabled = false,
-    -- Custom team filters (strings = team names, objects = Team instances)
     CustomTeams = {},
     CustomTeamObjects = {},
     
-    -- Display settings
     ShowName = true,
-    -- Name display mode: "Name" | "DisplayName" | "Both"
-    -- "Name" shows the Roblox username, "DisplayName" shows the player's display name,
-    -- "Both" shows `DisplayName (Name)`
     NameMode = "DisplayName",
     ShowHealthText = true,
     ShowDistance = true,
     
-    -- Gradient settings (autorotate enabled internally)
-    -- NOTE: UI gradient autorotation is handled internally; GUI animation controls removed
-
-    
-    -- Custom colors (3-stop gradients)
-    BoxCustomColor1 = Color3.fromRGB(255, 0, 0),
-    BoxCustomColor2 = Color3.fromRGB(0, 255, 55),
-    BoxCustomColor3 = Color3.fromRGB(0, 0, 255),
     
     BoxFillCustomColor1 = Color3.fromRGB(68, 0, 255),
     BoxFillCustomColor2 = Color3.fromRGB(0, 255, 76),
@@ -92,7 +78,10 @@ local ESPSettings = {
     -- Box fill
     BoxFill = true,
     BoxFillColor = Color3.fromRGB(0, 170, 255),
-    BoxFillTransparency = 0.5,
+    -- Per-stop alpha values for the box fill gradient (0 = opaque, 1 = transparent)
+    BoxFillAlpha1 = 0.5,
+    BoxFillAlpha2 = 0.5,
+    BoxFillAlpha3 = 0.5,
     
     -- Tracers
     Tracers = false,
@@ -125,6 +114,24 @@ local ESPSettings = {
     OutlineTransparency = 0,
 }
 
+local function readFillAlpha(idx)
+    local keys = {
+        "BoxFillCustomColor" .. idx .. "Transparency",
+        "BoxFillCustomColor" .. idx .. "Trans",
+        "BoxFillColor" .. idx .. "Trans",
+        "BoxFillColor" .. idx .. "Transparency",
+        "BoxFillAlpha" .. idx,
+        "BoxFillColor" .. idx .. "A",
+    }
+    for _, k in ipairs(keys) do
+        local v = ESPSettings[k]
+        if type(v) == "number" then
+            return math.clamp(v, 0, 1)
+        end
+    end
+    return 0.5
+end
+
 -- Spin integrator & constants
 local AUTOROTATE_SPEED = 60 -- degrees per second for fill gradient
 local SpinAngle = PERSIST.SpinAngle or RotationAngle -- persistent integrated angle
@@ -149,21 +156,6 @@ local function lerpColor(c1, c2, t)
         c1.G + (c2.G - c1.G) * t,
         c1.B + (c2.B - c1.B) * t
     )
-end
-
--- Sample a 3-stop gradient (c1 -> c2 -> c3) at parameter u in [0,1)
-local function sampleThreeColors(c1, c2, c3, u)
-    u = (u % 1 + 1) % 1
-    if u < (1/3) then
-        local t = u / (1/3)
-        return lerpColor(c1, c2, t)
-    elseif u < (2/3) then
-        local t = (u - (1/3)) / (1/3)
-        return lerpColor(c2, c3, t)
-    else
-        local t = (u - (2/3)) / (1/3)
-        return lerpColor(c3, c1, t)
-    end
 end
 
 local function getHealthColor(ratio)
@@ -353,22 +345,6 @@ local function createESPObject()
     espObj.OutlineGradient.Enabled = false
     espObj.OutlineGradient.Rotation = 90
     espObj.OutlineGradient.Parent = espObj.Box
-
-    -- Outline frame: a slightly larger frame behind the box with a UIGradient
-    -- to simulate a gradient outline (UIStroke cannot display gradients).
-    espObj.OutlineFrame = Instance.new("Frame")
-    espObj.OutlineFrame.Name = "BoxOutlineFrame"
-    espObj.OutlineFrame.BackgroundColor3 = Color3.new(1, 1, 1)
-    espObj.OutlineFrame.BackgroundTransparency = 1
-    espObj.OutlineFrame.BorderSizePixel = 0
-    espObj.OutlineFrame.ZIndex = 0
-    espObj.OutlineFrame.Parent = container
-
-    espObj.OutlineFrameGradient = Instance.new("UIGradient")
-    espObj.OutlineFrameGradient.Name = "OutlineFrameGradient"
-    espObj.OutlineFrameGradient.Enabled = false
-    espObj.OutlineFrameGradient.Rotation = 90
-    espObj.OutlineFrameGradient.Parent = espObj.OutlineFrame
     
     -- Tracer line
     espObj.Tracer = Instance.new("Frame")
@@ -609,12 +585,11 @@ local function updateESP(deltaTime)
                 -- Name
                 if ESPSettings.ShowName and espObj.Name then
                     local nameText = ""
-                    if ESPSettings.NameMode == "DisplayName" then
-                        nameText = (player.DisplayName or player.Name or "")
-                    elseif ESPSettings.NameMode == "Both" then
-                        nameText = string.format("%s (%s)", (player.DisplayName or ""), (player.Name or ""))
-                    else
+                    -- Only allow showing either the Roblox username or the display name
+                    if ESPSettings.NameMode == "Name" then
                         nameText = (player.Name or player.DisplayName or "")
+                    else
+                        nameText = (player.DisplayName or player.Name or "")
                     end
                     espObj.Name.Text = nameText
                     -- with AnchorPoint (0.5,1) position the name so its bottom aligns to the box top
@@ -692,38 +667,28 @@ local function updateESP(deltaTime)
                         espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
                         espObj.BoxGradient.Enabled = (ESPSettings.BoxFill == true)
 
-                        -- Color the outline to match the current gradient phase so outlines show
-                        -- a consistent gradient color even though UIStroke cannot take UIGradient.
-                        -- Prefer the gradient-backed OutlineFrame for a true gradient outline.
-                        if espObj.OutlineFrame and espObj.OutlineFrameGradient then
-                            espObj.OutlineFrameGradient.Color = createGradientSequence(gc1, gc2, gc3)
-                            espObj.OutlineFrameGradient.Rotation = espObj.BoxGradient.Rotation or 0
-                            espObj.OutlineFrameGradient.Enabled = true
-                            espObj.OutlineFrame.BackgroundTransparency = 0
-                        else
-                            if espObj.BoxOutline then
-                                espObj.BoxOutline.Color = sampleThreeColors(gc1, gc2, gc3, (espObj.GradientAngle or 0) / 360)
-                            end
-                        end
-
 
                         -- Box fill transparency and base color (base color uses middle stop)
                         if ESPSettings.BoxFill then
-                            espObj.Box.BackgroundTransparency = math.clamp(ESPSettings.BoxFillTransparency or 0.5, 0, 1)
-                            -- Leave BackgroundColor neutral so the UIGradient shows all three stops
+                            -- Use per-stop alpha (fallback to 0.5)
+                            local a1 = readFillAlpha(1)
+                            local a2 = readFillAlpha(2)
+                            local a3 = readFillAlpha(3)
+                            -- Keep frame opaque and let the UIGradient control per-stop transparency
+                            espObj.Box.BackgroundTransparency = 0
+                            espObj.BoxGradient.Transparency = NumberSequence.new{
+                                NumberSequenceKeypoint.new(0, a1),
+                                NumberSequenceKeypoint.new(0.5, a2),
+                                NumberSequenceKeypoint.new(1, a3),
+                            }
                             espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
                         else
                             espObj.Box.BackgroundTransparency = 1
                         end
                         
                         -- Outline color (use configured outline color or default)
-                        -- when using the gradient outline frame, hide the simple UIStroke
-                        if espObj.OutlineFrame and espObj.OutlineFrameGradient and espObj.OutlineFrameGradient.Enabled then
-                            if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
-                        else
-                            espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or Color3.fromRGB(0, 0, 0)
-                            espObj.BoxOutline.Thickness = 1
-                        end
+                        espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or Color3.fromRGB(0, 0, 0)
+                        espObj.BoxOutline.Thickness = 1
                         -- If an outline gradient is desired, enable and set it to the box custom colors
                         espObj.OutlineGradient.Color = createGradientSequence(
                             ESPSettings.BoxCustomColor1 or ESPSettings.BoxColor,
@@ -735,14 +700,6 @@ local function updateESP(deltaTime)
                         -- Hide corners for square mode
                         for _, corner in ipairs(espObj.Corners) do
                             corner.Visible = false
-                        end
-                        -- Position outline frame around the box (square mode)
-                        if espObj.OutlineFrame then
-                            local t = math.max(1, math.floor(ESPSettings.Thickness or 1))
-                            local margin = t + 1
-                            espObj.OutlineFrame.Position = UDim2.new(0, x - margin, 0, y - margin)
-                            espObj.OutlineFrame.Size = UDim2.new(0, w + margin*2, 0, h + margin*2)
-                            espObj.OutlineFrame.ZIndex = espObj.Box.ZIndex - 1
                         end
                         elseif ESPSettings.BoxType == "Corner" then
                         espObj.Box.Visible = false
@@ -819,36 +776,39 @@ local function updateESP(deltaTime)
                         espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
                         espObj.BoxGradient.Enabled = true
 
-                        -- Ensure the outline frame (fill-only case) is updated to match gradient
-                        if espObj.OutlineFrame and espObj.OutlineFrameGradient then
-                            espObj.OutlineFrameGradient.Color = createGradientSequence(gc1, gc2, gc3)
-                            espObj.OutlineFrameGradient.Rotation = espObj.BoxGradient.Rotation or 0
-                            espObj.OutlineFrameGradient.Enabled = true
-                            espObj.OutlineFrame.BackgroundTransparency = 0
-                        else
-                            if espObj.BoxOutline then
-                                espObj.BoxOutline.Color = sampleThreeColors(gc1, gc2, gc3, (espObj.GradientAngle or 0) / 360)
-                            end
-                        end
-
                         if ESPSettings.BoxFill then
-                            espObj.Box.BackgroundTransparency = math.clamp(ESPSettings.BoxFillTransparency or 0.5, 0, 1)
+                            local a1 = readFillAlpha(1)
+                            local a2 = readFillAlpha(2)
+                            local a3 = readFillAlpha(3)
+                            espObj.Box.BackgroundTransparency = 0
+                            espObj.BoxGradient.Transparency = NumberSequence.new{
+                                NumberSequenceKeypoint.new(0, a1),
+                                NumberSequenceKeypoint.new(0.5, a2),
+                                NumberSequenceKeypoint.new(1, a3),
+                            }
                             espObj.Box.BackgroundColor3 = Color3.new(1,1,1)
                         else
                             espObj.Box.BackgroundTransparency = 1
                         end
 
-                        -- disable UIStroke when using gradient outline frame; outline frame will draw the gradient
+                        -- disable outline and corners when only fill is requested
                         if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
-                        if espObj.OutlineFrame then
-                            local t = math.max(1, math.floor(ESPSettings.Thickness or 1))
-                            local margin = t + 1
-                            espObj.OutlineFrame.Position = UDim2.new(0, x - margin, 0, y - margin)
-                            espObj.OutlineFrame.Size = UDim2.new(0, w + margin*2, 0, h + margin*2)
-                            espObj.OutlineFrame.ZIndex = espObj.Box.ZIndex - 1
-                        end
                         if espObj.OutlineGradient then espObj.OutlineGradient.Enabled = false end
                         for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
+                    else
+                        -- Neither boxes nor fill requested: ensure box elements are hidden
+                        if espObj.Box then
+                            espObj.Box.Position = UDim2.new(0, x, 0, y)
+                            espObj.Box.Size = UDim2.new(0, w, 0, h)
+                            espObj.Box.Visible = false
+                            espObj.BoxGradient.Enabled = false
+                            espObj.Box.BackgroundTransparency = 1
+                        end
+                        if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
+                        if espObj.OutlineGradient then espObj.OutlineGradient.Enabled = false end
+                        if espObj.Corners then
+                            for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
+                        end
                     end
                 else
                     -- ensure box elements are hidden when boxes disabled
