@@ -539,6 +539,8 @@ local function updateESP(deltaTime)
                     espObj.Name.Text = nameText
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
                     espObj.Name.Visible = true
+                else
+                    if espObj.Name then espObj.Name.Visible = false end
                 end
                 
                 -- Distance
@@ -546,6 +548,8 @@ local function updateESP(deltaTime)
                     espObj.Distance.Text = string.format("[%d st]", math.floor(Dist))
                     espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
                     espObj.Distance.Visible = true
+                else
+                    if espObj.Distance then espObj.Distance.Visible = false end
                 end
                 
                 -- Weapon (placeholder)
@@ -666,8 +670,22 @@ local function updateESP(deltaTime)
                         espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
                         espObj.Corners[8].Visible = true
                     end
+                else
+                    -- ensure box elements are hidden when boxes disabled
+                    if espObj.Box then
+                        espObj.Box.Visible = false
+                        espObj.BoxGradient.Enabled = false
+                    end
+                    if espObj.BoxOutline then
+                        espObj.BoxOutline.Thickness = 0
+                    end
+                    if espObj.Corners then
+                        for _, corner in ipairs(espObj.Corners) do
+                            corner.Visible = false
+                        end
+                    end
                 end
-                
+
                 -- Health bar
                     -- Custom text ESP: create/update right-side stacked labels
                     if espObj.CustomTexts and #espObj.CustomTexts > 0 then
@@ -694,6 +712,10 @@ local function updateESP(deltaTime)
                         -- hide any surplus labels
                         for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
                             if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
+                        end
+                    else
+                        if espObj.CustomTextLabels then
+                            for _, lbl in ipairs(espObj.CustomTextLabels) do lbl.Visible = false end
                         end
                     end
 
@@ -825,6 +847,11 @@ local function updateESP(deltaTime)
                         espObj.HealthText.TextColor3 = healthTextColor or espObj.HealthText.TextColor3
                         espObj.HealthText.Visible = true
                     end
+                else
+                    -- hide health elements when disabled
+                    if espObj.HealthBar then espObj.HealthBar.Visible = false end
+                    if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
+                    if espObj.HealthText then espObj.HealthText.Visible = false end
                 end
                 
                 -- Tracer
@@ -840,6 +867,8 @@ local function updateESP(deltaTime)
                     positionTracer(espObj.Tracer, tracerFrom.X, tracerFrom.Y, tracerTo.X, tracerTo.Y, ESPSettings.TracerThickness)
                     espObj.Tracer.BackgroundColor3 = ESPSettings.TracerColor
                     espObj.Tracer.Visible = true
+                else
+                    if espObj.Tracer then espObj.Tracer.Visible = false end
                 end
                 
                 -- Chams
@@ -850,6 +879,8 @@ local function updateESP(deltaTime)
                     espObj.Highlight.FillTransparency = ESPSettings.FillTransparency
                     espObj.Highlight.OutlineTransparency = ESPSettings.OutlineTransparency
                     espObj.Highlight.Enabled = true
+                else
+                    if espObj.Highlight then espObj.Highlight.Enabled = false end
                 end
             else
                 hideESP(espObj)
