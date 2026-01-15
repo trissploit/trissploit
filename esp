@@ -534,15 +534,18 @@ local function updateESP(deltaTime)
                 for i, txt in ipairs(espObj.CustomTexts) do
                     local lbl = espObj.CustomTextLabels[i]
                     if not lbl then
-                        lbl = Instance.new("TextLabel")
-                        lbl.BackgroundTransparency = 1
-                        lbl.Font = Enum.Font.Code
-                        lbl.TextSize = 13
-                        lbl.TextColor3 = Color3.fromRGB(255,255,255)
-                        lbl.TextStrokeTransparency = 0
-                        lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-                        lbl.ZIndex = 11
-                        lbl.Parent = espObj.Container
+                                lbl = Instance.new("TextLabel")
+                                lbl.BackgroundTransparency = 1
+                                lbl.Font = Enum.Font.Code
+                                lbl.TextSize = 13
+                                lbl.TextColor3 = Color3.fromRGB(255,255,255)
+                                lbl.TextStrokeTransparency = 0
+                                lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+                                lbl.ZIndex = 11
+                                lbl.Size = UDim2.new(0, 160, 0, 16)
+                                lbl.AnchorPoint = Vector2.new(0, 0)
+                                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                                lbl.Parent = espObj.Container
                         espObj.CustomTextLabels[i] = lbl
                     end
                     lbl.Text = tostring(txt or "")
@@ -1008,6 +1011,9 @@ getgenv().TrisESP = {
             lbl.TextStrokeTransparency = 0
             lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
             lbl.ZIndex = 11
+            lbl.Size = UDim2.new(0, 160, 0, 16)
+            lbl.AnchorPoint = Vector2.new(0, 0)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
             if esp.Container then
                 lbl.Parent = esp.Container
             else
