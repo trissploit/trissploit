@@ -604,7 +604,8 @@ local function updateESP(deltaTime)
                 if espObj.Weapon then
                     espObj.Weapon.Text = "none"
                     espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 20)
-                    espObj.Weapon.Visible = false
+                    -- weapon label follows ShowName state
+                    espObj.Weapon.Visible = getSetting("ShowName", ESPSettings.ShowName)
                 end
                 
                 -- Box outline (completely separate from BoxFill)
@@ -702,7 +703,7 @@ local function updateESP(deltaTime)
                 
                 -- Health bar
                     -- Custom text ESP: create/update right-side stacked labels
-                        if espObj.CustomTexts and #espObj.CustomTexts > 0 then
+                    if espObj.CustomTexts and #espObj.CustomTexts > 0 then
                         local startX = x + w + 6 -- place to the right of the box
                         local lineHeight = 16
                         for i, txt in ipairs(espObj.CustomTexts) do
@@ -727,12 +728,7 @@ local function updateESP(deltaTime)
                         for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
                             if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
                         end
-                        else
-                            -- hide all custom text labels when none configured
-                            if espObj.CustomTextLabels then
-                                for _, lbl in ipairs(espObj.CustomTextLabels) do lbl.Visible = false end
-                            end
-                        end
+                    end
 
                     if getSetting("HealthBarEnabled", ESPSettings.HealthBarEnabled) and espObj.HealthBar then
                     local healthRatio = 1
@@ -784,7 +780,7 @@ local function updateESP(deltaTime)
                     end
 
                     -- If animation is disabled, use a static 3-stop sequence
-                    if not ESPSettings.HealthGradientEnabled then
+                    if not getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled) then
                         espObj.HealthBarGradient.Color = createGradientSequence(hc1, hc2, hc3)
                     else
                         -- fixed sample density for blending/smoothness (12 samples)
@@ -804,19 +800,20 @@ local function updateESP(deltaTime)
                     end
 
                     -- Determine a color sample for the health text (match gradient at filled/top position)
-                    local samplePhase = ESPSettings.HealthGradientEnabled and (espObj.HealthGradientPhase or 0) or 0
+                    local samplePhase = getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled) and (espObj.HealthGradientPhase or 0) or 0
                     local samplePosForText = (healthRatio - samplePhase) % 1
                     local healthTextColor = sampleBase(samplePosForText)
-                    -- Health bar outline sizing (can follow fill height when enabled)
+                    -- Health bar outline thickness (resizable if HealthOutlineFollow enabled)
                     if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
-                        local outlineThickness = math.clamp(math.max(1, math.floor(barHeight / 10)), 1, 6)
-                        espObj.HealthBarBG.BorderSizePixel = outlineThickness
+                        local barThickness = getSetting("HealthBarThickness", ESPSettings.HealthBarThickness) or 2
+                        -- scale border with health ratio while keeping at least 1px
+                        espObj.HealthBarBG.BorderSizePixel = math.max(1, math.floor(barThickness * math.clamp(healthRatio, 0, 1)))
                     else
                         espObj.HealthBarBG.BorderSizePixel = 1
                     end
                     espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
 
-                    local thickness = ESPSettings.HealthBarThickness or 2
+                    local thickness = getSetting("HealthBarThickness", ESPSettings.HealthBarThickness) or 2
                     local padding = 4
 
                     -- Position background/fill based on configured side
@@ -850,12 +847,6 @@ local function updateESP(deltaTime)
                     else
                         if espObj.HealthText then espObj.HealthText.Visible = false end
                     end
-                end
-                else
-                    -- HealthBar disabled: ensure elements hidden
-                    if espObj.HealthBar then espObj.HealthBar.Visible = false end
-                    if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
-                    if espObj.HealthText then espObj.HealthText.Visible = false end
                 end
                 
                 -- Tracer
