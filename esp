@@ -48,21 +48,37 @@ local ESPSettings = {
     -- Box animation settings
     AnimateBoxRotation = true,
     BoxRotationSpeed = 300,
-    -- Static rotation to use when animation is disabled (degrees)
-    BoxRotation = -90,
     
+    -- Filtering
     FilterMode = "All",
     WhitelistedPlayers = {},
     BlacklistedPlayers = {},
     TeamCheckEnabled = false,
+    -- Custom team filters (strings = team names, objects = Team instances)
     CustomTeams = {},
     CustomTeamObjects = {},
+    -- Automatically add players at startup (false = only add explicitly or by team mappings)
+    AutoAddPlayers = false,
+    -- Team color mappings: list of { ref = <teamRef>, color = Color3 }
+    TeamColorMap = {},
     
+    -- Display settings
     ShowName = true,
+    -- Name display mode: "Name" | "DisplayName" | "Both"
+    -- "Name" shows the Roblox username, "DisplayName" shows the player's display name,
+    -- "Both" shows `DisplayName (Name)`
     NameMode = "DisplayName",
     ShowHealthText = true,
     ShowDistance = true,
     
+    -- Gradient settings (autorotate enabled internally)
+    -- NOTE: UI gradient autorotation is handled internally; GUI animation controls removed
+
+    
+    -- Custom colors (3-stop gradients)
+    BoxCustomColor1 = Color3.fromRGB(255, 0, 0),
+    BoxCustomColor2 = Color3.fromRGB(0, 255, 55),
+    BoxCustomColor3 = Color3.fromRGB(0, 0, 255),
     
     BoxFillCustomColor1 = Color3.fromRGB(68, 0, 255),
     BoxFillCustomColor2 = Color3.fromRGB(0, 255, 76),
@@ -78,10 +94,7 @@ local ESPSettings = {
     -- Box fill
     BoxFill = true,
     BoxFillColor = Color3.fromRGB(0, 170, 255),
-    -- Per-stop alpha values for the box fill gradient (0 = opaque, 1 = transparent)
-    BoxFillAlpha1 = 0.5,
-    BoxFillAlpha2 = 0.5,
-    BoxFillAlpha3 = 0.5,
+    BoxFillTransparency = 0.5,
     
     -- Tracers
     Tracers = false,
@@ -103,7 +116,9 @@ local ESPSettings = {
     HealthGradientEnabled = true,
     -- Number of samples used when building the animated gradient (fixed default)
     -- (setting removed; defaults to 12 samples)
-    -- Health gradient blending is fixed to linear (setting removed)
+    -- Health gradient blending: "linear" | "smooth" | "ease"
+    -- "smooth" uses smoothstep, "ease" uses cosine ease in/out
+    HealthGradientBlend = "linear",
     -- Whether the healthbar outline thickness scales with the filled height
     HealthOutlineFollow = false,
     
@@ -113,24 +128,6 @@ local ESPSettings = {
     FillTransparency = 0.5,
     OutlineTransparency = 0,
 }
-
-local function readFillAlpha(idx)
-    local keys = {
-        "BoxFillCustomColor" .. idx .. "Transparency",
-        "BoxFillCustomColor" .. idx .. "Trans",
-        "BoxFillColor" .. idx .. "Trans",
-        "BoxFillColor" .. idx .. "Transparency",
-        "BoxFillAlpha" .. idx,
-        "BoxFillColor" .. idx .. "A",
-    }
-    for _, k in ipairs(keys) do
-        local v = ESPSettings[k]
-        if type(v) == "number" then
-            return math.clamp(v, 0, 1)
-        end
-    end
-    return 0.5
-end
 
 -- Spin integrator & constants
 local AUTOROTATE_SPEED = 60 -- degrees per second for fill gradient
@@ -222,6 +219,73 @@ local function shouldShowPlayer(player)
     return true
 end
 
+-- Helper to match a teamRef (string/Instance/table/number) against a player
+local function matchTeamRef(teamRef, player)
+    if not teamRef or not player then return false end
+    -- Team instance
+    if typeof and typeof(teamRef) == "Instance" and teamRef:IsA("Team") then
+        return player.Team == teamRef
+    end
+    -- string team name
+    if type(teamRef) == "string" then
+        if player.Team and tostring(player.Team.Name) == tostring(teamRef) then return true end
+        return false
+    end
+    -- folder/instance containing player name/value
+    if typeof and typeof(teamRef) == "Instance" then
+        if teamRef:FindFirstChild(player.Name) then return true end
+        for _, child in ipairs(teamRef:GetChildren()) do
+            if child:IsA("ObjectValue") and child.Value == player then return true end
+            if child:IsA("StringValue") and child.Value == player.Name then return true end
+        end
+    end
+    -- table/list
+    if type(teamRef) == "table" then
+        for _, v in ipairs(teamRef) do
+            if v == player or v == player.UserId or v == player.Name then return true end
+        end
+    end
+    -- number userId
+    if type(teamRef) == "number" and teamRef == player.UserId then return true end
+    return false
+end
+
+-- Return a Color3 if the player matches a TeamColorMap entry
+local function getTeamColor(player)
+    if not ESPSettings.TeamColorMap then return nil end
+    for _, entry in ipairs(ESPSettings.TeamColorMap) do
+        local ref = entry.ref
+        local col = entry.color
+        if matchTeamRef(ref, player) then
+            return col
+        end
+    end
+    return nil
+end
+
+-- Determine whether we should create an ESP object for this player at startup/add
+local function needsESP(player)
+    if not player or player == LocalPlayer then return false end
+    -- explicit player overrides
+    if ESPSettings.PlayerOverrides then
+        if ESPSettings.PlayerOverrides[tostring(player.UserId)] or ESPSettings.PlayerOverrides[player.Name] then
+            return true
+        end
+    end
+    -- team-based mapping
+    for _, tname in ipairs(ESPSettings.CustomTeams or {}) do
+        if player.Team and tostring(player.Team.Name) == tostring(tname) then return true end
+    end
+    for _, tobj in ipairs(ESPSettings.CustomTeamObjects or {}) do
+        if matchTeamRef(tobj, player) then return true end
+    end
+    -- team color mappings
+    if getTeamColor(player) then return true end
+    -- global auto-add flag
+    if ESPSettings.AutoAddPlayers then return true end
+    return false
+end
+
 local function getScreenRectForCharacter(char)
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -266,8 +330,7 @@ local function createESPObject()
     espObj.Name.Name = "NameLabel"
     espObj.Name.BackgroundTransparency = 1
     espObj.Name.Size = UDim2.new(0, 100, 0, 20)
-    -- anchor the name to the bottom-center so it sits directly above the box
-    espObj.Name.AnchorPoint = Vector2.new(0.5, 1)
+    espObj.Name.AnchorPoint = Vector2.new(0.5, 0.5)
     espObj.Name.Font = Enum.Font.Code
     espObj.Name.TextSize = 13
     espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -326,8 +389,7 @@ local function createESPObject()
     espObj.BoxGradient = Instance.new("UIGradient")
     espObj.BoxGradient.Name = "FillGradient"
     espObj.BoxGradient.Enabled = true
-    -- default rotation upright (fix inverted gradients)
-    espObj.BoxGradient.Rotation = 90
+    espObj.BoxGradient.Rotation = -90
     espObj.BoxGradient.Parent = espObj.Box
     
     -- Box outline (UIStroke)
@@ -343,7 +405,7 @@ local function createESPObject()
     espObj.OutlineGradient = Instance.new("UIGradient")
     espObj.OutlineGradient.Name = "OutlineGradient"
     espObj.OutlineGradient.Enabled = false
-    espObj.OutlineGradient.Rotation = 90
+    espObj.OutlineGradient.Rotation = -90
     espObj.OutlineGradient.Parent = espObj.Box
     
     -- Tracer line
@@ -361,7 +423,8 @@ local function createESPObject()
     espObj.HealthBarBG.Name = "HealthBarBG"
     espObj.HealthBarBG.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     espObj.HealthBarBG.BackgroundTransparency = 0
-    espObj.HealthBarBG.BorderSizePixel = 0
+    espObj.HealthBarBG.BorderSizePixel = 1
+    espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
     espObj.HealthBarBG.Visible = false
     espObj.HealthBarBG.ZIndex = 3
     espObj.HealthBarBG.Parent = container
@@ -380,8 +443,7 @@ local function createESPObject()
     espObj.HealthBarGradient = Instance.new("UIGradient")
     espObj.HealthBarGradient.Name = "HealthGradient"
     espObj.HealthBarGradient.Enabled = true
-    -- upright orientation so the healthbar gradient reads top->bottom correctly
-    espObj.HealthBarGradient.Rotation = 90
+    espObj.HealthBarGradient.Rotation = -90
     espObj.HealthBarGradient.Color = createGradientSequence(
         Color3.fromRGB(200, 0, 0),
         Color3.fromRGB(60, 60, 125),
@@ -444,18 +506,17 @@ end
 
 -- Hide ESP
 local function hideESP(espObj)
-    if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
-    if espObj.Distance then espObj.Distance.Visible = false espObj.Distance.Text = "" end
-    if espObj.Weapon then espObj.Weapon.Visible = false espObj.Weapon.Text = "" end
+    if espObj.Name then espObj.Name.Visible = false end
+    if espObj.Distance then espObj.Distance.Visible = false end
+    if espObj.Weapon then espObj.Weapon.Visible = false end
     if espObj.Box then espObj.Box.Visible = false end
     if espObj.Tracer then espObj.Tracer.Visible = false end
     if espObj.HealthBar then espObj.HealthBar.Visible = false end
     if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
-    if espObj.HealthText then espObj.HealthText.Visible = false espObj.HealthText.Text = "" end
+    if espObj.HealthText then espObj.HealthText.Visible = false end
     if espObj.CustomTextLabels then
         for _, lbl in ipairs(espObj.CustomTextLabels) do
             lbl.Visible = false
-            if lbl:IsA("TextLabel") then lbl.Text = "" end
         end
     end
     if espObj.Corners then
@@ -499,8 +560,7 @@ local function updateESP(deltaTime)
         SpinAngle = (SpinAngle + speed * dt) % 360
         RotationAngle = SpinAngle
     else
-        -- when animation is disabled, respect the configured static rotation
-        RotationAngle = (ESPSettings.BoxRotation or RotationAngle or -90) % 360
+        RotationAngle = -90
     end
     -- persist spin angle across reloads
     PERSIST.SpinAngle = SpinAngle
@@ -508,6 +568,20 @@ local function updateESP(deltaTime)
 
     for player, espObj in pairs(ESPObjects) do
         pcall(function()
+            -- per-player setting accessor: checks ESPSettings.PlayerOverrides by UserId or Name
+            local function getSetting(key, default)
+                if ESPSettings.PlayerOverrides and player then
+                    local idKey = tostring(player.UserId)
+                    local nameKey = player.Name
+                    local overrides = ESPSettings.PlayerOverrides[idKey] or ESPSettings.PlayerOverrides[nameKey]
+                    if overrides and overrides[key] ~= nil then
+                        return overrides[key]
+                    end
+                end
+                if ESPSettings[key] ~= nil then return ESPSettings[key] end
+                return default
+            end
+
             if not shouldShowPlayer(player) then 
                 hideESP(espObj) 
                 return 
@@ -523,7 +597,7 @@ local function updateESP(deltaTime)
             end
 
             local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
-            if distance > ESPSettings.MaxDistance then
+            if distance > getSetting("MaxDistance", ESPSettings.MaxDistance) then
                 hideESP(espObj)
                 return
             end
@@ -537,75 +611,27 @@ local function updateESP(deltaTime)
             local x, y, w, h = rect.x, rect.y, rect.w, rect.h
             local Dist = distance / 3.5714285714
             
-            -- Render custom texts (e.g., kills) even when global ESP master toggle is off
-            if espObj.CustomTexts and #espObj.CustomTexts > 0 then
-                local startX = x + w + 6 -- place to the right of the box
-                local lineHeight = 16
-                espObj.CustomTextLabels = espObj.CustomTextLabels or {}
-                for i, txt in ipairs(espObj.CustomTexts) do
-                    local lbl = espObj.CustomTextLabels[i]
-                    if not lbl then
-                                lbl = Instance.new("TextLabel")
-                                lbl.BackgroundTransparency = 1
-                                lbl.Font = Enum.Font.Code
-                                lbl.TextSize = 13
-                                lbl.TextColor3 = Color3.fromRGB(255,255,255)
-                                lbl.TextStrokeTransparency = 0
-                                lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-                                lbl.ZIndex = 11
-                                lbl.Size = UDim2.new(0, 160, 0, 16)
-                                lbl.AnchorPoint = Vector2.new(0, 0)
-                                lbl.TextXAlignment = Enum.TextXAlignment.Left
-                                lbl.Parent = espObj.Container
-                        espObj.CustomTextLabels[i] = lbl
-                    end
-                    lbl.Text = tostring(txt or "")
-                    lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
-                    lbl.Visible = true
-                end
-                -- hide any surplus labels
-                for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
-                    if espObj.CustomTextLabels[j] then
-                        espObj.CustomTextLabels[j].Visible = false
-                        if espObj.CustomTextLabels[j]:IsA("TextLabel") then
-                            espObj.CustomTextLabels[j].Text = ""
-                        end
-                    end
-                end
-            else
-                if espObj.CustomTextLabels then
-                    for _, lbl in ipairs(espObj.CustomTextLabels) do
-                        lbl.Visible = false
-                        if lbl:IsA("TextLabel") then lbl.Text = "" end
-                    end
-                end
-            end
-
-            if ESPSettings.Enabled then
+            if getSetting("Enabled", ESPSettings.Enabled) then
                 -- Name
-                if ESPSettings.ShowName and espObj.Name then
+                if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
                     local nameText = ""
-                    -- Only allow showing either the Roblox username or the display name
-                    if ESPSettings.NameMode == "Name" then
-                        nameText = (player.Name or player.DisplayName or "")
-                    else
+                    if getSetting("NameMode", ESPSettings.NameMode) == "DisplayName" then
                         nameText = (player.DisplayName or player.Name or "")
+                    elseif getSetting("NameMode", ESPSettings.NameMode) == "Both" then
+                        nameText = string.format("%s (%s)", (player.DisplayName or ""), (player.Name or ""))
+                    else
+                        nameText = (player.Name or player.DisplayName or "")
                     end
                     espObj.Name.Text = nameText
-                    -- with AnchorPoint (0.5,1) position the name so its bottom aligns to the box top
-                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y)
+                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
                     espObj.Name.Visible = true
-                else
-                    if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
                 end
                 
                 -- Distance
-                if ESPSettings.ShowDistance and espObj.Distance then
+                if getSetting("ShowDistance", ESPSettings.ShowDistance) and espObj.Distance then
                     espObj.Distance.Text = string.format("[%d st]", math.floor(Dist))
                     espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
                     espObj.Distance.Visible = true
-                else
-                    if espObj.Distance then espObj.Distance.Visible = false espObj.Distance.Text = "" end
                 end
                 
                 -- Weapon (placeholder)
@@ -613,24 +639,27 @@ local function updateESP(deltaTime)
                     espObj.Weapon.Text = "none"
                     espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 20)
                     espObj.Weapon.Visible = false
-                    espObj.Weapon.Text = ""
                 end
                 
                 -- Box
-                if espObj.Box then
-                    if ESPSettings.Boxes then
-                        if ESPSettings.BoxType == "Square" then
+                if getSetting("Boxes", ESPSettings.Boxes) and espObj.Box then
+                    if ESPSettings.BoxType == "Square" then
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
                         
                         -- Update gradient + fill
-                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
-                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
-                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
+                        local c1 = getSetting("BoxFillCustomColor1", ESPSettings.BoxFillCustomColor1) or getSetting("BoxCustomColor1", ESPSettings.BoxCustomColor1)
+                        local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2) or getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2)
+                        local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3) or getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3)
+                        local teamCol = getTeamColor(player)
+                        if teamCol then
+                            c1 = teamCol
+                            c2 = teamCol
+                            c3 = teamCol
+                        end
                         -- Base rotation for the gradient: box rotation (if enabled) plus internal autorotation (time-based)
-                        -- use the computed RotationAngle (either animated or static)
-                        local baseRotation = RotationAngle % 360
+                        local baseRotation = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation) and (RotationAngle % 360) or -90
                         -- Compensate gradient angular velocity by the projected perpendicular span
                         -- so travel speed of colors appears uniform across rotations/box shapes.
                         -- Use the box's base rotation for span calculation so the
@@ -647,14 +676,9 @@ local function updateESP(deltaTime)
                         local multiplier = perpSpan / averageSpan
                         local effectiveSpeed = AUTOROTATE_SPEED * multiplier
 
-                        espObj.GradientAngle = espObj.GradientAngle or 0
-                        if ESPSettings.AnimateBoxRotation then
-                            espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
-                        else
-                            espObj.GradientAngle = 0
-                        end
-                        -- add 180 deg offset so gradient orientation is upright (fix inverted visuals)
-                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle + 180) % 360
+                        espObj.GradientAngle = (espObj.GradientAngle or 0 + 0) -- ensure non-nil
+                        espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle) % 360
                         -- persist per-player gradient angle
                         if espObj.Player and espObj.Player.UserId then
                             PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
@@ -670,24 +694,15 @@ local function updateESP(deltaTime)
 
                         -- Box fill transparency and base color (base color uses middle stop)
                         if ESPSettings.BoxFill then
-                            -- Use per-stop alpha (fallback to 0.5)
-                            local a1 = readFillAlpha(1)
-                            local a2 = readFillAlpha(2)
-                            local a3 = readFillAlpha(3)
-                            -- Keep frame opaque and let the UIGradient control per-stop transparency
-                            espObj.Box.BackgroundTransparency = 0
-                            espObj.BoxGradient.Transparency = NumberSequence.new{
-                                NumberSequenceKeypoint.new(0, a1),
-                                NumberSequenceKeypoint.new(0.5, a2),
-                                NumberSequenceKeypoint.new(1, a3),
-                            }
+                            espObj.Box.BackgroundTransparency = math.clamp(ESPSettings.BoxFillTransparency or 0.5, 0, 1)
+                            -- Leave BackgroundColor neutral so the UIGradient shows all three stops
                             espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
                         else
                             espObj.Box.BackgroundTransparency = 1
                         end
                         
                         -- Outline color (use configured outline color or default)
-                        espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or Color3.fromRGB(0, 0, 0)
+                        espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
                         espObj.BoxOutline.Thickness = 1
                         -- If an outline gradient is desired, enable and set it to the box custom colors
                         espObj.OutlineGradient.Color = createGradientSequence(
@@ -701,7 +716,7 @@ local function updateESP(deltaTime)
                         for _, corner in ipairs(espObj.Corners) do
                             corner.Visible = false
                         end
-                        elseif ESPSettings.BoxType == "Corner" then
+                    elseif getSetting("BoxType", ESPSettings.BoxType) == "Corner" then
                         espObj.Box.Visible = false
                         
                         -- Corner boxes
@@ -742,92 +757,39 @@ local function updateESP(deltaTime)
                         espObj.Corners[8].Position = UDim2.new(0, x + w - 1, 0, y + h - cornerLen)
                         espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
                         espObj.Corners[8].Visible = true
-                        end
-                    elseif ESPSettings.BoxFill then
-                        -- Render fill even when box outlines/corners are disabled
-                        espObj.Box.Position = UDim2.new(0, x, 0, y)
-                        espObj.Box.Size = UDim2.new(0, w, 0, h)
-                        espObj.Box.Visible = true
-
-                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
-                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
-                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
-                        local baseRotation = RotationAngle % 360
-                        local rad = math.rad(baseRotation % 360)
-                        local absSin = math.abs(math.sin(rad))
-                        local absCos = math.abs(math.cos(rad))
-                        local perpSpan = w * absSin + h * absCos
-                        local averageSpan = (2 / math.pi) * (w + h)
-                        if averageSpan == 0 then averageSpan = 1 end
-                        local multiplier = perpSpan / averageSpan
-                        local effectiveSpeed = AUTOROTATE_SPEED * multiplier
-
-                        espObj.GradientAngle = espObj.GradientAngle or 0
-                        if ESPSettings.AnimateBoxRotation then
-                            espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
-                        else
-                            espObj.GradientAngle = 0
-                        end
-                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle + 180) % 360
-
-                        local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
-                        local gc2 = c2 or ESPSettings.BoxFillColor or gc1
-                        local gc3 = c3 or ESPSettings.BoxFillColor or gc2
-                        espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
-                        espObj.BoxGradient.Enabled = true
-
-                        if ESPSettings.BoxFill then
-                            local a1 = readFillAlpha(1)
-                            local a2 = readFillAlpha(2)
-                            local a3 = readFillAlpha(3)
-                            espObj.Box.BackgroundTransparency = 0
-                            espObj.BoxGradient.Transparency = NumberSequence.new{
-                                NumberSequenceKeypoint.new(0, a1),
-                                NumberSequenceKeypoint.new(0.5, a2),
-                                NumberSequenceKeypoint.new(1, a3),
-                            }
-                            espObj.Box.BackgroundColor3 = Color3.new(1,1,1)
-                        else
-                            espObj.Box.BackgroundTransparency = 1
-                        end
-
-                        -- disable outline and corners when only fill is requested
-                        if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
-                        if espObj.OutlineGradient then espObj.OutlineGradient.Enabled = false end
-                        for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
-                    else
-                        -- Neither boxes nor fill requested: ensure box elements are hidden
-                        if espObj.Box then
-                            espObj.Box.Position = UDim2.new(0, x, 0, y)
-                            espObj.Box.Size = UDim2.new(0, w, 0, h)
-                            espObj.Box.Visible = false
-                            espObj.BoxGradient.Enabled = false
-                            espObj.Box.BackgroundTransparency = 1
-                        end
-                        if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
-                        if espObj.OutlineGradient then espObj.OutlineGradient.Enabled = false end
-                        if espObj.Corners then
-                            for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
-                        end
-                    end
-                else
-                    -- ensure box elements are hidden when boxes disabled
-                    if espObj.Box then
-                        espObj.Box.Visible = false
-                        espObj.BoxGradient.Enabled = false
-                    end
-                    if espObj.BoxOutline then
-                        espObj.BoxOutline.Thickness = 0
-                    end
-                    if espObj.Corners then
-                        for _, corner in ipairs(espObj.Corners) do
-                            corner.Visible = false
-                        end
                     end
                 end
-
+                
                 -- Health bar
-                    if ESPSettings.HealthBarEnabled and espObj.HealthBar then
+                    -- Custom text ESP: create/update right-side stacked labels
+                    if espObj.CustomTexts and #espObj.CustomTexts > 0 then
+                        local startX = x + w + 6 -- place to the right of the box
+                        local lineHeight = 16
+                        for i, txt in ipairs(espObj.CustomTexts) do
+                            local lbl = espObj.CustomTextLabels[i]
+                            if not lbl then
+                                lbl = Instance.new("TextLabel")
+                                lbl.BackgroundTransparency = 1
+                                lbl.Font = Enum.Font.Code
+                                lbl.TextSize = 13
+                                lbl.TextColor3 = Color3.fromRGB(255,255,255)
+                                lbl.TextStrokeTransparency = 0
+                                lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+                                lbl.ZIndex = 11
+                                lbl.Parent = espObj.Container
+                                espObj.CustomTextLabels[i] = lbl
+                            end
+                            lbl.Text = tostring(txt or "")
+                            lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
+                            lbl.Visible = true
+                        end
+                        -- hide any surplus labels
+                        for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
+                            if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
+                        end
+                    end
+
+                    if getSetting("HealthBarEnabled", ESPSettings.HealthBarEnabled) and espObj.HealthBar then
                     local healthRatio = 1
                     if hum.MaxHealth and hum.MaxHealth > 0 then
                         healthRatio = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
@@ -837,7 +799,7 @@ local function updateESP(deltaTime)
                     -- Use neutral background so gradient displays correctly
                     espObj.HealthBar.BackgroundColor3 = Color3.new(1, 1, 1)
                     -- Animate health gradient upward by shifting keypoint positions
-                    local speed = ESPSettings.HealthGradientSpeed or 0.5 -- cycles per second
+                    local speed = getSetting("HealthGradientSpeed", ESPSettings.HealthGradientSpeed) or 0.5 -- cycles per second
                     espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0)
                     espObj.HealthGradientPhase = (espObj.HealthGradientPhase + speed * dt) % 1
                     if espObj.Player and espObj.Player.UserId then
@@ -845,15 +807,27 @@ local function updateESP(deltaTime)
                     end
 
                     -- Health gradient colors
-                    local hc1 = ESPSettings.HealthBarColor1 or Color3.fromRGB(255, 0, 0)
-                    local hc2 = ESPSettings.HealthBarColor2 or Color3.fromRGB(255, 170, 0)
-                    local hc3 = ESPSettings.HealthBarColor3 or Color3.fromRGB(0, 255, 0)
+                    local hc1 = getSetting("HealthBarColor1", ESPSettings.HealthBarColor1) or Color3.fromRGB(255, 0, 0)
+                    local hc2 = getSetting("HealthBarColor2", ESPSettings.HealthBarColor2) or Color3.fromRGB(255, 170, 0)
+                    local hc3 = getSetting("HealthBarColor3", ESPSettings.HealthBarColor3) or Color3.fromRGB(0, 255, 0)
+                    local teamCol = getTeamColor(player)
+                    if teamCol then
+                        hc1 = teamCol
+                        hc2 = teamCol
+                        hc3 = teamCol
+                    end
 
-                    -- Setup blending/sampling helper (fixed linear blending)
+                    -- Setup blending/sampling helper (used by static and animated modes)
+                    local blendMode = ESPSettings.HealthGradientBlend or "linear"
                     local function applyBlend(t)
                         t = math.clamp(t, 0, 1)
-                        -- linear blending only
-                        return t
+                        if blendMode == "smooth" then
+                            return t * t * (3 - 2 * t)
+                        elseif blendMode == "ease" then
+                            return 0.5 * (1 - math.cos(math.pi * t))
+                        else
+                            return t
+                        end
                     end
 
                     local function sampleBase(u)
@@ -894,44 +868,27 @@ local function updateESP(deltaTime)
                     local samplePhase = ESPSettings.HealthGradientEnabled and (espObj.HealthGradientPhase or 0) or 0
                     local samplePosForText = (healthRatio - samplePhase) % 1
                     local healthTextColor = sampleBase(samplePosForText)
-
-                    -- Outline: fixed 1px black border (not configurable)
+                    -- Force health bar outline to 1px black (do not change)
                     espObj.HealthBarBG.BorderSizePixel = 1
                     espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
 
-                    local thickness = ESPSettings.HealthBarThickness or 2.5
+                    local thickness = ESPSettings.HealthBarThickness or 2
                     local padding = 4
 
-                    if ESPSettings.HealthOutlineFollow then
-                        -- Position the background/outline to match the filled portion height
-                        if ESPSettings.HealthBarPosition == "Right" then
-                            local bgX = x + w + padding
-                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                        else
-                            local bgX = x - (thickness + padding)
-                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                        end
-
-                        espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, barHeight)
-                        espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
+                    -- Position background/fill based on configured side
+                    if ESPSettings.HealthBarPosition == "Right" then
+                        local bgX = x + w + padding
+                        espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                        espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
                     else
-                        -- Background remains full height; filled bar sits inside it
-                        if ESPSettings.HealthBarPosition == "Right" then
-                            local bgX = x + w + padding
-                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
-                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                        else
-                            local bgX = x - (thickness + padding)
-                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
-                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                        end
-
-                        espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
-                        espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
+                        -- Default to Left
+                        local bgX = x - (thickness + padding)
+                        espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                        espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
                     end
 
+                    espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
+                    espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
                     espObj.HealthBarBG.Visible = true
                     espObj.HealthBar.Visible = true
 
@@ -947,11 +904,6 @@ local function updateESP(deltaTime)
                         espObj.HealthText.TextColor3 = healthTextColor or espObj.HealthText.TextColor3
                         espObj.HealthText.Visible = true
                     end
-                else
-                    -- hide health elements when disabled
-                    if espObj.HealthBar then espObj.HealthBar.Visible = false end
-                    if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
-                    if espObj.HealthText then espObj.HealthText.Visible = false espObj.HealthText.Text = "" end
                 end
                 
                 -- Tracer
@@ -967,8 +919,6 @@ local function updateESP(deltaTime)
                     positionTracer(espObj.Tracer, tracerFrom.X, tracerFrom.Y, tracerTo.X, tracerTo.Y, ESPSettings.TracerThickness)
                     espObj.Tracer.BackgroundColor3 = ESPSettings.TracerColor
                     espObj.Tracer.Visible = true
-                else
-                    if espObj.Tracer then espObj.Tracer.Visible = false end
                 end
                 
                 -- Chams
@@ -979,8 +929,6 @@ local function updateESP(deltaTime)
                     espObj.Highlight.FillTransparency = ESPSettings.FillTransparency
                     espObj.Highlight.OutlineTransparency = ESPSettings.OutlineTransparency
                     espObj.Highlight.Enabled = true
-                else
-                    if espObj.Highlight then espObj.Highlight.Enabled = false end
                 end
             else
                 hideESP(espObj)
@@ -1018,14 +966,14 @@ end
 
 -- Initialize ESP for all players
 for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer then
+    if needsESP(player) then
         addESP(player)
     end
 end
 
 -- Player added/removed events
 Players.PlayerAdded:Connect(function(player)
-    if player ~= LocalPlayer then
+    if needsESP(player) then
         addESP(player)
     end
 end)
@@ -1054,10 +1002,6 @@ getgenv().TrisESP = {
     -- Helper to resolve a player reference (player object, userId number, or player name)
     _resolvePlayer = function(ref)
         if not ref then return nil end
-        -- Accept Player instance directly
-        if typeof and typeof(ref) == "Instance" then
-            if ref and ref.IsA and ref:IsA("Player") then return ref end
-        end
         if type(ref) == "table" and ref.UserId then return ref end
         if type(ref) == "number" then
             for _,p in ipairs(Players:GetPlayers()) do
@@ -1084,43 +1028,6 @@ getgenv().TrisESP = {
         -- trim leading/trailing whitespace
         s = s:gsub("^%s+", ""):gsub("%s+$", "")
         table.insert(esp.CustomTexts, s)
-        -- ensure a TextLabel exists for this custom text immediately so it appears without waiting
-        esp.CustomTextLabels = esp.CustomTextLabels or {}
-        local idx = #esp.CustomTexts
-        local lbl = esp.CustomTextLabels[idx]
-        if not lbl then
-            lbl = Instance.new("TextLabel")
-            lbl.BackgroundTransparency = 1
-            lbl.Font = Enum.Font.Code
-            lbl.TextSize = 13
-            lbl.TextColor3 = Color3.fromRGB(255,255,255)
-            lbl.TextStrokeTransparency = 0
-            lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-            lbl.ZIndex = 11
-            lbl.Size = UDim2.new(0, 160, 0, 16)
-            lbl.AnchorPoint = Vector2.new(0, 0)
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            if esp.Container then
-                lbl.Parent = esp.Container
-            else
-                lbl.Parent = ESPHolder
-            end
-            esp.CustomTextLabels[idx] = lbl
-        end
-        lbl.Text = s
-        -- Try to position immediately based on character screen rect so it appears without waiting
-        local lineHeight = 16
-        local rect = nil
-        if p and p.Character then
-            rect = getScreenRectForCharacter(p.Character)
-        end
-        if rect then
-            local sx, sy, sw = rect.x, rect.y, rect.w
-            lbl.Position = UDim2.new(0, sx + sw + 6, 0, sy + (#esp.CustomTexts-1) * lineHeight)
-            lbl.Visible = true
-        else
-            lbl.Visible = false
-        end
         return true
     end,
 
@@ -1131,15 +1038,6 @@ getgenv().TrisESP = {
         esp.CustomTexts = esp.CustomTexts or {}
         if type(idxOrText) == "number" then
             if idxOrText >= 1 and idxOrText <= #esp.CustomTexts then
-                -- remove corresponding label if present
-                if esp.CustomTextLabels and esp.CustomTextLabels[idxOrText] then
-                    pcall(function()
-                        esp.CustomTextLabels[idxOrText].Visible = false
-                        esp.CustomTextLabels[idxOrText].Text = ""
-                        esp.CustomTextLabels[idxOrText]:Destroy()
-                    end)
-                    table.remove(esp.CustomTextLabels, idxOrText)
-                end
                 table.remove(esp.CustomTexts, idxOrText)
                 return true
             end
@@ -1147,14 +1045,6 @@ getgenv().TrisESP = {
         else
             for i, v in ipairs(esp.CustomTexts) do
                 if v == tostring(idxOrText) then
-                    if esp.CustomTextLabels and esp.CustomTextLabels[i] then
-                        pcall(function()
-                            esp.CustomTextLabels[i].Visible = false
-                            esp.CustomTextLabels[i].Text = ""
-                            esp.CustomTextLabels[i]:Destroy()
-                        end)
-                        table.remove(esp.CustomTextLabels, i)
-                    end
                     table.remove(esp.CustomTexts, i)
                     return true
                 end
@@ -1168,16 +1058,6 @@ getgenv().TrisESP = {
         if not p or not ESPObjects[p] then return false end
         local esp = ESPObjects[p]
         esp.CustomTexts = {}
-        if esp.CustomTextLabels then
-            for _, lbl in ipairs(esp.CustomTextLabels) do
-                pcall(function()
-                    lbl.Visible = false
-                    lbl.Text = ""
-                    lbl:Destroy()
-                end)
-            end
-            esp.CustomTextLabels = {}
-        end
         return true
     end,
 
@@ -1203,43 +1083,96 @@ getgenv().TrisESP = {
         return nil
     end,
 
-    AddCustomTeam = function(teamRef)
+    AddCustomTeam = function(teamRef, color)
         local t = getgenv().TrisESP._resolveTeam(teamRef)
         if not t then return false end
         if type(t) == "string" then
             ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
             for _, v in ipairs(ESPSettings.CustomTeams) do if v == t then return true end end
             table.insert(ESPSettings.CustomTeams, t)
-            return true
         else
             ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
             for _, v in ipairs(ESPSettings.CustomTeamObjects) do if v == t then return true end end
             table.insert(ESPSettings.CustomTeamObjects, t)
-            return true
         end
+        -- store optional team color mapping
+        if color then
+            ESPSettings.TeamColorMap = ESPSettings.TeamColorMap or {}
+            table.insert(ESPSettings.TeamColorMap, { ref = t, color = color })
+        end
+        -- ensure ESP created for existing players matching this team
+        for _, p in ipairs(Players:GetPlayers()) do
+            if matchTeamRef(t, p) then
+                if not ESPObjects[p] then addESP(p) end
+            end
+        end
+        return true
     end,
 
     RemoveCustomTeam = function(teamRef)
         local t = getgenv().TrisESP._resolveTeam(teamRef)
         if not t then return false end
-        if type(t) == "string" then
-            ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
-            for i, v in ipairs(ESPSettings.CustomTeams) do
-                if v == t then table.remove(ESPSettings.CustomTeams, i) return true end
-            end
-            return false
-        else
-            ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
-            for i, v in ipairs(ESPSettings.CustomTeamObjects) do
-                if v == t then table.remove(ESPSettings.CustomTeamObjects, i) return true end
-            end
-            return false
+        local found = false
+        ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
+        for i, v in ipairs(ESPSettings.CustomTeams) do
+            if v == t then table.remove(ESPSettings.CustomTeams, i) found = true break end
         end
+        ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
+        for i, v in ipairs(ESPSettings.CustomTeamObjects) do
+            if v == t then table.remove(ESPSettings.CustomTeamObjects, i) found = true break end
+        end
+        -- remove team color mappings referencing this ref
+        if ESPSettings.TeamColorMap then
+            for i = #ESPSettings.TeamColorMap, 1, -1 do
+                local entry = ESPSettings.TeamColorMap[i]
+                if entry and entry.ref == t then
+                    table.remove(ESPSettings.TeamColorMap, i)
+                    found = true
+                end
+            end
+        end
+        return found
     end,
 
     ClearCustomTeams = function()
         ESPSettings.CustomTeams = {}
         ESPSettings.CustomTeamObjects = {}
+        return true
+    end,
+    -- Add per-player ESP with optional color (Color3) or settings table
+    AddPlayerESP = function(playerRef, colorOrSettings)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
+        local key = tostring(p.UserId)
+        local entry = {}
+        if type(colorOrSettings) == "table" then
+            entry = colorOrSettings
+        elseif typeof and typeof(colorOrSettings) == "Color3" then
+            entry.BoxCustomColor1 = colorOrSettings
+            entry.BoxCustomColor2 = colorOrSettings
+            entry.BoxCustomColor3 = colorOrSettings
+            entry.HealthBarColor1 = colorOrSettings
+            entry.HealthBarColor2 = colorOrSettings
+            entry.HealthBarColor3 = colorOrSettings
+        elseif type(colorOrSettings) == "userdata" then
+            -- attempt to treat as Color3-like
+            entry.BoxCustomColor1 = colorOrSettings
+            entry.HealthBarColor1 = colorOrSettings
+        end
+        entry.Enabled = true
+        ESPSettings.PlayerOverrides[key] = entry
+        if not ESPObjects[p] then addESP(p) end
+        return true
+    end,
+
+    RemovePlayerESP = function(playerRef)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
+        ESPSettings.PlayerOverrides[tostring(p.UserId)] = nil
+        ESPSettings.PlayerOverrides[p.Name] = nil
+        removePlayerESP(p)
         return true
     end,
 }
