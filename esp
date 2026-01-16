@@ -114,24 +114,6 @@ local ESPSettings = {
     OutlineTransparency = 0,
 }
 
-local function readFillAlpha(idx)
-    local keys = {
-        "BoxFillCustomColor" .. idx .. "Transparency",
-        "BoxFillCustomColor" .. idx .. "Trans",
-        "BoxFillColor" .. idx .. "Trans",
-        "BoxFillColor" .. idx .. "Transparency",
-        "BoxFillAlpha" .. idx,
-        "BoxFillColor" .. idx .. "A",
-    }
-    for _, k in ipairs(keys) do
-        local v = ESPSettings[k]
-        if type(v) == "number" then
-            return math.clamp(v, 0, 1)
-        end
-    end
-    return 0.5
-end
-
 -- Spin integrator & constants
 local AUTOROTATE_SPEED = 60 -- degrees per second for fill gradient
 local SpinAngle = PERSIST.SpinAngle or RotationAngle -- persistent integrated angle
@@ -670,16 +652,28 @@ local function updateESP(deltaTime)
 
                         -- Box fill transparency and base color (base color uses middle stop)
                         if ESPSettings.BoxFill then
-                            -- Use per-stop alpha (fallback to 0.5)
-                            local a1 = readFillAlpha(1)
-                            local a2 = readFillAlpha(2)
-                            local a3 = readFillAlpha(3)
-                            -- Keep frame opaque and let the UIGradient control per-stop transparency
+                            -- Use per-stop alpha (fallback to 0.5) and smooth transitions for better visuals
+                            local targetA1 = readFillAlpha(1)
+                            local targetA2 = readFillAlpha(2)
+                            local targetA3 = readFillAlpha(3)
+
+                            -- initialize current values if missing
+                            espObj._fillAlphaCurrent1 = espObj._fillAlphaCurrent1 or targetA1
+                            espObj._fillAlphaCurrent2 = espObj._fillAlphaCurrent2 or targetA2
+                            espObj._fillAlphaCurrent3 = espObj._fillAlphaCurrent3 or targetA3
+
+                            -- smooth towards target (time-based lerp)
+                            local smoothFactor = math.clamp(dt * 12, 0, 1)
+                            espObj._fillAlphaCurrent1 = espObj._fillAlphaCurrent1 + (targetA1 - espObj._fillAlphaCurrent1) * smoothFactor
+                            espObj._fillAlphaCurrent2 = espObj._fillAlphaCurrent2 + (targetA2 - espObj._fillAlphaCurrent2) * smoothFactor
+                            espObj._fillAlphaCurrent3 = espObj._fillAlphaCurrent3 + (targetA3 - espObj._fillAlphaCurrent3) * smoothFactor
+
+                            -- Keep frame opaque and let the UIGradient control per-stop transparency (use smoothed values)
                             espObj.Box.BackgroundTransparency = 0
                             espObj.BoxGradient.Transparency = NumberSequence.new{
-                                NumberSequenceKeypoint.new(0, a1),
-                                NumberSequenceKeypoint.new(0.5, a2),
-                                NumberSequenceKeypoint.new(1, a3),
+                                NumberSequenceKeypoint.new(0, espObj._fillAlphaCurrent1),
+                                NumberSequenceKeypoint.new(0.5, espObj._fillAlphaCurrent2),
+                                NumberSequenceKeypoint.new(1, espObj._fillAlphaCurrent3),
                             }
                             espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
                         else
