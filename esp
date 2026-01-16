@@ -604,8 +604,7 @@ local function updateESP(deltaTime)
                 if espObj.Weapon then
                     espObj.Weapon.Text = "none"
                     espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 20)
-                    -- weapon label follows ShowName state
-                    espObj.Weapon.Visible = getSetting("ShowName", ESPSettings.ShowName)
+                    espObj.Weapon.Visible = false
                 end
                 
                 -- Box outline (completely separate from BoxFill)
@@ -780,7 +779,7 @@ local function updateESP(deltaTime)
                     end
 
                     -- If animation is disabled, use a static 3-stop sequence
-                    if not getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled) then
+                    if not ESPSettings.HealthGradientEnabled then
                         espObj.HealthBarGradient.Color = createGradientSequence(hc1, hc2, hc3)
                     else
                         -- fixed sample density for blending/smoothness (12 samples)
@@ -800,20 +799,14 @@ local function updateESP(deltaTime)
                     end
 
                     -- Determine a color sample for the health text (match gradient at filled/top position)
-                    local samplePhase = getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled) and (espObj.HealthGradientPhase or 0) or 0
+                    local samplePhase = ESPSettings.HealthGradientEnabled and (espObj.HealthGradientPhase or 0) or 0
                     local samplePosForText = (healthRatio - samplePhase) % 1
                     local healthTextColor = sampleBase(samplePosForText)
-                    -- Health bar outline thickness (resizable if HealthOutlineFollow enabled)
-                    if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
-                        local barThickness = getSetting("HealthBarThickness", ESPSettings.HealthBarThickness) or 2
-                        -- scale border with health ratio while keeping at least 1px
-                        espObj.HealthBarBG.BorderSizePixel = math.max(1, math.floor(barThickness * math.clamp(healthRatio, 0, 1)))
-                    else
-                        espObj.HealthBarBG.BorderSizePixel = 1
-                    end
+                    -- Force health bar outline to 1px black (do not change)
+                    espObj.HealthBarBG.BorderSizePixel = 1
                     espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
 
-                    local thickness = getSetting("HealthBarThickness", ESPSettings.HealthBarThickness) or 2
+                    local thickness = ESPSettings.HealthBarThickness or 2
                     local padding = 4
 
                     -- Position background/fill based on configured side
@@ -846,6 +839,15 @@ local function updateESP(deltaTime)
                         espObj.HealthText.Visible = true
                     else
                         if espObj.HealthText then espObj.HealthText.Visible = false end
+                    end
+
+                    -- Health bar outline resizing (follow filled height) if enabled
+                    if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
+                        -- scale border thickness between 1 and 6 based on filled ratio
+                        local border = math.max(1, math.floor((barHeight / math.max(h, 1)) * 6))
+                        espObj.HealthBarBG.BorderSizePixel = border
+                    else
+                        espObj.HealthBarBG.BorderSizePixel = 1
                     end
                 end
                 
