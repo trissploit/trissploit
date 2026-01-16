@@ -1,2938 +1,1247 @@
---// Services
+--[[
+    TrisESP - ScreenGui ESP System
+    
+    Complete rewrite using ScreenGui instead of Drawing.new
+    Includes rotation animation and vertical gradients
+    
+    Load via: loadstring(game:HttpGet("YOUR_URL_HERE"))()
+--]]
+
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local CoreGui = game:GetService("CoreGui")
+local Teams = game:GetService("Teams")
 
---// Player / Camera
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 local Camera = Workspace.CurrentCamera
+local renderConn
 
---// Common constructors (worth localizing)
-local Vector2 = Vector2
-local Vector3 = Vector3
-local CFrame = CFrame
-local Color3 = Color3
-local Enum = Enum
-local Instance = Instance
-local Drawing = Drawing
+local ESPObjects = {}
+local RotationAngle = -90
+-- Persistent state across hot-reloads (if executor preserves getgenv)
+getgenv()._TrisESP_Persistent = getgenv()._TrisESP_Persistent or {}
+local PERSIST = getgenv()._TrisESP_Persistent
+PERSIST.HealthPhase = PERSIST.HealthPhase or {}
+PERSIST.GradientAngle = PERSIST.GradientAngle or {}
+PERSIST.SpinAngle = PERSIST.SpinAngle or RotationAngle
 
 
-
--- Create folders for custom combos
-if not isfolder("TrisSploit") then
-    makefolder("TrisSploit")
-end
-if not isfolder("TrisSploit/combos") then
-    makefolder("TrisSploit/combos")
-end
-
--- Remote library loading
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local success, Library = pcall(function() return loadstring(game:HttpGet("https://raw.githubusercontent.com/trissploit/trissploit/refs/heads/main/library.lua"))() end)
-if not success or not Library then error("Failed to load Obsidian Library: " .. tostring(Library)) return end
-
--- Load TrisESP
-local ESPSuccess, ESPError = pcall(function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/trissploit/trissploit/refs/heads/main/esp"))()
+-- Create ScreenGui holder
+local ESPHolder = Instance.new("ScreenGui")
+ESPHolder.Name = "TrisESPHolder"
+ESPHolder.ResetOnSpawn = false
+ESPHolder.IgnoreGuiInset = true
+pcall(function()
+    ESPHolder.Parent = CoreGui
 end)
-if not ESPSuccess then
-    warn("Failed to load TrisESP: " .. tostring(ESPError))
+if not ESPHolder.Parent then
+    ESPHolder.Parent = LocalPlayer:WaitForChild("PlayerGui")
 end
-Library.ForceCheckbox = true
-local success2, ThemeManager = pcall(function() return loadstring(game:HttpGet("https://raw.githubusercontent.com/trissploit/trissploit/refs/heads/main/thememanager.lua"))() end)
-if not success2 then ThemeManager = nil end
 
-
-
-local success3, SaveManager = pcall(function() return loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))() end)
-if not success3 then SaveManager = nil end
-
-local Window = Library:CreateWindow({
-    Title = "tris.sip",
-    Footer = "tris.sip | testing | version: 0.0",
-    Icon = "rbxassetid://85419017315177",
-    CornerRadius = 0,
-    Size = UDim2.fromOffset(580, 460),
-    NotifySide = "Right",
-    ShowCustomCursor = false,
-    Compact = true,
+local ESPSettings = {
+    Enabled = true,
+    MaxDistance = 1500,
     
-})
-
-local Tabs = {
-    Home = Window:AddTab("Home", "boxes", "Overview & status"),
-    Combat = Window:AddTab("Combat", "sword"),
-    Mods = Window:AddTab("Mods", "wrench"),
-    Visuals = Window:AddTab("Visuals", "eye"),
-    Rage = Window:AddTab("Rage", "angry"),
-    Settings = Window:AddTab("Settings", "cog"),
-}
-
-Tabs.Home:UpdateWarningBox({
-    Title = "Development Notice",
-    Text = "SCRIPT IS IN DEVELOPMENT! Script may have bugs or things may not function properly",
-    IsNormal = false,
-    Visible = true,
-    LockSize = true
-})
-
--- Status box removed per user request
-
-local ChangelogsBox = Tabs.Home:AddLeftGroupbox("Changelogs", "scroll")
-ChangelogsBox:AddLabel("Updates posted in Discord server.", true)
-
-local CreditsBox = Tabs.Home:AddRightGroupbox("Credits", "award")
-CreditsBox:AddLabel("<font color='rgb(255,0,255)'>worldwide</font> - founder & developer", true)
-CreditsBox:AddLabel("<font color='rgb(0,255,255)'>nebula</font> - developer", true)
-
-local SocialBox = Tabs.Home:AddRightGroupbox("Socials", "users")
-SocialBox:AddLabel("Join Discord for updates & support!", true)
-SocialBox:AddButton("Join Discord", function()
-    if safeSetClipboard("https://pornhub.com") then
-        Library:Notify("Discord invite copied!", 3)
-        local s = Instance.new("Sound"); s.SoundId = "rbxassetid://9086208311"; s.Volume = 0.3; s.Parent = SoundService; s:Play(); s.Ended:Wait(); s:Destroy()
-    else
-        Library:Notify("Clipboard not supported!", 3)
-    end
-end)
-
--- === Modules ===
-
--- AntiDebuff Module
-local AntiDebuff = {
-    Enabled = false,
-    Connection = nil :: RBXScriptConnection?,
-    Blacklist = {} :: { [string]: boolean },
-}
-
-do
-    local blacklistNames = {
-        "InSkil", "NoSprint", "Block", "Stun", "Knockback",
-        "Hold", "Wakeup", "Counter", "NoNue", "WorldSlash",
-        "Drill", "DiSWeapon", "DisableChase"
-    }
-    for _, name in blacklistNames do
-        AntiDebuff.Blacklist[name] = true
-    end
-end
-
-function AntiDebuff.StartListener()
-    if AntiDebuff.Connection and AntiDebuff.Connection.Connected then return end
-    AntiDebuff.Connection = Workspace.Characters.DescendantAdded:Connect(function(obj: Instance)
-        if not AntiDebuff.Enabled then return end
-        task.spawn(function()
-            task.wait()
-            if not (obj and obj.Parent and obj.Parent.Parent) then return end
-            if not AntiDebuff.Blacklist[obj.Name] then return end
-            local character = LocalPlayer.Character
-            if not character then return end
-            if obj.Parent.Parent == character then
-                obj:Destroy()
-            end
-        end)
-    end)
-end
-
-function AntiDebuff.StopListener()
-    if AntiDebuff.Connection and AntiDebuff.Connection.Connected then
-        AntiDebuff.Connection:Disconnect()
-        AntiDebuff.Connection = nil
-    end
-end
-
--- Custom Sequences
-local CustomSequences = {} :: { [string]: { any } }
-
--- Load custom sequences
-local function LoadCustomSequences()
-    for k in CustomSequences do
-        CustomSequences[k] = nil
-    end
-    if isfolder("TrisSploit/combos") then
-        for _, file in listfiles("TrisSploit/combos") do
-            if file:match("%.txt$") then
-                local content = readfile(file)
-                local loader = loadstring("return {" .. content .. "}")
-                if loader then
-                    local success, seq = pcall(loader)
-                    if success and type(seq) == "table" then
-                        local name = file:match("([^/\\]+)%.txt$")
-                        CustomSequences[name] = seq
-                    else
-                        warn("Failed to execute sequence from " .. file .. ": " .. tostring(seq))
-                    end
-                else
-                    warn("Failed to load sequence from " .. file)
-                end
-            end
-        end
-    end
-end
-
--- Load initially
-LoadCustomSequences()
-
--- Shared Range Settings
-local RangeCheck = {
-    AutoEnabled = false,
-    CustomEnabled = false,
-    Range = 20,
-    ShowVisualizer = false,
-}
-
--- Range Visualizer (perfect flat circle with nice border)
-local visualizerPart: Part
-local visualizerMesh: SpecialMesh?
-do
-    visualizerPart = Instance.new("Part")
-    visualizerPart.Shape = Enum.PartType.Block
-    visualizerPart.Size = Vector3.new(1, 0.2, 1)
-    visualizerPart.Anchored = true
-    visualizerPart.CanCollide = false
-    visualizerPart.Transparency = 0.6
-    visualizerPart.Material = Enum.Material.Neon
-    visualizerPart.Color = Color3.new(0, 1, 0)
-    visualizerPart.Name = "RangeVisualizer"
-
-    visualizerMesh = Instance.new("SpecialMesh")
-    visualizerMesh.MeshType = Enum.MeshType.Cylinder
-    visualizerMesh.Scale = Vector3.new(RangeCheck.Range * 2, 0.2, RangeCheck.Range * 2)
-    visualizerMesh.Parent = visualizerPart
-end
-
-local visualizerConnection: RBXScriptConnection?
-local function UpdateVisualizer()
-    if visualizerConnection then visualizerConnection:Disconnect() end
-    visualizerConnection = RunService.Heartbeat:Connect(function()
-        if not RangeCheck.ShowVisualizer then
-            visualizerPart.Parent = nil
-            return
-        end
-        local character = LocalPlayer.Character
-        if not character then
-            visualizerPart.Parent = nil
-            return
-        end
-        local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-        if not hrp then
-            visualizerPart.Parent = nil
-            return
-        end
-        -- Place visualizer at the bottom of the character's feet (not world ground)
-        local bottomY = nil
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local partBottom = part.Position.Y - part.Size.Y / 2
-                if not bottomY or partBottom < bottomY then
-                    bottomY = partBottom
-                end
-            end
-        end
-        if not bottomY then bottomY = hrp.Position.Y - hrp.Size.Y / 2 end
-        local meshThickness = 1.0
-        -- use a flattened sphere mesh (reliable circular disc appearance)
-        visualizerMesh.MeshType = Enum.MeshType.Sphere
-        visualizerMesh.Scale = Vector3.new(RangeCheck.Range * 2, meshThickness, RangeCheck.Range * 2)
-        local placePos = Vector3.new(hrp.Position.X, bottomY + meshThickness / 2 + 0.05, hrp.Position.Z)
-        -- place flat on feet (no rotation required for flattened sphere)
-        visualizerPart.CFrame = CFrame.new(placePos)
-        visualizerPart.Parent = Workspace
-    end)
-end
-
--- Target System
-local Target = {
-    Enabled = false,
-    CurrentTarget = nil :: Player?,
-    NoDamageThreshold = 0.5,
-    TargetKey = Enum.KeyCode.E,
-    AimlockEnabled = false,
-    AimlockMethod = "CameraLock",
-    ChamsEnabled = true,
-}
-
--- Camera lock state
-local _cameraLockActive = false
-local _savedCameraType = nil
-local _savedCameraCFrame = nil
-local _cameraLockConnection: RBXScriptConnection?
-
-local function EnableCameraLock()
-    if _cameraLockActive then return end
-    if not Camera then return end
-    -- Use mouse-locking: move the mouse cursor to the target's HumanoidRootPart screen
-    _cameraLockActive = true
-    if _cameraLockConnection and _cameraLockConnection.Connected then
-        _cameraLockConnection:Disconnect()
-        _cameraLockConnection = nil
-    end
-    _cameraLockConnection = RunService.RenderStepped:Connect(function()
-        if not _cameraLockActive then return end
-        local target = Target.CurrentTarget
-        if not target or not target.Character then return end
-        local hrp = target.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-        if not hrp then return end
-        local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-        if onScreen then
-            pcall(function()
-                VirtualInputManager:SendMouseMoveEvent(screenPos.X, screenPos.Y, game)
-            end)
-        end
-    end)
-end
-
-local function DisableCameraLock()
-    if not _cameraLockActive then return end
-    if not Camera then _cameraLockActive = false; return end
-    if _cameraLockConnection and _cameraLockConnection.Connected then
-        pcall(function() _cameraLockConnection:Disconnect() end)
-        _cameraLockConnection = nil
-    end
-    _cameraLockActive = false
-    _savedCameraType = nil
-    _savedCameraCFrame = nil
-end
-
-local _hitoMacroStop: (() -> ())?
-local _hitoMacroDelayMs: number = 100
-
-local function _startHitoMacro(): (() -> ())
-    -- Services
-    local Players = game:GetService("Players")
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    local RunService = game:GetService("RunService")
-
-    -- Local player and GUI
-    local player = Players.LocalPlayer
-    local playerGui = player:WaitForChild("PlayerGui")
-
-    local alive = true
-    local activeHandlers = {}
-
-    local function safeDisconnect(conn)
-        if conn then
-            pcall(function()
-                conn:Disconnect()
-            end)
-        end
-    end
-
-    -- Helper to get KeyCode from letter
-    local function getKeyCodeFromLetter(letter)
-        local upper = tostring(letter):upper()
-        return Enum.KeyCode[upper]
-    end
-
-    -- Handles one QTE instance
-    local function handleQTE(qteGui)
-        if not alive then return end
-        local qtePC = qteGui:WaitForChild("QTE_PC", 5)
-        if not alive or not qtePC or not qtePC:IsA("TextLabel") then return end
-
-        local state = {
-            qteGui = qteGui,
-            qtePC = qtePC,
-            currentLetter = qtePC.Text,
-            stopLoop = false,
-            keyPressLoopRunning = false,
-            conns = {},
-        }
-        table.insert(activeHandlers, state)
-
-        -- Repeatedly press the current key
-        local function startKeyPressLoop()
-            if state.keyPressLoopRunning then return end
-            state.keyPressLoopRunning = true
-
-            coroutine.wrap(function()
-                while alive and not state.stopLoop and state.currentLetter do
-                    local keyCode = getKeyCodeFromLetter(state.currentLetter)
-                    if keyCode then
-                        VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-                        VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
-                    end
-
-                    -- Delay (0..1000ms). If 0, still yield to avoid freezing.
-                    local delayMs = tonumber(_hitoMacroDelayMs) or 0
-                    delayMs = math.clamp(delayMs, 0, 1000)
-                    if delayMs > 0 then
-                        task.wait(delayMs / 1000)
-                    else
-                        RunService.Heartbeat:Wait()
-                    end
-                end
-                state.keyPressLoopRunning = false
-            end)()
-        end
-
-        -- Watch for Text changes
-        state.conns.textConn = qtePC:GetPropertyChangedSignal("Text"):Connect(function()
-            if not alive then return end
-            local newLetter = qtePC.Text
-            if newLetter ~= state.currentLetter then
-                state.currentLetter = newLetter
-                state.stopLoop = true
-                task.wait()
-                state.stopLoop = false
-                startKeyPressLoop()
-            end
-        end)
-
-        -- Watch for QTE GUI being removed
-        state.conns.ancestryConn = qteGui.AncestryChanged:Connect(function()
-            if not qteGui:IsDescendantOf(playerGui) then
-                state.stopLoop = true
-                safeDisconnect(state.conns.textConn)
-                safeDisconnect(state.conns.ancestryConn)
-                state.currentLetter = nil
-            end
-        end)
-
-        -- Start loop if there's already a letter
-        if state.currentLetter ~= "" then
-            startKeyPressLoop()
-        end
-    end
-
-    -- Listen for QTE GUI being added
-    local descendantConn = playerGui.DescendantAdded:Connect(function(descendant)
-        if not alive then return end
-        if descendant.Name == "QTE" then
-            task.spawn(handleQTE, descendant)
-        end
-    end)
-
-    -- Return cleanup function for toggling off
-    return function()
-        if not alive then return end
-        alive = false
-        safeDisconnect(descendantConn)
-        for _, state in ipairs(activeHandlers) do
-            state.stopLoop = true
-            if state.conns then
-                safeDisconnect(state.conns.textConn)
-                safeDisconnect(state.conns.ancestryConn)
-            end
-            state.currentLetter = nil
-        end
-    end
-end
-
-local function StartHitoMacro()
-    if _hitoMacroStop then return end
-    _hitoMacroStop = _startHitoMacro()
-end
-
-local function StopHitoMacro()
-    local stopFn = _hitoMacroStop
-    _hitoMacroStop = nil
-    if stopFn then
-        pcall(stopFn)
-    end
-end
-
-local PlayerESPConfig = {
-    Kills = {
-        Enabled = false,
-        Position = "Bottom",
-        Color = Color3.new(1,1,1),
-        OutlineEnabled = true,
-        OutlineColor = Color3.new(0,0,0),
-        Size = 13,
-    },
-}
-
-local playerESPs = {}
-local wasPlayingAnim = {}
-
-local function getCorners(cf: CFrame, size: Vector3)
-    local hx, hy, hz = size.X/2, size.Y/2, size.Z/2
-    local corners = {
-        cf * Vector3.new(-hx, -hy, -hz),
-        cf * Vector3.new(-hx, -hy, hz),
-        cf * Vector3.new(-hx, hy, -hz),
-        cf * Vector3.new(-hx, hy, hz),
-        cf * Vector3.new(hx, -hy, -hz),
-        cf * Vector3.new(hx, -hy, hz),
-        cf * Vector3.new(hx, hy, -hz),
-        cf * Vector3.new(hx, hy, hz),
-    }
-    return corners
-end
-
-local function get2DBoxFromCorners(corners)
-    local minX, minY = math.huge, math.huge
-    local maxX, maxY = -math.huge, -math.huge
-    local anyOnScreen = false
-    for _, pos in corners do
-        local screen, onScreen = Camera:WorldToViewportPoint(pos)
-        if onScreen then anyOnScreen = true end
-        minX = math.min(minX, screen.X)
-        maxX = math.max(maxX, screen.X)
-        minY = math.min(minY, screen.Y)
-        maxY = math.max(maxY, screen.Y)
-    end
-    if not anyOnScreen then return nil end
-    return Vector2.new(minX, minY), Vector2.new(maxX - minX, maxY - minY)
-end
-
-local function getTextPosition(position: string, boxPos: Vector2, boxSize: Vector2, textBounds: Vector2)
-    local width, height = textBounds.X, textBounds.Y
-    local boxCenterX = boxPos.X + boxSize.X / 2
-    local boxCenterY = boxPos.Y + boxSize.Y / 2
-    local textX, textY
-    if position == "Top" then
-        textX = boxCenterX - width / 2
-        textY = boxPos.Y - height
-    elseif position == "Bottom" then
-        textX = boxCenterX - width / 2
-        textY = boxPos.Y + boxSize.Y
-    elseif position == "Left" then
-        textX = boxPos.X - width
-        textY = boxCenterY - height / 2
-    elseif position == "Right" then
-        textX = boxPos.X + boxSize.X
-        textY = boxCenterY - height / 2
-    end
-    return Vector2.new(textX, textY)
-end
-
-local function createESP(player)
-    if playerESPs[player] then return end
-    local esp = {
-        -- Use TrisESP custom text instead of Drawing.Text to avoid persistent drawings
-        _lastKillsText = nil,
-        -- placeholder for any future per-player state
-    }
-    playerESPs[player] = esp
-end
-
-local function AddESPToPlayer(player)
-    if player == LocalPlayer then return end
-    createESP(player)
-end
-
-local function SetupPlayerESP()
-    for _, player in ipairs(Players:GetPlayers()) do
-        AddESPToPlayer(player)
-    end
-
-    Players.PlayerAdded:Connect(AddESPToPlayer)
-
-    Players.PlayerRemoving:Connect(function(player)
-        local esp = playerESPs[player]
-        if esp then
-            -- remove any custom text we added via TrisESP
-            pcall(function()
-                if getgenv().TrisESP and esp._lastKillsText then
-                    getgenv().TrisESP.RemoveCustomText(player, esp._lastKillsText)
-                end
-            end)
-            playerESPs[player] = nil
-        end
-        wasPlayingAnim[player] = nil
-    end)
-end
-
-SetupPlayerESP()
-
-local function SetTarget()
-    local targetInstance = Mouse.Target
-    if not targetInstance then 
-        Target.CurrentTarget = nil
-        Library:Notify("Target cleared")
-        TargetLabel:SetText("Current Target: None")
-        TargetHPLabel:SetText("HP: N/A")
-        pcall(function()
-            RefreshTargetPlayerDropdown()
-            if TargetPlayerDropdown and TargetPlayerDropdown.SetValue then TargetPlayerDropdown:SetValue(nil) end
-        end)
-        return 
-    end
-    local char = targetInstance:FindFirstAncestorWhichIsA("Model")
-    if not char or char.Parent ~= Workspace.Characters then 
-        Target.CurrentTarget = nil
-        Library:Notify("Target cleared")
-        TargetLabel:SetText("Current Target: None")
-        TargetHPLabel:SetText("HP: N/A")
-        pcall(function()
-            RefreshTargetPlayerDropdown()
-            if TargetPlayerDropdown and TargetPlayerDropdown.SetValue then TargetPlayerDropdown:SetValue(nil) end
-        end)
-        return 
-    end
-    local player = Players:GetPlayerFromCharacter(char)
-    if not player or player == LocalPlayer then return end
-    if Target.CurrentTarget == player then
-        Target.CurrentTarget = nil
-        Library:Notify("Target cleared")
-        TargetLabel:SetText("Current Target: None")
-        TargetHPLabel:SetText("HP: N/A")
-        pcall(function()
-            RefreshTargetPlayerDropdown()
-            if TargetPlayerDropdown and TargetPlayerDropdown.SetValue then TargetPlayerDropdown:SetValue(nil) end
-        end)
-    else
-        Target.CurrentTarget = player
-        Library:Notify("Targeted: " .. player.DisplayName)
-        TargetLabel:SetText("Current Target: " .. player.DisplayName .. " (@" .. player.Name .. ")")
-        pcall(function()
-            RefreshTargetPlayerDropdown()
-            if TargetPlayerDropdown and TargetPlayerDropdown.SetValue then
-                TargetPlayerDropdown:SetValue(player.DisplayName .. " (@" .. player.Name .. ")")
-            end
-        end)
-    end
-end
-
-local targetKeyConnection: RBXScriptConnection?
-local playerRemovingConnection = Players.PlayerRemoving:Connect(function(player: Player)
-    if Target.CurrentTarget == player then
-        Target.CurrentTarget = nil
-        Target.AimlockEnabled = false
-        Library:Notify("Target left the game")
-        TargetLabel:SetText("Current Target: None")
-        TargetHPLabel:SetText("HP: N/A")
-    end
-end)
-
--- Function to get activation distance (target if set, else nearest)
-local function GetActivationDistance(): number
-    local lpChar = LocalPlayer.Character
-    if not lpChar then return math.huge end
-    local lpHrp = lpChar:FindFirstChild("HumanoidRootPart") :: BasePart?
-    if not lpHrp then return math.huge end
-    local lpPos = lpHrp.Position
-    if Target.CurrentTarget then
-        local p = Target.CurrentTarget
-        local pChar = p.Character
-        if pChar then
-            local pHrp = pChar:FindFirstChild("HumanoidRootPart") :: BasePart?
-            if pHrp then
-                local pHum = pChar:FindFirstChild("Humanoid") :: Humanoid?
-                if pHum and pHum.Health > 0 then
-                    return (pHrp.Position - lpPos).Magnitude
-                end
-            end
-        end
-        return math.huge
-    else
-        local minDist = math.huge
-        for _, p in Players:GetPlayers() do
-            if p ~= LocalPlayer then
-                local pChar = p.Character
-                if pChar then
-                    local pHrp = pChar:FindFirstChild("HumanoidRootPart") :: BasePart?
-                    if pHrp then
-                        local pHum = pChar:FindFirstChild("Humanoid") :: Humanoid?
-                        if pHum and pHum.Health > 0 then
-                            local dist = (pHrp.Position - lpPos).Magnitude
-                            if dist < minDist then
-                                minDist = dist
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        return minDist
-    end
-end
-
--- CustomCombo Module
-local CustomCombo = {
-    Config = {
-        PressReleaseDelay = 0.05,
-        DefaultDelayAfter = 0.1,
-        DelayMultiplier = 1.0
-    },
-    Sequences = CustomSequences,
-    SelectedCombo = nil :: string?,
-    Enabled = false,
-    TriggerKey = Enum.KeyCode.Q,
-    CurrentThread = nil :: thread?,
-}
-
-function CustomCombo.PressKey(keyCode: Enum.KeyCode)
-    VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-    task.wait(CustomCombo.Config.PressReleaseDelay)
-    VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
-end
-
-function CustomCombo.HoldKey(keyCode: Enum.KeyCode, duration: number?)
-    VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-    if duration then
-        task.wait(duration)
-        VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
-    end
-end
-
-function CustomCombo.ReleaseKey(keyCode: Enum.KeyCode)
-    VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
-end
-
-function CustomCombo.LeftClick(x: number?, y: number?)
-    x = x or Mouse.X
-    y = y or Mouse.Y
-    VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
-    task.wait(CustomCombo.Config.PressReleaseDelay)
-    VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
-end
-
-function CustomCombo.ClickWithKeyHold(keyCode: Enum.KeyCode, x: number?, y: number?)
-    CustomCombo.HoldKey(keyCode)
-    task.wait(CustomCombo.Config.PressReleaseDelay)
-    CustomCombo.LeftClick(x, y)
-end
-
-function CustomCombo.MoveMouseTo(x: number, y: number)
-    VirtualInputManager:SendMouseMoveEvent(x, y, game)
-end
-
-function CustomCombo.ExecuteSequence(sequenceName: string)
-    local seq = CustomCombo.Sequences[sequenceName]
-    if not seq then
-        warn("Custom sequence '" .. sequenceName .. "' not found!")
-        return
-    end
-    local delayMultiplier = CustomCombo.Config.DelayMultiplier
-    local hum: Humanoid? = nil
-    if Target.CurrentTarget then
-        local targetChar = Target.CurrentTarget.Character
-        if targetChar then
-            hum = targetChar:FindFirstChild("Humanoid") :: Humanoid?
-        end
-    end
-    for _, action in seq do
-        local preHealth: number? = nil
-        if hum and action.nodmg_stop then
-            preHealth = hum.Health
-        end
-        if action.type == "click" then
-            CustomCombo.LeftClick(action.x, action.y)
-        elseif action.type == "key" then
-            CustomCombo.PressKey(action.key)
-        elseif action.type == "clickHold" then
-            CustomCombo.ClickWithKeyHold(action.key, action.x, action.y)
-        elseif action.type == "holdKey" then
-            CustomCombo.HoldKey(action.key, action.duration)
-        elseif action.type == "releaseKey" then
-            CustomCombo.ReleaseKey(action.key)
-        elseif action.type == "mouseMove" then
-            CustomCombo.MoveMouseTo(action.x, action.y)
-        elseif action.type == "waitAnim" then
-            -- Wait until the local player's humanoid finishes playing the given animation(s).
-            -- action.animId: string or nil
-            -- action.timeout: number (seconds) optional, defaults to 5
-            local animSet = {}
-            if action.animId then
-                animSet[tostring(action.animId)] = true
-            end
-            -- If no animId provided, capture the local player's currently-playing animations
-            -- so we only wait on the user's own animations (do NOT fallback to AutoBlock list).
-            if next(animSet) == nil then
-                local lpChar = LocalPlayer.Character
-                local lpHum = lpChar and lpChar:FindFirstChild("Humanoid") :: Humanoid?
-                if lpHum then
-                    for _, track in ipairs(lpHum:GetPlayingAnimationTracks()) do
-                        local anim = track and track.Animation
-                        if anim and track.IsPlaying then
-                            animSet[tostring(anim.AnimationId)] = true
-                        end
-                    end
-                end
-            end
-            local timeout = action.timeout or 5
-            local elapsed = 0
-            while elapsed < timeout do
-                local lpChar = LocalPlayer.Character
-                local hum = lpChar and lpChar:FindFirstChild("Humanoid") :: Humanoid?
-                local stillPlaying = false
-                if hum then
-                    for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                        if not track or not track.IsPlaying then continue end
-                        local anim = track.Animation
-                        if anim and animSet[tostring(anim.AnimationId)] then
-                            stillPlaying = true
-                            break
-                        end
-                    end
-                end
-                if not stillPlaying then break end
-                task.wait(0.05)
-                elapsed = elapsed + 0.05
-            end
-        end
-        -- Support numeric delays or replaceable wait instructions.
-        local function doWait(waitArg)
-            if type(waitArg) == "number" then
-                task.wait(waitArg * delayMultiplier)
-                return
-            end
-            if type(waitArg) == "table" then
-                -- table may contain { animId = <string|nil>, timeout = <seconds> }
-                local timeout = waitArg.timeout or 5
-                local elapsed = 0
-                if waitArg.animId then
-                    -- wait for specific animation id to stop on local player
-                    while elapsed < timeout do
-                        local lpChar = LocalPlayer.Character
-                        local hum = lpChar and lpChar:FindFirstChild("Humanoid") :: Humanoid?
-                        local stillPlaying = false
-                        if hum then
-                            for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                                if not track or not track.IsPlaying then continue end
-                                local anim = track.Animation
-                                if anim and tostring(anim.AnimationId) == tostring(waitArg.animId) then
-                                    stillPlaying = true
-                                    break
-                                end
-                            end
-                        end
-                        if not stillPlaying then break end
-                        task.wait(0.05)
-                        elapsed = elapsed + 0.05
-                    end
-                else
-                    -- capture currently-playing local animations and wait for them to finish
-                    local animSet = {}
-                    do
-                        local lpChar = LocalPlayer.Character
-                        local hum = lpChar and lpChar:FindFirstChild("Humanoid") :: Humanoid?
-                        if hum then
-                            for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                                local anim = track and track.Animation
-                                if anim and track.IsPlaying then
-                                    animSet[tostring(anim.AnimationId)] = true
-                                end
-                            end
-                        end
-                    end
-                    if next(animSet) == nil then
-                        return
-                    end
-                    while elapsed < timeout do
-                        local lpChar = LocalPlayer.Character
-                        local hum = lpChar and lpChar:FindFirstChild("Humanoid") :: Humanoid?
-                        local stillPlaying = false
-                        if hum then
-                            for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                                if not track or not track.IsPlaying then continue end
-                                local anim = track.Animation
-                                if anim and animSet[tostring(anim.AnimationId)] then
-                                    stillPlaying = true
-                                    break
-                                end
-                            end
-                        end
-                        if not stillPlaying then break end
-                        task.wait(0.05)
-                        elapsed = elapsed + 0.05
-                    end
-                end
-                return
-            end
-            -- default fallback
-            task.wait(CustomCombo.Config.DefaultDelayAfter * delayMultiplier)
-        end
-
-        -- choose how to wait: `action.delay_after` may be a number or a table describing an anim wait.
-        if action.delay_after ~= nil then
-            doWait(action.delay_after)
-        else
-            doWait(CustomCombo.Config.DefaultDelayAfter)
-        end
-        if preHealth and hum then
-            local postHealth = hum.Health
-            if postHealth >= preHealth then
-                CustomCombo.CurrentThread = nil
-                return
-            end
-        end
-    end
-    CustomCombo.CurrentThread = nil
-end
-
-function CustomCombo.ReleaseAllKeys()
-    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-end
-
--- Get names functions
-local function GetSequenceNames(sequences: { [string]: any }): { string }
-    local names = {}
-    for name in sequences do
-        table.insert(names, name)
-    end
-    table.sort(names)
-    return names
-end
-
-local AutoBlock = {
-    Enabled = false,
-    Range = 10,
-    -- Add or remove ability animation IDs here (strings as returned by Animation.AnimationId)
-AbilityAnimationIds = {
-    "rbxassetid://137865634124104", -- Lapse Blue
-    "rbxassetid://137654778575373", -- Reversal Red
-    "rbxassetid://77200218033775",  -- Cursed Strike
-    "rbxassetid://82541714192027",  -- Reverse Ball
-    "rbxassetid://72063002791216",  -- Shutter Door
-    "rbxassetid://79619765411660",  -- Fever Breaker
-    "rbxassetid://132653290201368", -- Rabbit Escape
-    "rbxassetid://116432619539029", -- Toad
-    "rbxassetid://81112033595734",  -- Divine Dog: Totality
-    "rbxassetid://89092734635186",  -- Soul Fire
-    "rbxassetid://115234621584704", -- Focus Strike
-    "rbxassetid://127171275866632", -- Piercing Blood
-    "rbxassetid://84039122607068",  -- Flowing Red Scale
-    "rbxassetid://85569553424083",  -- Supernova
-    "rbxassetid://100446064103831", -- Blood Edge
-    "rbxassetid://111720035828971", -- Pebble Throw
-    "rbxassetid://94720627091769",  -- Swift Kick
-    "rbxassetid://89652378115594",  -- Extended Swings
-    "rbxassetid://82191642276319",  -- Judgement's Reach
-    "rbxassetid://124340599144108", -- Twirling Strikes
-    "rbxassetid://104824728032437", -- Severing Path
-    "rbxassetid://89582140026963",  -- Resolute Slash
-    "rbxassetid://117178057848472", -- Veilstep
-    "rbxassetid://140185219044200", -- Revolve
-    "rbxassetid://105121164520635", -- Projection Breaker
-    "rbxassetid://75190685223546",  -- Decisive Strike
-    "rbxassetid://120136894011461", -- Ultra Spin
-    "rbxassetid://93901924492394",  -- Ultra Cannon
-    "rbxassetid://73522808400163",  -- Puppet Barrage
-    "rbxassetid://129132347098646",             -- Black Mucus
-    "rbxassetid://115097960689033", -- Garuda Rebound
-    "rbxassetid://94347210073500",  -- Rising Rage
-    "rbxassetid://103013818601982", -- Despair
-    "rbxassetid://79860101129549",  -- Shut Up!
-},
-    -- internal set for fast lookup (built from AbilityAnimationIds)
-    AbilityAnimationIdsSet = {
-    },
-    -- animations discovered under ReplicatedStorage.Animations
-    RSAnimationsSet = {},
-    -- animations specifically under ReplicatedStorage.Animations.misc.hits
-    RSHitsSet = {},
-    -- key to hold while blocking
-    HoldKey = Enum.KeyCode.F,
-    -- show a range visualizer for AutoBlock (abilities)
-    ShowVisualizer = false,
-    -- whether to block ability animations (separate toggle)
-    BlockAbilities = false,
-    -- whether to apply special handling for M1/hit animations after blocks
-    BlockM1s = false,
-    -- extra hold duration when an M1/hit follows a blocked animation
-    BlockM1Extra = 0.5,
-    -- separate range for M1/hit blocking
-    BlockM1Range = 10,
-    -- only block for the selected target
-    OnlyTarget = false,
-    -- only extend M1 blocks for the selected target
-    BlockM1OnlyTarget = false,
-    -- dash animation group (separate from abilities / M1s)
-    BlockDashes = false,
-    DashAnimationIds = {"rbxassetid://9443519528"},
-    DashAnimationIdsSet = {},
-    DashRange = 10,
-    DashShowVisualizer = false,
-    DashOnlyTarget = false,
-    -- blocking method: "VIM" uses VirtualInputManager; "REMOTE" fires BlockService REMotes
-    Method = "VIM",
-}
-
-local _autoBlockCurrentlyHolding = false
-local lastBlockedByPlayer = {}
-local _autoBlockExtraHoldUntil = 0
--- currently-blocking animation info
-local _autoBlockCurrentAnimId = nil
-local _autoBlockCurrentAnimName = nil
-
--- Track active relevant animations per player so we can react when they move into range mid-animation
-local activePlayerAnims = {} -- [player] = { aid=string, name=string, isAbility=bool, isDash=bool, isHit=bool }
-local autoBlockPlayerAnimConns = {} -- [player] = RBXScriptConnection
-
-local function cleanupPlayerAnimConn(player)
-    local conn = autoBlockPlayerAnimConns[player]
-    if conn then
-        pcall(function() conn:Disconnect() end)
-        autoBlockPlayerAnimConns[player] = nil
-    end
-    activePlayerAnims[player] = nil
-end
-
-local function setupPlayerAnimConn(player)
-    cleanupPlayerAnimConn(player)
-    if not player or player == LocalPlayer then return end
-    local char = player.Character
-    if not char then return end
-    local hum = char:FindFirstChild("Humanoid")
-    if not hum then return end
-    local conn
-    conn = hum.AnimationPlayed:Connect(function(track)
-        if not track or not track.Animation then return end
-        local aid = tostring(track.Animation.AnimationId)
-        local isAbility = (AutoBlock.AbilityAnimationIdsSet and AutoBlock.AbilityAnimationIdsSet[aid]) or (AutoBlock.RSAnimationsSet and AutoBlock.RSAnimationsSet[aid])
-        local isDash = AutoBlock.DashAnimationIdsSet and AutoBlock.DashAnimationIdsSet[aid]
-        local isHit = AutoBlock.RSHitsSet and AutoBlock.RSHitsSet[aid]
-        if isAbility or isDash or isHit then
-            activePlayerAnims[player] = { aid = aid, name = tostring(track.Name or track.Animation.Name or ""), isAbility = isAbility and true or false, isDash = isDash and true or false, isHit = isHit and true or false }
-            -- clear when track stops
-            local stoppedConn
-            stoppedConn = track.Stopped:Connect(function()
-                if stoppedConn then pcall(function() stoppedConn:Disconnect() end) end
-                activePlayerAnims[player] = nil
-            end)
-        end
-    end)
-    autoBlockPlayerAnimConns[player] = conn
-end
-
--- Setup for current players
-for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= LocalPlayer then
-        p.CharacterAdded:Connect(function(char) setupPlayerAnimConn(p) end)
-        if p.Character then setupPlayerAnimConn(p) end
-    end
-end
-Players.PlayerAdded:Connect(function(p)
-    if p ~= LocalPlayer then
-        p.CharacterAdded:Connect(function(char) setupPlayerAnimConn(p) end)
-        if p.Character then setupPlayerAnimConn(p) end
-    end
-end)
-Players.PlayerRemoving:Connect(function(p)
-    cleanupPlayerAnimConn(p)
-end)
-
-local function _buildAutoBlockSet()
-    AutoBlock.AbilityAnimationIdsSet = {}
-    for _, id in ipairs(AutoBlock.AbilityAnimationIds) do
-        AutoBlock.AbilityAnimationIdsSet[tostring(id)] = true
-    end
-    -- dash ids from config
-    AutoBlock.DashAnimationIdsSet = {}
-    for _, id in ipairs(AutoBlock.DashAnimationIds) do
-        AutoBlock.DashAnimationIdsSet[tostring(id)] = true
-    end
-    -- scan ReplicatedStorage.Animations for available Animation objects
-    AutoBlock.RSAnimationsSet = {}
-    AutoBlock.RSHitsSet = {}
-    -- animations under ReplicatedStorage.Animations.misc.hits.block (special handling)
-    AutoBlock.RSBlockHitsSet = {}
-    local ok, rs = pcall(function() return game:GetService("ReplicatedStorage"):FindFirstChild("Animations") end)
-    if ok and rs and rs:IsA("Folder") then
-        for _, inst in ipairs(rs:GetDescendants()) do
-            if inst:IsA("Animation") then
-                local aid = tostring(inst.AnimationId)
-                local fullname = inst:GetFullName():lower()
-                local name = tostring(inst.Name or ""):lower()
-                -- Exclude common movement/parkour and hit animations from being treated as abilities
-                local isExcluded = (fullname:find("land") ~= nil) or (name:find("land") ~= nil)
-                    or (fullname:find("parkour") ~= nil) or (name:find("parkour") ~= nil)
-                    or (fullname:find("hit[1-4]") ~= nil) or (name:find("hit[1-4]") ~= nil)
-                if not isExcluded then
-                    AutoBlock.RSAnimationsSet[aid] = true
-                end
-                
-                -- M1 blocks: ONLY from Melee folder (Melee1, Melee2, Melee3, Melee4)
-                if fullname:find(".melee") or fullname:find("melee") then
-                    if name:find("melee1") or name:find("melee2") or name:find("melee3") or name:find("melee4") then
-                        AutoBlock.RSHitsSet[aid] = true
-                    end
-                    -- also detect chase animations in melee folders for dash blocking
-                    if name:find("chase") then
-                        AutoBlock.DashAnimationIdsSet[aid] = true
-                    end
-                end
-                
-                -- 0.5 hold blocks: ONLY from misc.hits.block, and exclude HIT3 (only HIT1, HIT2, BLOCK)
-                if fullname:find("replicatedstorage.animations.misc.hits.block") then
-                    if not name:find("hit3") then
-                        AutoBlock.RSBlockHitsSet[aid] = true
-                    end
-                end
-                -- also populate dash set if placed under a folder named 'dash' (convention)
-                -- Only treat animations explicitly named 'chase' as dash-block targets.
-                if fullname:find("dash") and name:find("chase") then
-                    AutoBlock.DashAnimationIdsSet[aid] = true
-                end
-            end
-        end
-    end
-end
-
--- Keep ReplicatedStorage scan up-to-date
-local rsAnimConnection: RBXScriptConnection?
-local rsAnimRemovingConnection: RBXScriptConnection?
-do
-    local ok, rs = pcall(function() return game:GetService("ReplicatedStorage"):FindFirstChild("Animations") end)
-    if ok and rs and rs:IsA("Folder") then
-        rsAnimConnection = rs.DescendantAdded:Connect(function()
-            _buildAutoBlockSet()
-        end)
-        rsAnimRemovingConnection = rs.DescendantRemoving:Connect(function()
-            _buildAutoBlockSet()
-        end)
-    end
-end
-
-    -- AutoBlock hold/release helpers (support VIM and REMOTE methods)
-    local function AutoBlock_DoHold()
-        if AutoBlock.Method == "VIM" then
-            pcall(function()
-                VirtualInputManager:SendKeyEvent(true, AutoBlock.HoldKey, false, game)
-            end)
-        else
-            pcall(function()
-                local rs = game:GetService("ReplicatedStorage")
-                if rs and rs:FindFirstChild("Knit") and rs.Knit:FindFirstChild("Knit") and rs.Knit.Knit.Services and rs.Knit.Knit.Services.BlockService and rs.Knit.Knit.Services.BlockService.RE and rs.Knit.Knit.Services.BlockService.RE.Activated then
-                    rs.Knit.Knit.Services.BlockService.RE.Activated:FireServer()
-                else
-                    -- try direct path (best-effort)
-                    game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Activated:FireServer()
-                end
-            end)
-        end
-    end
-
-    local function AutoBlock_DoRelease()
-        if AutoBlock.Method == "VIM" then
-            pcall(function()
-                VirtualInputManager:SendKeyEvent(false, AutoBlock.HoldKey, false, game)
-            end)
-        else
-            pcall(function()
-                local rs = game:GetService("ReplicatedStorage")
-                if rs and rs:FindFirstChild("Knit") and rs.Knit:FindFirstChild("Knit") and rs.Knit.Knit.Services and rs.Knit.Knit.Services.BlockService and rs.Knit.Knit.Services.BlockService.RE and rs.Knit.Knit.Services.BlockService.RE.Deactivated then
-                    rs.Knit.Knit.Services.BlockService.RE.Deactivated:FireServer()
-                else
-                    game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Deactivated:FireServer()
-                end
-            end)
-        end
-    end
-
-function AutoBlock.AddAbilityAnimation(id: string)
-    table.insert(AutoBlock.AbilityAnimationIds, id)
-    _buildAutoBlockSet()
-end
-
-function AutoBlock.RemoveAbilityAnimation(id: string)
-    for i, v in ipairs(AutoBlock.AbilityAnimationIds) do
-        if v == id then
-            table.remove(AutoBlock.AbilityAnimationIds, i)
-            break
-        end
-    end
-    _buildAutoBlockSet()
-end
-
-function AutoBlock.AddDashAnimation(id: string)
-    table.insert(AutoBlock.DashAnimationIds, id)
-    _buildAutoBlockSet()
-end
-
-function AutoBlock.RemoveDashAnimation(id: string)
-    for i, v in ipairs(AutoBlock.DashAnimationIds) do
-        if v == id then
-            table.remove(AutoBlock.DashAnimationIds, i)
-            break
-        end
-    end
-    _buildAutoBlockSet()
-end
-
-_buildAutoBlockSet()
-
--- AutoBlock range visualizer
-local autoBlockVisualizerPart: Part
-local autoBlockVisualizerMesh: SpecialMesh?
-local autoBlockVisualizerConnection: RBXScriptConnection?
-local function UpdateAutoBlockVisualizer()
-    if autoBlockVisualizerConnection then
-        autoBlockVisualizerConnection:Disconnect()
-        autoBlockVisualizerConnection = nil
-    end
-    if not AutoBlock.ShowVisualizer or not AutoBlock.BlockAbilities then
-        if autoBlockVisualizerPart then
-            autoBlockVisualizerPart.Parent = nil
-        end
-        return
-    end
-    if not autoBlockVisualizerPart then
-        autoBlockVisualizerPart = Instance.new("Part")
-        autoBlockVisualizerPart.Shape = Enum.PartType.Block
-        autoBlockVisualizerPart.Size = Vector3.new(1, 0.2, 1)
-        autoBlockVisualizerPart.Anchored = true
-        autoBlockVisualizerPart.CanCollide = false
-        autoBlockVisualizerPart.Transparency = 0.6
-        autoBlockVisualizerPart.Material = Enum.Material.Neon
-        autoBlockVisualizerPart.Color = Color3.new(0, 0.5, 1)
-        autoBlockVisualizerPart.Name = "AutoBlockRangeVisualizer"
-
-        autoBlockVisualizerMesh = Instance.new("SpecialMesh")
-        autoBlockVisualizerMesh.MeshType = Enum.MeshType.Cylinder
-        autoBlockVisualizerMesh.Scale = Vector3.new(AutoBlock.Range * 2, 0.2, AutoBlock.Range * 2)
-        autoBlockVisualizerMesh.Parent = autoBlockVisualizerPart
-    end
-
-    autoBlockVisualizerMesh.Scale = Vector3.new(AutoBlock.Range * 2, 0.2, AutoBlock.Range * 2)
-    autoBlockVisualizerPart.Parent = Workspace
-
-    autoBlockVisualizerConnection = RunService.Heartbeat:Connect(function()
-        if not AutoBlock.ShowVisualizer or not AutoBlock.BlockAbilities then
-            autoBlockVisualizerPart.Parent = nil
-            return
-        end
-        local character = LocalPlayer.Character
-        if not character then
-            autoBlockVisualizerPart.Parent = nil
-            return
-        end
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-            autoBlockVisualizerPart.Parent = nil
-            return
-        end
-            -- Place auto-block visualizer at the bottom of the character's feet
-            local bottomY = nil
-            for _, part in pairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    local partBottom = part.Position.Y - part.Size.Y / 2
-                    if not bottomY or partBottom < bottomY then
-                        bottomY = partBottom
-                    end
-                end
-            end
-            if not bottomY then bottomY = hrp.Position.Y - hrp.Size.Y / 2 end
-            local meshThickness = 1.0
-            -- use a flattened sphere mesh for a consistent circular disc look
-            if autoBlockVisualizerMesh then
-                autoBlockVisualizerMesh.MeshType = Enum.MeshType.Sphere
-                autoBlockVisualizerMesh.Scale = Vector3.new(AutoBlock.Range * 2, meshThickness, AutoBlock.Range * 2)
-            end
-            local placePos = Vector3.new(hrp.Position.X, bottomY + meshThickness / 2 + 0.05, hrp.Position.Z)
-            autoBlockVisualizerPart.CFrame = CFrame.new(placePos)
-            autoBlockVisualizerPart.Parent = Workspace
-    end)
-end
-
--- Block M1 range visualizer
-local blockM1VisualizerPart: Part
-local blockM1VisualizerMesh: SpecialMesh?
-local blockM1VisualizerConnection: RBXScriptConnection?
-local function UpdateBlockM1Visualizer()
-    if blockM1VisualizerConnection then
-        blockM1VisualizerConnection:Disconnect()
-        blockM1VisualizerConnection = nil
-    end
-    if not AutoBlock.BlockM1s then
-        if blockM1VisualizerPart then blockM1VisualizerPart.Parent = nil end
-        return
-    end
-    if not blockM1VisualizerPart then
-        blockM1VisualizerPart = Instance.new("Part")
-        blockM1VisualizerPart.Shape = Enum.PartType.Block
-        blockM1VisualizerPart.Size = Vector3.new(1, 0.2, 1)
-        blockM1VisualizerPart.Anchored = true
-        blockM1VisualizerPart.CanCollide = false
-        blockM1VisualizerPart.Transparency = 0.6
-        blockM1VisualizerPart.Material = Enum.Material.Neon
-        blockM1VisualizerPart.Color = Color3.new(1, 0.5, 0)
-        blockM1VisualizerPart.Name = "BlockM1RangeVisualizer"
-        blockM1VisualizerMesh = Instance.new("SpecialMesh")
-        blockM1VisualizerMesh.MeshType = Enum.MeshType.Sphere
-        blockM1VisualizerMesh.Parent = blockM1VisualizerPart
-    end
-    blockM1VisualizerMesh.Scale = Vector3.new(AutoBlock.BlockM1Range * 2, 1.0, AutoBlock.BlockM1Range * 2)
-    blockM1VisualizerPart.Parent = Workspace
-    blockM1VisualizerConnection = RunService.Heartbeat:Connect(function()
-        if not AutoBlock.BlockM1s or not AutoBlock.ShowVisualizer then blockM1VisualizerPart.Parent = nil; return end
-        local character = LocalPlayer.Character
-        if not character then blockM1VisualizerPart.Parent = nil; return end
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        if not hrp then blockM1VisualizerPart.Parent = nil; return end
-        local bottomY = nil
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local partBottom = part.Position.Y - part.Size.Y / 2
-                if not bottomY or partBottom < bottomY then bottomY = partBottom end
-            end
-        end
-        if not bottomY then bottomY = hrp.Position.Y - hrp.Size.Y / 2 end
-        local placePos = Vector3.new(hrp.Position.X, bottomY + 0.5, hrp.Position.Z)
-        blockM1VisualizerPart.CFrame = CFrame.new(placePos)
-        blockM1VisualizerPart.Parent = Workspace
-    end)
-end
-
--- Dash group visualizer
-local dashVisualizerPart: Part
-local dashVisualizerMesh: SpecialMesh?
-local dashVisualizerConnection: RBXScriptConnection?
-local function UpdateDashVisualizer()
-    if dashVisualizerConnection then
-        dashVisualizerConnection:Disconnect()
-        dashVisualizerConnection = nil
-    end
-    if not AutoBlock.BlockDashes then
-        if dashVisualizerPart then dashVisualizerPart.Parent = nil end
-        return
-    end
-    if not dashVisualizerPart then
-        dashVisualizerPart = Instance.new("Part")
-        dashVisualizerPart.Shape = Enum.PartType.Block
-        dashVisualizerPart.Size = Vector3.new(1, 0.2, 1)
-        dashVisualizerPart.Anchored = true
-        dashVisualizerPart.CanCollide = false
-        dashVisualizerPart.Transparency = 0.6
-        dashVisualizerPart.Material = Enum.Material.Neon
-        dashVisualizerPart.Color = Color3.new(0.8, 0.2, 0.8)
-        dashVisualizerPart.Name = "DashRangeVisualizer"
-        dashVisualizerMesh = Instance.new("SpecialMesh")
-        dashVisualizerMesh.MeshType = Enum.MeshType.Sphere
-        dashVisualizerMesh.Parent = dashVisualizerPart
-    end
-    dashVisualizerMesh.Scale = Vector3.new(AutoBlock.DashRange * 2, 1.0, AutoBlock.DashRange * 2)
-    dashVisualizerPart.Parent = Workspace
-    dashVisualizerConnection = RunService.Heartbeat:Connect(function()
-        if not AutoBlock.BlockDashes or not AutoBlock.ShowVisualizer then dashVisualizerPart.Parent = nil; return end
-        local character = LocalPlayer.Character
-        if not character then dashVisualizerPart.Parent = nil; return end
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        if not hrp then dashVisualizerPart.Parent = nil; return end
-        local bottomY = nil
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local partBottom = part.Position.Y - part.Size.Y / 2
-                if not bottomY or partBottom < bottomY then bottomY = partBottom end
-            end
-        end
-        if not bottomY then bottomY = hrp.Position.Y - hrp.Size.Y / 2 end
-        local placePos = Vector3.new(hrp.Position.X, bottomY + 0.5, hrp.Position.Z)
-        dashVisualizerPart.CFrame = CFrame.new(placePos)
-        dashVisualizerPart.Parent = Workspace
-    end)
-end
-
--- Bring Player range visualizer
-local bringVisualizerPart: Part
-local bringVisualizerMesh: SpecialMesh?
-local bringVisualizerConnection: RBXScriptConnection?
-local function UpdateBringVisualizer()
-    if bringVisualizerConnection then
-        bringVisualizerConnection:Disconnect()
-        bringVisualizerConnection = nil
-    end
-    if not BringRequireTarget then
-        if bringVisualizerPart then bringVisualizerPart.Parent = nil end
-        return
-    end
-    if not bringVisualizerPart then
-        bringVisualizerPart = Instance.new("Part")
-        bringVisualizerPart.Shape = Enum.PartType.Block
-        bringVisualizerPart.Size = Vector3.new(1, 0.2, 1)
-        bringVisualizerPart.Anchored = true
-        bringVisualizerPart.CanCollide = false
-        bringVisualizerPart.Transparency = 0.6
-        bringVisualizerPart.Material = Enum.Material.Neon
-        bringVisualizerPart.Color = Color3.new(0, 1, 1)
-        bringVisualizerPart.Name = "BringRangeVisualizer"
-        bringVisualizerMesh = Instance.new("SpecialMesh")
-        bringVisualizerMesh.MeshType = Enum.MeshType.Sphere
-        bringVisualizerMesh.Parent = bringVisualizerPart
-    end
-    bringVisualizerMesh.Scale = Vector3.new(BringTargetRange * 2, 1.0, BringTargetRange * 2)
-    bringVisualizerPart.Parent = Workspace
-    bringVisualizerConnection = RunService.Heartbeat:Connect(function()
-        if not BringRequireTarget then bringVisualizerPart.Parent = nil; return end
-        local character = LocalPlayer.Character
-        if not character then bringVisualizerPart.Parent = nil; return end
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        if not hrp then bringVisualizerPart.Parent = nil; return end
-        local bottomY = nil
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local partBottom = part.Position.Y - part.Size.Y / 2
-                if not bottomY or partBottom < bottomY then bottomY = partBottom end
-            end
-        end
-        if not bottomY then bottomY = hrp.Position.Y - hrp.Size.Y / 2 end
-        bringVisualizerMesh.Scale = Vector3.new(BringTargetRange * 2, 1.0, BringTargetRange * 2)
-        local placePos = Vector3.new(hrp.Position.X, bottomY + 0.5, hrp.Position.Z)
-        bringVisualizerPart.CFrame = CFrame.new(placePos)
-        bringVisualizerPart.Parent = Workspace
-    end)
-end
-
--- === GUI Setup ===
--- Fly system (defined before GUI so callbacks can reference StartFly/StopFly)
-local FlyEnabled = false
-local flySpeed = 50
-local FlyMethods = { "New Version", "Old Version" }
-local SelectedFlyMethod = FlyMethods[1]
-local flyConnection: RBXScriptConnection?
-local flyInputConnectionBegin: RBXScriptConnection?
-local flyInputConnectionEnd: RBXScriptConnection?
-local flyKeys = { W=false, A=false, S=false, D=false, Space=false, LeftControl=false }
-
-local function StopFly()
-    FlyEnabled = false
-    if flyConnection then flyConnection:Disconnect(); flyConnection = nil end
-    if flyInputConnectionBegin then flyInputConnectionBegin:Disconnect(); flyInputConnectionBegin = nil end
-    if flyInputConnectionEnd then flyInputConnectionEnd:Disconnect(); flyInputConnectionEnd = nil end
-    local Players = game:GetService("Players")
-    local plr = Players.LocalPlayer
-    if plr then
-        local char = plr.Character
-        if char then
-            local humanoid = char:FindFirstChild("Humanoid")
-            if humanoid then pcall(function() humanoid.PlatformStand = false end) end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local bv = hrp:FindFirstChild("_fly_bv")
-                local bg = hrp:FindFirstChild("_fly_bg")
-                if bv then pcall(function() bv:Destroy() end) end
-                if bg then pcall(function() bg:Destroy() end) end
-                pcall(function() hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
-            end
-        end
-    end
-end
-
-local function StartFly()
-    if FlyEnabled then return end
-    FlyEnabled = true
-    local UserInputService = game:GetService("UserInputService")
-    local rs = game:GetService("RunService")
-    flyInputConnectionBegin = UserInputService.InputBegan:Connect(function(inp, gp)
-        if gp then return end
-        if inp.KeyCode == Enum.KeyCode.W then flyKeys.W = true end
-        if inp.KeyCode == Enum.KeyCode.S then flyKeys.S = true end
-        if inp.KeyCode == Enum.KeyCode.A then flyKeys.A = true end
-        if inp.KeyCode == Enum.KeyCode.D then flyKeys.D = true end
-        if inp.KeyCode == Enum.KeyCode.Space then flyKeys.Space = true end
-        if inp.KeyCode == Enum.KeyCode.LeftControl then flyKeys.LeftControl = true end
-    end)
-    flyInputConnectionEnd = UserInputService.InputEnded:Connect(function(inp, gp)
-        if gp then return end
-        if inp.KeyCode == Enum.KeyCode.W then flyKeys.W = false end
-        if inp.KeyCode == Enum.KeyCode.S then flyKeys.S = false end
-        if inp.KeyCode == Enum.KeyCode.A then flyKeys.A = false end
-        if inp.KeyCode == Enum.KeyCode.D then flyKeys.D = false end
-        if inp.KeyCode == Enum.KeyCode.Space then flyKeys.Space = false end
-        if inp.KeyCode == Enum.KeyCode.LeftControl then flyKeys.LeftControl = false end
-    end)
-
-    flyConnection = rs.Heartbeat:Connect(function()
-        if not FlyEnabled then return end
-        local Players = game:GetService("Players")
-        local plr = Players.LocalPlayer
-        if not plr then return end
-        local char = plr.Character
-        if not char then return end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local humanoid = char:FindFirstChild("Humanoid")
-        if not hrp or not humanoid then return end
-        local cam = workspace.CurrentCamera
-        local look = cam and cam.CFrame and cam.CFrame.LookVector or Vector3.new(0,0,-1)
-        local right = cam and cam.CFrame and cam.CFrame.RightVector or Vector3.new(1,0,0)
-        local moveVec = Vector3.new(0,0,0)
-        if flyKeys.W then moveVec = moveVec + Vector3.new(look.X,0,look.Z) end
-        if flyKeys.S then moveVec = moveVec - Vector3.new(look.X,0,look.Z) end
-        if flyKeys.D then moveVec = moveVec + Vector3.new(right.X,0,right.Z) end
-        if flyKeys.A then moveVec = moveVec - Vector3.new(right.X,0,right.Z) end
-        local up = 0
-        if flyKeys.Space then up = up + 1 end
-        if flyKeys.LeftControl then up = up - 1 end
-        local hv = moveVec.Magnitude > 0 and moveVec.Unit * flySpeed or Vector3.new(0,0,0)
-        local vel = Vector3.new(hv.X, up * flySpeed, hv.Z)
-        if SelectedFlyMethod == "New Version" then
-            pcall(function() humanoid.PlatformStand = true end)
-            -- set assembly velocity directly for linear movement, with vertical clamping
-            local desired = Vector3.new(vel.X, vel.Y, vel.Z)
-            pcall(function() hrp.AssemblyLinearVelocity = desired end)
-            -- rotate to face camera yaw only (avoid pitch)
-            local horizLook = Vector3.new(look.X, 0, look.Z)
-            if horizLook.Magnitude > 0.001 then
-                pcall(function() hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + horizLook.Unit) end)
-            end
-        else
-            -- BodyVelocity + BodyGyro fly
-            pcall(function() humanoid.PlatformStand = true end)
-            if not hrp:FindFirstChild("_fly_bv") then
-                local bv = Instance.new("BodyVelocity") bv.Name = "_fly_bv" bv.MaxForce = Vector3.new(1e5,1e5,1e5) bv.Parent = hrp
-                local bg = Instance.new("BodyGyro") bg.Name = "_fly_bg" bg.MaxTorque = Vector3.new(1e5,1e5,1e5) bg.Parent = hrp
-            end
-            local bv = hrp:FindFirstChild("_fly_bv")
-            local bg = hrp:FindFirstChild("_fly_bg")
-            if bv then pcall(function() bv.Velocity = vel end) end
-            if bg then pcall(function() bg.CFrame = CFrame.new(hrp.Position, hrp.Position + look) end) end
-        end
-    end)
-end
-
-local AntiGroup = Tabs.Mods:AddLeftGroupbox("Anti-Stun")
-AntiGroup:AddToggle("AntiDebuffToggle", {
-    Text = "Enable",
-    Default = false,
-    Risky = true,
-    Callback = function(value: boolean)
-        AntiDebuff.Enabled = value
-        if value then
-            AntiDebuff.StartListener()
-        else
-            AntiDebuff.StopListener()
-        end
-    end
-})
-
-local HitoMacroGroup = Tabs.Mods:AddLeftGroupbox("Final Judgement Macro")
-HitoMacroGroup:AddToggle("HitoMacroToggle", {
-    Text = "Enable",
-    Default = false,
-    Callback = function(value: boolean)
-        if value then
-            StartHitoMacro()
-        else
-            StopHitoMacro()
-        end
-    end,
-})
-
-HitoMacroGroup:AddSlider("HitoMacroDelaySlider", {
-    Text = "Delay (ms)",
-    Min = 0,
-    Max = 1000,
-    Default = _hitoMacroDelayMs,
-    Rounding = 0,
-    Compact = true,
-    Callback = function(value: number)
-        _hitoMacroDelayMs = math.clamp(value, 0, 1000)
-    end,
-})
-
-    -- Fly controls in Mods tab
-    local FlyGroup = Tabs.Mods:AddRightGroupbox("Fly")
-    FlyGroup:AddToggle("FlyToggle", {
-        Text = "Enable",
-        Default = false,
-        Risku = true,
-        Callback = function(val)
-            if val then StartFly() else StopFly() end
-        end
-    })
-    FlyGroup:AddSlider("FlySpeedSlider", {
-        Text = "Speed",
-        Compact = true,
-        Default = flySpeed,
-        Min = 10,
-        Max = 500,
-        Rounding = 0,
-        Callback = function(v) flySpeed = v end
-    })
-    FlyGroup:AddDropdown("FlyMethodSelect", {
-        Text = "Method",
-        Values = FlyMethods,
-        Default = 1,
-        Callback = function(value)
-            SelectedFlyMethod = value
-        end
-    })
-
--- Custom Combo tabbox (first tab: enable/select/refresh; second tab: settings)
-local CustomComboTabbox = Tabs.Combat:AddLeftTabbox()
-local CustomComboTab = CustomComboTabbox:AddTab("Custom Combo")
-local CustomComboSettingsTab = CustomComboTabbox:AddTab("Settings")
-
-CustomComboTab:AddToggle("CustomComboToggle", {
-    Text = "Enable",
-    Default = false,
-    Callback = function(value: boolean)
-        CustomCombo.Enabled = value
-        if not value and customInputConnection then
-            customInputConnection:Disconnect()
-            customInputConnection = nil
-        end
-    end
-})
-
-local customComboNames = GetSequenceNames(CustomSequences)
-if #customComboNames > 0 then
-    CustomCombo.SelectedCombo = customComboNames[1]
-end
-
-local CustomComboDropdown = CustomComboTab:AddDropdown("CustomComboSelect", {
-    Text = "Select Custom Combo",
-    Values = customComboNames,
-    Default = #customComboNames > 0 and 1 or nil,
-    Callback = function(value: string)
-        CustomCombo.SelectedCombo = value
-    end
-})
-
-CustomComboTab:AddButton({
-    Text = "Refresh Combos",
-    Func = function()
-        LoadCustomSequences()
-        local names = GetSequenceNames(CustomSequences)
-        CustomComboDropdown.Values = names
-        CustomComboDropdown:BuildDropdownList()
-        CustomComboDropdown:Display()
-        if #names > 0 then
-            if not table.find(names, CustomCombo.SelectedCombo) then
-                CustomCombo.SelectedCombo = names[1]
-            end
-            CustomComboDropdown:SetValue(CustomCombo.SelectedCombo)
-        else
-            CustomCombo.SelectedCombo = nil
-            CustomComboDropdown:SetValue(nil)
-        end
-    end
-})
-
-local keyOptions = {
-    "E", "Q", "R", "F", "G", "T", "Z", "X", "C", "V", "B", "H", "N", "Y"
-}
-local keyMap = {
-    E = Enum.KeyCode.E,
-    Q = Enum.KeyCode.Q,
-    R = Enum.KeyCode.R,
-    F = Enum.KeyCode.F,
-    G = Enum.KeyCode.G,
-    T = Enum.KeyCode.T,
-    Z = Enum.KeyCode.Z,
-    X = Enum.KeyCode.X,
-    C = Enum.KeyCode.C,
-    V = Enum.KeyCode.V,
-    B = Enum.KeyCode.B,
-    H = Enum.KeyCode.H,
-    N = Enum.KeyCode.N,
-    Y = Enum.KeyCode.Y,
-}
-
-local TriggerKeyLabel = CustomComboSettingsTab:AddLabel("Trigger Key")
-TriggerKeyLabel:AddKeyPicker("TriggerKeyPicker", {
-    Default = "Q",
-    Mode = "Click",
-    Callback = function()
-        if not CustomCombo.Enabled then return end
-        if RangeCheck.CustomEnabled then
-            local dist = GetActivationDistance()
-            if dist > RangeCheck.Range then return end
-        end
-        CustomCombo.CurrentThread = task.spawn(CustomCombo.ExecuteSequence, CustomCombo.SelectedCombo)
-    end
-})
-
-local CancelKeyLabel = CustomComboSettingsTab:AddLabel("Cancel Combo Key")
-CancelKeyLabel:AddKeyPicker("CancelKeyPicker", {
-    Default = "H",
-    Mode = "Click",
-    Callback = function()
-        if CustomCombo.CurrentThread then
-            task.cancel(CustomCombo.CurrentThread)
-            CustomCombo.CurrentThread = nil
-            CustomCombo.ReleaseAllKeys()
-        end
-        if _autoBlockCurrentlyHolding then
-            pcall(AutoBlock_DoRelease)
-            _autoBlockCurrentlyHolding = false
-        end
-    end
-})
-
-CustomComboSettingsTab:AddDivider()
-
-CustomComboSettingsTab:AddToggle("CustomRangeCheckToggle", {
-    Text = "Activate Only In Range",
-    Default = false,
-    Callback = function(value: boolean)
-        RangeCheck.CustomEnabled = value
-    end
-})
-
-CustomComboSettingsTab:AddToggle("ShowRangeVisualizerToggle", {
-    Text = "Show Range Visualizer",
-    Default = RangeCheck.ShowVisualizer,
-    Callback = function(value: boolean)
-        RangeCheck.ShowVisualizer = value
-        if value then
-            UpdateVisualizer()
-        else
-            visualizerPart.Parent = nil
-            if visualizerConnection then
-                visualizerConnection:Disconnect()
-                visualizerConnection = nil
-            end
-        end
-    end
-})
--- Moved Range controls here from the Range Settings group
-CustomComboSettingsTab:AddSlider("RangeSlider", {
-    Text = "Range",
-    Min = 1,
-    Max = 100,
-    Default = RangeCheck.Range,
-    Rounding = 0,
-    Compact = true,
-    Callback = function(value: number)
-        RangeCheck.Range = value
-        if visualizerMesh then
-            visualizerMesh.Scale = Vector3.new(value * 2, 0.2, value * 2)
-        else
-            visualizerPart.Size = Vector3.new(value * 2, 0.1, value * 2)
-        end
-    end
-})
-
-
-
-
-
--- AutoBlock / Block M1s tabbox for cleaner organization
-local AutoBlockTabbox = Tabs.Combat:AddRightTabbox()
-local AutoBlockTab = AutoBlockTabbox:AddTab("Autoblock")
-
--- Autoblock master enable removed from UI; use per-group toggles above to enable blocking.
--- Autoblock tab: per-group enable toggles (Abilities / M1s / Dashes)
-AutoBlockTab:AddToggle("AutoBlockBlockAbilities", {
-    Text = "Block Abilities",
-    Default = AutoBlock.BlockAbilities,
-    Callback = function(value: boolean)
-        AutoBlock.BlockAbilities = value
-        UpdateAutoBlockVisualizer()
-    end
-})
-AutoBlockTab:AddToggle("AutoBlockBlockM1s", {
-    Text = "Block M1s",
-    Default = AutoBlock.BlockM1s,
-    Callback = function(value: boolean)
-        AutoBlock.BlockM1s = value
-        UpdateBlockM1Visualizer()
-    end
-})
-AutoBlockTab:AddToggle("AutoBlockBlockDashes", {
-    Text = "Block Dashes",
-    Default = AutoBlock.BlockDashes,
-    Callback = function(value: boolean)
-        AutoBlock.BlockDashes = value
-        UpdateDashVisualizer()
-    end
-})
-
--- Settings tab: Abilities, M1s and Dash group controls
-local SettingsTab = AutoBlockTabbox:AddTab("Settings")
--- Block Abilities controls (moved from Autoblock tab)
--- Abilities controls (enable toggle moved to Autoblock tab)
--- Universal visualizer toggle (applies to all blocking visualizers)
-
-SettingsTab:AddSlider("AutoBlockAbilitiesRange", {
-    Text = "Abilities Range",
-    Min = 1,
-    Max = 100,
-    Default = AutoBlock.Range,
-    Rounding = 0,
-    Compact = true,
-    Callback = function(value)
-        AutoBlock.Range = value
-        UpdateAutoBlockVisualizer()
-    end
-})
-SettingsTab:AddToggle("AutoBlockAbilitiesOnlyTarget", {
-    Text = "Ability Block Only For Target",
-    Default = AutoBlock.OnlyTarget,
-    Callback = function(value)
-        AutoBlock.OnlyTarget = value
-    end
-})
-SettingsTab:AddDivider()
-
--- `AutoBlockMethodSelect` moved further down (below visualizers)
-
--- Block M1s enable toggle moved to Autoblock tab
-SettingsTab:AddSlider("AutoBlockM1RangeSlider", {
-    Text = "M1 Range",
-    Min = 1,
-    Max = 100,
-    Default = AutoBlock.BlockM1Range,
-    Rounding = 0,
-    Compact = true,
-    Callback = function(value)
-        AutoBlock.BlockM1Range = value
-        UpdateBlockM1Visualizer()
-    end
-})
-SettingsTab:AddToggle("AutoBlockM1OnlyTargetToggle", {
-    Text = "Block M1 Only For Target",
-    Default = AutoBlock.BlockM1OnlyTarget,
-    Callback = function(value)
-        AutoBlock.BlockM1OnlyTarget = value
-    end
-})
-SettingsTab:AddDivider()
-
--- Dash group controls
--- Block Dashes enable toggle moved to Autoblock tab
-SettingsTab:AddSlider("AutoBlockDashRange", {
-    Text = "Dash Range",
-    Min = 1,
-    Max = 100,
-    Default = AutoBlock.DashRange,
-    Rounding = 0,
-    Compact = true,
-    Callback = function(value)
-        AutoBlock.DashRange = value
-        UpdateDashVisualizer()
-    end
-})
-SettingsTab:AddToggle("AutoBlockDashOnlyTarget", {
-    Text = "Block Dashes Only For Target",
-    Default = AutoBlock.DashOnlyTarget,
-    Callback = function(value)
-        AutoBlock.DashOnlyTarget = value
-    end
-})
-
-SettingsTab:AddDivider()
-
-SettingsTab:AddDropdown("AutoBlockMethodSelect", {
-    Text = "Method",
-    Values = {"VIM", "REMOTE"},
-    Default = (AutoBlock.Method == "REMOTE") and 2 or 1,
-    Callback = function(value)
-        AutoBlock.Method = value
-    end
-})
-
-SettingsTab:AddToggle("AutoBlockShowVisualizer", {
-    Text = "Show Blocking Visualizers",
-    Default = AutoBlock.ShowVisualizer,
-    Callback = function(value: boolean)
-        AutoBlock.ShowVisualizer = value
-        UpdateAutoBlockVisualizer()
-        UpdateBlockM1Visualizer()
-        UpdateDashVisualizer()
-    end
-})
-
-
-
-local TargetSection = Tabs.Combat:AddLeftGroupbox("Targeting")
-TargetSection:AddToggle("TargetToggle", {
-    Text = "Enable",
-    Default = false,
-    Callback = function(value: boolean)
-        Target.Enabled = value
-    end
-})
-local TargetKeyLabel = TargetSection:AddLabel("Target Key")
-TargetKeyLabel:AddKeyPicker("TargetKeyPicker", {
-    Default = "E",
-    Mode = "Click",
-    Callback = function()
-        if Target.Enabled then
-            SetTarget()
-        end
-    end
-})
-
-TargetSection:AddButton({
-    Text = "Clear Target",
-    Func = function()
-        Target.CurrentTarget = nil
-        Library:Notify("Target cleared")
-        TargetLabel:SetText("Current Target: None")
-        TargetHPLabel:SetText("HP: N/A")
-    end
-})
-TargetSection:AddDivider()
-local TargetLabel = TargetSection:AddLabel("Current Target: None")
-local TargetHPLabel = TargetSection:AddLabel("HP: N/A")
-
--- Player selection dropdown (kept in sync when targets change)
-local TargetPlayerDropdown: any
-local TargetPlayerMap = {}
-local function RefreshTargetPlayerDropdown()
-    local vals = {}
-    TargetPlayerMap = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            local s = p.DisplayName .. " (@" .. p.Name .. ")"
-            table.insert(vals, s)
-            TargetPlayerMap[s] = p
-        end
-    end
-    if TargetPlayerDropdown then
-        TargetPlayerDropdown.Values = vals
-        if TargetPlayerDropdown.BuildDropdownList then
-            pcall(function() TargetPlayerDropdown:BuildDropdownList() end)
-        end
-    end
-end
-Players.PlayerAdded:Connect(function() RefreshTargetPlayerDropdown() end)
-Players.PlayerRemoving:Connect(function() RefreshTargetPlayerDropdown() end)
-
-TargetPlayerDropdown = TargetSection:AddDropdown("TargetPlayerSelect", {
-    Text = "Select Player",
-    Values = {},
-    Default = nil,
-    Callback = function(value: string)
-        local pl = TargetPlayerMap[value]
-        if not pl or pl == LocalPlayer then return end
-        Target.CurrentTarget = pl
-        Library:Notify("Targeted: " .. pl.DisplayName)
-        TargetLabel:SetText("Current Target: " .. pl.DisplayName .. " (@" .. pl.Name .. ")")
-    end
-})
-RefreshTargetPlayerDropdown()
-
-
-
-
--- Aimlock groupbox (separate)
-local AimlockGroup = Tabs.Combat:AddRightGroupbox("Aimlock")
-AimlockGroup:AddToggle("AimlockToggle", {
-    Text = "Enable",
-    Default = Target.AimlockEnabled,
-    Callback = function(value: boolean)
-        Target.AimlockEnabled = value
-        -- Manage camera lock state when enabling/disabling aimlock
-        if Target.AimlockMethod == "CameraLock" then
-            if value then
-                EnableCameraLock()
-            else
-                DisableCameraLock()
-            end
-        end
-    end
-})
--- Aimlock method selection
-AimlockGroup:AddDropdown("AimlockMethodSelect", {
-    Text = "Method",
-    Values = { "CameraLock" },
-    Default = 1,
-    Callback = function(value: string)
-        Target.AimlockMethod = value
-        Library:Notify("Aimlock method: " .. value)
-        -- Ensure camera lock state reflects selection
-        if value == "CameraLock" and Target.AimlockEnabled then
-            EnableCameraLock()
-        else
-            DisableCameraLock()
-        end
-    end,
-})
--- Target key for aimlock removed: aimlock uses the Targeting system's `CurrentTarget` instead.
-
--- Range settings moved to Custom Combo Settings tab
-
--- === TRISESP CONTROLS ===
-if getgenv().TrisESP then
-    -- Ensure sensible defaults
-    getgenv().TrisESP.Settings.HealthBarThickness = getgenv().TrisESP.Settings.HealthBarThickness or 2.5
-
-    local espGroup = Tabs.Visuals:AddLeftGroupbox("ESP (TrisESP)")
-
-    -- Kills / General
-    local killsToggle = espGroup:AddToggle("ESPKillsToggle", {
-        Text = "Kills ESP",
-        Default = PlayerESPConfig.Kills.Enabled,
-        Callback = function(v) PlayerESPConfig.Kills.Enabled = v end
-    })
-
-    espGroup:AddSlider("ESPMaxDistance", {
-        Text = "Max Distance",
-        Default = getgenv().TrisESP.Settings.MaxDistance,
-        Min = 100,
-        Max = 5000,
-        Rounding = 0,
-        Callback = function(v) getgenv().TrisESP.Settings.MaxDistance = v end
-    })
-
-    espGroup:AddDropdown("ESPNameMode", {
-        Values = {"Name", "DisplayName"},
-        Default = ({Name=1, DisplayName=2})[tostring(getgenv().TrisESP.Settings.NameMode)] or 2,
-        Multi = false,
-        Text = "Name Mode",
-        Callback = function(v) getgenv().TrisESP.Settings.NameMode = v end
-    })
-
-    espGroup:AddToggle("ESPTeamCheck", {
-        Text = "Team Check",
-        Default = getgenv().TrisESP.Settings.TeamCheckEnabled,
-        Callback = function(v) getgenv().TrisESP.Settings.TeamCheckEnabled = v end
-    })
-
-    -- Boxes (outline toggle + color picker)
-    local boxesToggle = espGroup:AddToggle("ESPBoxes", {
-        Text = "Show Boxes",
-        Default = getgenv().TrisESP.Settings.Boxes,
-        Callback = function(v) getgenv().TrisESP.Settings.Boxes = v; boxDep.Holder.Visible = v; boxDep.Visible = v end
-    })
-
-    boxesToggle:AddColorPicker("ESPBoxOutlineColor", {
-        Title = "Outline Color",
-        Default = getgenv().TrisESP.Settings.BoxOutlineColor,
-        Callback = function(v) getgenv().TrisESP.Settings.BoxOutlineColor = v end
-    })
-
-    -- Box options (dependency box controlled by the Boxes toggle)
-    local boxDep = espGroup:AddDependencyBox()
-    boxDep:SetupDependencies({{boxesToggle, true}})
-    boxDep.Holder.Visible = getgenv().TrisESP.Settings.Boxes or false
-    boxDep.Visible = getgenv().TrisESP.Settings.Boxes or false
-    boxDep:AddSlider("ESPBoxThickness", { Text = "Outline Thickness", Default = getgenv().TrisESP.Settings.Thickness, Min = 1, Max = 5, Rounding = 0, Callback = function(v) getgenv().TrisESP.Settings.Thickness = v end })
-
-    -- Box fill independent toggle + color pickers (toggle keeps color pickers only)
-    local fillToggle = espGroup:AddToggle("ESPBoxFill", {
-        Text = "Box Fill",
-        Default = getgenv().TrisESP.Settings.BoxFill,
-        Callback = function(v) getgenv().TrisESP.Settings.BoxFill = v; fillDep.Holder.Visible = v; fillDep.Visible = v end
-    })
-    fillToggle:AddColorPicker("ESPBoxFillColor1", { Title = "Fill Color 1", Default = getgenv().TrisESP.Settings.BoxFillCustomColor1, Callback = function(v) getgenv().TrisESP.Settings.BoxFillCustomColor1 = v end })
-    fillToggle:AddColorPicker("ESPBoxFillColor2", { Title = "Fill Color 2", Default = getgenv().TrisESP.Settings.BoxFillCustomColor2, Callback = function(v) getgenv().TrisESP.Settings.BoxFillCustomColor2 = v end })
-    fillToggle:AddColorPicker("ESPBoxFillColor3", { Title = "Fill Color 3", Default = getgenv().TrisESP.Settings.BoxFillCustomColor3, Callback = function(v) getgenv().TrisESP.Settings.BoxFillCustomColor3 = v end })
-    local fillDep = espGroup:AddDependencyBox()
-    fillDep:SetupDependencies({{fillToggle, true}})
-    fillDep.Holder.Visible = getgenv().TrisESP.Settings.BoxFill or false
-    fillDep.Visible = getgenv().TrisESP.Settings.BoxFill or false
-    fillDep:AddSlider("ESPBoxFillTransparency", { Text = "Fill Transparency", Default = getgenv().TrisESP.Settings.BoxFillAlpha1 or 0.5, Min = 0, Max = 1, Rounding = 2, Callback = function(v) getgenv().TrisESP.Settings.BoxFillAlpha1 = v; getgenv().TrisESP.Settings.BoxFillAlpha2 = v; getgenv().TrisESP.Settings.BoxFillAlpha3 = v end })
-    fillDep:AddToggle("ESPBoxRotation", { Text = "Moving", Default = getgenv().TrisESP.Settings.AnimateBoxRotation, Callback = function(v) getgenv().TrisESP.Settings.AnimateBoxRotation = v end })
-    fillDep:AddSlider("ESPBoxRotationSpeed", { Text = "Rotation Speed", Default = getgenv().TrisESP.Settings.BoxRotationSpeed, Min = 10, Max = 500, Rounding = 0, Callback = function(v) getgenv().TrisESP.Settings.BoxRotationSpeed = v end })
-
-    -- Display options (use dependency boxes for nested controls)
-    local displayDeps = espGroup:AddDependencyBox()
-    displayDeps:SetupDependencies({})
-    displayDeps:AddToggle("ESPShowName", { Text = "Show Name", Default = getgenv().TrisESP.Settings.ShowName, Callback = function(v) getgenv().TrisESP.Settings.ShowName = v end })
-    displayDeps:AddToggle("ESPShowDistance", { Text = "Show Distance", Default = getgenv().TrisESP.Settings.ShowDistance, Callback = function(v) getgenv().TrisESP.Settings.ShowDistance = v end })
-    displayDeps:AddToggle("ESPShowHealthText", { Text = "Show Health Text", Default = getgenv().TrisESP.Settings.ShowHealthText, Callback = function(v) getgenv().TrisESP.Settings.ShowHealthText = v end })
-
-    -- Health bar toggle + dependency box for its options
-    local healthToggle = displayDeps:AddToggle("ESPHealthBar", { Text = "Health Bar", Default = getgenv().TrisESP.Settings.HealthBarEnabled, Callback = function(v) getgenv().TrisESP.Settings.HealthBarEnabled = v; healthDep.Holder.Visible = v; healthDep.Visible = v end })
-    healthToggle:AddColorPicker("ESPHealthColor1", { Title = "Health Color 1", Default = getgenv().TrisESP.Settings.HealthBarColor1, Callback = function(v) getgenv().TrisESP.Settings.HealthBarColor1 = v end })
-    healthToggle:AddColorPicker("ESPHealthColor2", { Title = "Health Color 2", Default = getgenv().TrisESP.Settings.HealthBarColor2, Callback = function(v) getgenv().TrisESP.Settings.HealthBarColor2 = v end })
-    healthToggle:AddColorPicker("ESPHealthColor3", { Title = "Health Color 3", Default = getgenv().TrisESP.Settings.HealthBarColor3, Callback = function(v) getgenv().TrisESP.Settings.HealthBarColor3 = v end })
-    local healthDep = displayDeps:AddDependencyBox()
-    healthDep:SetupDependencies({{healthToggle, true}})
-    healthDep.Holder.Visible = getgenv().TrisESP.Settings.HealthBarEnabled or false
-    healthDep.Visible = getgenv().TrisESP.Settings.HealthBarEnabled or false
-    healthDep:AddDropdown("ESPHealthBarPosition", { Values = {"Left", "Right"}, Default = ({Left=1, Right=2})[getgenv().TrisESP.Settings.HealthBarPosition] or 1, Multi = false, Text = "Health Bar Position", Callback = function(v) getgenv().TrisESP.Settings.HealthBarPosition = v end })
-    healthDep:AddToggle("ESPHealthOutlineFollow", { Text = "Health Outline Follow", Default = getgenv().TrisESP.Settings.HealthOutlineFollow, Callback = function(v) getgenv().TrisESP.Settings.HealthOutlineFollow = v end })
-    healthDep:AddToggle("ESPHealthGradientAnim", { Text = "Moving", Default = getgenv().TrisESP.Settings.HealthGradientEnabled, Callback = function(v) getgenv().TrisESP.Settings.HealthGradientEnabled = v end })
-    healthDep:AddSlider("ESPHealthGradientSpeed", { Text = "Gradient Speed", Default = getgenv().TrisESP.Settings.HealthGradientSpeed, Min = 0.1, Max = 5, Rounding = 1, Callback = function(v) getgenv().TrisESP.Settings.HealthGradientSpeed = v end })
-    -- Fixed default thickness enforced in TrisESP
-    getgenv().TrisESP.Settings.HealthBarThickness = 2.5
-
-    -- Tracers toggle + dependency box for options
-    local tracersToggle = displayDeps:AddToggle("ESPTracers", { Text = "Tracers", Default = getgenv().TrisESP.Settings.Tracers, Callback = function(v) getgenv().TrisESP.Settings.Tracers = v; tracersDep.Holder.Visible = v; tracersDep.Visible = v end })
-    tracersToggle:AddColorPicker("ESPTracerColor", { Title = "Tracer Color", Default = getgenv().TrisESP.Settings.TracerColor, Callback = function(v) getgenv().TrisESP.Settings.TracerColor = v end })
-    local tracersDep = displayDeps:AddDependencyBox()
-    tracersDep:SetupDependencies({{tracersToggle, true}})
-    tracersDep.Holder.Visible = getgenv().TrisESP.Settings.Tracers or false
-    tracersDep.Visible = getgenv().TrisESP.Settings.Tracers or false
-    tracersDep:AddDropdown("ESPTracerFrom", { Values = {"Bottom", "Top", "Center"}, Default = ({Bottom=1, Top=2, Center=3})[getgenv().TrisESP.Settings.TracerFrom] or 1, Multi = false, Text = "Tracer From", Callback = function(v) getgenv().TrisESP.Settings.TracerFrom = v end })
-
+    PlayerOverrides = {},
+    
+    -- Box animation settings
+    AnimateBoxRotation = true,
+    BoxRotationSpeed = 300,
+    -- Static rotation to use when animation is disabled (degrees)
+    BoxRotation = -90,
+    
+    FilterMode = "All",
+    WhitelistedPlayers = {},
+    BlacklistedPlayers = {},
+    TeamCheckEnabled = false,
+    CustomTeams = {},
+    CustomTeamObjects = {},
+    
+    ShowName = true,
+    NameMode = "DisplayName",
+    ShowHealthText = true,
+    ShowDistance = true,
+    
+    
+    BoxFillCustomColor1 = Color3.fromRGB(68, 0, 255),
+    BoxFillCustomColor2 = Color3.fromRGB(0, 255, 76),
+    BoxFillCustomColor3 = Color3.fromRGB(255, 0, 212),
+    
+    -- Box settings
+    Boxes = true,
+    BoxType = "Square",
+    BoxColor = Color3.fromRGB(0, 170, 255),
+    Thickness = 2,
+    BoxOutlineColor = Color3.new(0, 0, 0),
+    
+    -- Box fill
+    BoxFill = true,
+    BoxFillColor = Color3.fromRGB(0, 170, 255),
+    -- Per-stop alpha values for the box fill gradient (0 = opaque, 1 = transparent)
+    BoxFillAlpha1 = 0.5,
+    BoxFillAlpha2 = 0.5,
+    BoxFillAlpha3 = 0.5,
+    
+    -- Tracers
+    Tracers = false,
+    TracerFrom = "Bottom",
+    TracerThickness = 2,
+    TracerColor = Color3.fromRGB(0, 170, 255),
+    
+    -- Health bar
+    HealthBarEnabled = true,
+    HealthBarPosition = "Left",
+    HealthBarThickness = 2.5,
+    -- Health bar custom gradient (3 stops)
+    HealthBarColor1 = Color3.fromRGB(255, 0, 0),
+    HealthBarColor2 = Color3.fromRGB(38, 0, 255),
+    HealthBarColor3 = Color3.fromRGB(0, 255, 0),
+    -- Health gradient animation speed (cycles per second)
+    HealthGradientSpeed = 0.5,
+    -- Enable animated health gradient
+    HealthGradientEnabled = true,
+    -- Number of samples used when building the animated gradient (fixed default)
+    -- (setting removed; defaults to 12 samples)
+    -- Health gradient blending is fixed to linear (setting removed)
+    -- Whether the healthbar outline thickness scales with the filled height
+    HealthOutlineFollow = false,
+    
     -- Chams
-    local chamsToggle = espGroup:AddToggle("ESPChams", { Text = "Chams", Default = getgenv().TrisESP.Settings.Highlight, Callback = function(v) getgenv().TrisESP.Settings.Highlight = v; chamsDep.Holder.Visible = v; chamsDep.Visible = v end })
-    chamsToggle:AddColorPicker("ESPChamColor", { Title = "Cham Color", Default = getgenv().TrisESP.Settings.GlobalChamColor, Callback = function(v) getgenv().TrisESP.Settings.GlobalChamColor = v end })
-    local chamsDep = espGroup:AddDependencyBox()
-    chamsDep:SetupDependencies({{chamsToggle, true}})
-    chamsDep.Holder.Visible = getgenv().TrisESP.Settings.Highlight or false
-    chamsDep.Visible = getgenv().TrisESP.Settings.Highlight or false
-    chamsDep:AddSlider("ESPChamFillTransparency", { Text = "Fill Transparency", Default = getgenv().TrisESP.Settings.FillTransparency, Min = 0, Max = 1, Rounding = 2, Callback = function(v) getgenv().TrisESP.Settings.FillTransparency = v end })
-    chamsDep:AddSlider("ESPChamOutlineTransparency", { Text = "Outline Transparency", Default = getgenv().TrisESP.Settings.OutlineTransparency, Min = 0, Max = 1, Rounding = 2, Callback = function(v) getgenv().TrisESP.Settings.OutlineTransparency = v end })
-else
-    Tabs.Visuals:AddLeftGroupbox("ESP"):AddLabel("TrisESP failed to load!")
-end
-
--- HP and orientation update
-local updateConnection: RBXScriptConnection?
-updateConnection = RunService.RenderStepped:Connect(function()
-    if not Target.CurrentTarget then
-        TargetHPLabel:SetText("HP: N/A")
-    else
-        local targetChar = Target.CurrentTarget.Character
-        if not targetChar then
-            TargetHPLabel:SetText("HP: N/A")
-        else
-            local hum = targetChar:FindFirstChild("Humanoid") :: Humanoid?
-            if hum then
-                TargetHPLabel:SetText("HP: " .. math.floor(hum.Health) .. "/" .. hum.MaxHealth)
-            else
-                TargetHPLabel:SetText("HP: N/A")
-            end
-        end
-    end
-    local lpChar = LocalPlayer.Character
-    if lpChar and Target.AimlockEnabled and Target.CurrentTarget then
-        local targetChar = Target.CurrentTarget.Character
-        if targetChar then
-            local lpHrp = lpChar:FindFirstChild("HumanoidRootPart") :: BasePart?
-            local targetHrp = targetChar:FindFirstChild("HumanoidRootPart") :: BasePart?
-            if lpHrp and targetHrp then
-                local lpPos = lpHrp.Position
-                -- Camera lock: keep camera position but rotate to face the target
-                local cam = Camera
-                if cam and cam.CFrame then
-                    local camPos = cam.CFrame.Position
-                    local lookAt = targetHrp.Position
-                    pcall(function()
-                        cam.CFrame = CFrame.new(camPos, lookAt)
-                    end)
-                end
-            end
-        end
-    end
-    for player, esp in playerESPs do
-        if player == LocalPlayer or not player.Character then
-            -- remove any custom text we added for this player
-            pcall(function()
-                if getgenv().TrisESP and esp._lastKillsText then
-                    getgenv().TrisESP.RemoveCustomText(player, esp._lastKillsText)
-                    esp._lastKillsText = nil
-                end
-            end)
-            continue
-        end
-        local char = player.Character
-        local config = PlayerESPConfig
-
-        -- Quick check: only compute box if Kills ESP is enabled
-        if not config.Kills.Enabled then
-            -- remove any custom text when Kills ESP disabled
-            pcall(function()
-                if getgenv().TrisESP and esp._lastKillsText then
-                    getgenv().TrisESP.RemoveCustomText(player, esp._lastKillsText)
-                    esp._lastKillsText = nil
-                end
-            end)
-            continue
-        end
-
-        -- Compute a combined world-space AABB from cached body parts or use bounding box
-        local pos2d, size2d
-        do
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                -- Use HRP-based bounding box (much faster than scanning all descendants)
-                local ok, cf, sz = pcall(function() return char:GetBoundingBox() end)
-                if ok and cf and sz then
-                    local corners = getCorners(cf, sz * 1.1)
-                    pos2d, size2d = get2DBoxFromCorners(corners)
-                else
-                    pos2d = nil
-                    size2d = nil
-                end
-            else
-                pos2d = nil
-                size2d = nil
-            end
-        end
-        if not pos2d then
-            pcall(function()
-                if getgenv().TrisESP and esp._lastKillsText then
-                    getgenv().TrisESP.RemoveCustomText(player, esp._lastKillsText)
-                    esp._lastKillsText = nil
-                end
-            end)
-            continue
-        end
-
-        local killsConfig = config.Kills
-        local kills = 0
-        -- Cache kills lookup (don't search every frame if player hasn't changed)
-        if not wasPlayingAnim[player] then wasPlayingAnim[player] = {} end
-        if not wasPlayingAnim[player].killsCache then
-            wasPlayingAnim[player].killsCache = 0
-            wasPlayingAnim[player].killsCacheTime = 0
-        end
-        -- Refresh kills every 1 second instead of every frame
-        if tick() - wasPlayingAnim[player].killsCacheTime > 1 then
-            local leaderstats = player:FindFirstChild("leaderstats")
-            if leaderstats then
-                local k = leaderstats:FindFirstChild("Kills")
-                if k then 
-                    wasPlayingAnim[player].killsCache = k.Value
-                end
-            end
-            wasPlayingAnim[player].killsCacheTime = tick()
-        else
-            kills = wasPlayingAnim[player].killsCache
-        end
-        local newText = "Kills: " .. kills
-        -- approximate text bounds for positioning: width ~= chars * size * 0.6, height = size
-        local approxBounds = Vector2.new(string.len(newText) * (killsConfig.Size or 14) * 0.6, killsConfig.Size or 14)
-        local textPos = getTextPosition(killsConfig.Position, pos2d, size2d, approxBounds)
-        -- update TrisESP custom text only when changed
-        if getgenv().TrisESP then
-            if esp._lastKillsText ~= newText then
-                pcall(function()
-                    if esp._lastKillsText then
-                        getgenv().TrisESP.RemoveCustomText(player, esp._lastKillsText)
-                    end
-                    getgenv().TrisESP.AddCustomText(player, newText)
-                    esp._lastKillsText = newText
-                end)
-            end
-        end
-        -- TrisESP handles visibility for the custom text we added
-    end
-    local lpChar = LocalPlayer.Character
-    if lpChar and (AutoBlock.BlockAbilities or AutoBlock.BlockM1s or AutoBlock.BlockDashes) then
-            local lpHrp = lpChar:FindFirstChild("HumanoidRootPart")
-            local lpHum = lpChar:FindFirstChild("Humanoid") :: Humanoid?
-            if lpHrp then
-                local lpPos = lpHrp.Position
-                -- Allow the local player's own hit1/hit2 animations (from misc) to extend
-                -- the extra-hold timer by 0.5s (this is local-only). Do NOT set
-                -- `shouldHold` from local animations; blocking behavior is driven by
-                -- other players' animations only.
-                if lpHum then
-                    for _, track in ipairs(lpHum:GetPlayingAnimationTracks()) do
-                        if not track or not track.IsPlaying then continue end
-                        local anim = track.Animation
-                        if not anim then continue end
-                        -- If the local player is playing a ReplicatedStorage misc.hits.block
-                        -- animation, extend the extra-hold timer by the configured amount.
-                        local aid = tostring(anim.AnimationId)
-                        if AutoBlock.RSBlockHitsSet and AutoBlock.RSBlockHitsSet[aid] then
-                            _autoBlockExtraHoldUntil = math.max(_autoBlockExtraHoldUntil, tick() + AutoBlock.BlockM1Extra)
-                        end
-                    end
-                end
-            local shouldHold = false
-            local blockedAnimId, blockedAnimName = nil, nil
-            -- compute max range needed for any enabled group to avoid unnecessary checks
-            local maxRange = 0
-            if AutoBlock.BlockAbilities then maxRange = math.max(maxRange, AutoBlock.Range) end
-            if AutoBlock.BlockM1s then maxRange = math.max(maxRange, AutoBlock.BlockM1Range) end
-            if AutoBlock.BlockDashes then maxRange = math.max(maxRange, AutoBlock.DashRange) end
-            if maxRange == 0 then maxRange = AutoBlock.Range end
-            local animationSet = AutoBlock.AbilityAnimationIdsSet or {}
-            local rsSet = AutoBlock.RSAnimationsSet or {}
-            local hitsSet = AutoBlock.RSHitsSet or {}
-            local dashSet = AutoBlock.DashAnimationIdsSet or {}
-            local rsBlockHitsSet = AutoBlock.RSBlockHitsSet or {}
-            
-            -- IMPORTANT: Only check other players' animations. LocalPlayer is skipped.
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p == LocalPlayer then continue end
-                -- if OnlyTarget is enabled, skip anyone who isn't the CurrentTarget
-                if AutoBlock.OnlyTarget and Target.CurrentTarget ~= p then
-                    continue
-                end
-                
-                local char = p.Character
-                if char then
-                    local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        local dist = (hrp.Position - lpPos).Magnitude
-                        -- First, check if we have an active relevant animation recorded from AnimationPlayed
-                        local cached = activePlayerAnims[p]
-                        if cached then
-                            if cached.isDash and AutoBlock.BlockDashes and dist <= AutoBlock.DashRange then
-                                if not AutoBlock.DashOnlyTarget or (Target.CurrentTarget == p) then
-                                    shouldHold = true
-                                    blockedAnimId = cached.aid
-                                    blockedAnimName = cached.name
-                                    lastBlockedByPlayer[p] = tick()
-                                    break
-                                end
-                            end
-                            if cached.isAbility and AutoBlock.BlockAbilities and dist <= AutoBlock.Range then
-                                shouldHold = true
-                                blockedAnimId = cached.aid
-                                blockedAnimName = cached.name
-                                lastBlockedByPlayer[p] = tick()
-                                break
-                            end
-                            if cached.isHit and AutoBlock.BlockM1s and dist <= AutoBlock.BlockM1Range then
-                                if (not AutoBlock.BlockM1OnlyTarget) or (Target.CurrentTarget == p) then
-                                    blockedAnimId = cached.aid
-                                    blockedAnimName = cached.name
-                                    lastBlockedByPlayer[p] = tick()
-                                    shouldHold = true
-                                    break
-                                end
-                            end
-                        end
-                        if dist <= maxRange then
-                            local hum = char:FindFirstChild("Humanoid") :: Humanoid?
-                            if hum then
-                                for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                                    if not track or not track.IsPlaying then continue end
-                                    local anim = track.Animation
-                                    if not anim then continue end
-                                    local aid = tostring(anim.AnimationId)
-                                    
-                                    -- CRITICAL: RSBlockHitsSet animations are ONLY for local player.
-                                    -- Completely skip these for any other player.
-                                    if rsBlockHitsSet[aid] then
-                                        continue
-                                    end
-                                    
-                                    -- check which group the animation belongs to
-                                    local isAbility = animationSet[aid]
-                                    local isDash = dashSet[aid]
-                                    
-                                    -- dash handling
-                                    if isDash then
-                                        if AutoBlock.BlockDashes and dist <= AutoBlock.DashRange then
-                                            if not AutoBlock.DashOnlyTarget or (Target.CurrentTarget == p) then
-                                                shouldHold = true
-                                                blockedAnimId = aid
-                                                blockedAnimName = tostring(anim.Name or "")
-                                                lastBlockedByPlayer[p] = tick()
-                                                break
-                                            end
-                                        end
-                                    -- ability handling: only explicit ability IDs
-                                    elseif isAbility then
-                                        if AutoBlock.BlockAbilities and dist <= AutoBlock.Range then
-                                            shouldHold = true
-                                            blockedAnimId = aid
-                                            blockedAnimName = tostring(anim.Name or "")
-                                            lastBlockedByPlayer[p] = tick()
-                                            break
-                                        end
-                                    end
-                                    
-                                    -- M1/hit handling: check hits but skip RSBlockHitsSet (already checked above)
-                                    if AutoBlock.BlockM1s and hitsSet[aid] then
-                                        if dist <= AutoBlock.BlockM1Range then
-                                            if (not AutoBlock.BlockM1OnlyTarget) or (Target.CurrentTarget == p) then
-                                                blockedAnimId = aid
-                                                blockedAnimName = tostring(anim.Name or "")
-                                                lastBlockedByPlayer[p] = tick()
-                                                shouldHold = true
-                                                break
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                if shouldHold then break end
-            end
-            local desiredHold = shouldHold or tick() < _autoBlockExtraHoldUntil
-            if desiredHold and not _autoBlockCurrentlyHolding then
-                AutoBlock_DoHold()
-                _autoBlockCurrentlyHolding = true
-                -- persist current blocking animation info for later reference
-                _autoBlockCurrentAnimId = blockedAnimId
-                _autoBlockCurrentAnimName = blockedAnimName
-                pcall(function()
-                    local msg = "Blocking"
-                    if _autoBlockCurrentAnimId then
-                        if _autoBlockCurrentAnimName and _autoBlockCurrentAnimName ~= "" then
-                            msg = "Blocking: " .. _autoBlockCurrentAnimName .. " (" .. _autoBlockCurrentAnimId .. ")"
-                        else
-                            msg = "Blocking: " .. _autoBlockCurrentAnimId
-                        end
-                    end
-                    Library:Notify(msg)
-                    if DebugNotifications then
-                        print("[AutoBlock DEBUG] " .. msg)
-                    end
-                end)
-            elseif (not desiredHold) and _autoBlockCurrentlyHolding then
-                AutoBlock_DoRelease()
-                _autoBlockCurrentlyHolding = false
-                -- clear stored anim info
-                _autoBlockCurrentAnimId = nil
-                _autoBlockCurrentAnimName = nil
-                pcall(function()
-                    Library:Notify("Stopped blocking")
-                    if DebugNotifications then
-                        print("[AutoBlock DEBUG] Stopped blocking")
-                    end
-                end)
-            end
-        end
-    else
-        -- ensure key released if AutoBlock disabled or no character
-        if _autoBlockCurrentlyHolding then
-            AutoBlock_DoRelease()
-            _autoBlockCurrentlyHolding = false
-        end
-    end
-end)
-
-local cancelConnection: RBXScriptConnection?
-cancelConnection = UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-    if gameProcessed then return end
-    -- Keys that should cancel AutoBlock hold when pressed
-    local stopKeys = {
-        [Enum.KeyCode.One] = true,
-        [Enum.KeyCode.Two] = true,
-        [Enum.KeyCode.Three] = true,
-        [Enum.KeyCode.Four] = true,
-        [Enum.KeyCode.Q] = true,
-        [Enum.KeyCode.R] = true,
-    }
-
-    if stopKeys[input.KeyCode] or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if _autoBlockCurrentlyHolding then
-            pcall(AutoBlock_DoRelease)
-            _autoBlockCurrentlyHolding = false
-            pcall(function() Library:Notify("AutoBlock cancelled by input") end)
-        end
-    end
-end)
-
-------------------------
-local player = game.Players.LocalPlayer
-
-local BringPlayerTabbox = Tabs.Rage:AddLeftTabbox()
-local BringPlayerTab = BringPlayerTabbox:AddTab("Bring Player")
-local SettingsBringTab = BringPlayerTabbox:AddTab("Settings")
-
-local MovementEnabled = false
-local speed = 100  -- Default movement speed
-local arrivalThreshold = 1  -- Default distance threshold for arrival (changed to 1)
-local returnTimeout = 5  -- Default timeout for return movement (in seconds)
-local bringMaxAttempt = 10 -- Maximum seconds to attempt reaching target before returning
-local ReturnAfterBring = true -- whether to return to original position after bringing
-local BringRequireTarget = false -- whether bring requires a target to be in range
-local BringTargetRange = 100 -- range to check for target
-local BringStopOnTargetDeath = false -- whether to stop bring if target dies
-
--- Preset animations (no free-form ID)
-local PresetAnimations = {
-    ["Rapid Punches"] = "rbxassetid://95421145178968",
-    ["Crushing Blow"] = "rbxassetid://124901309160375",
-    ["Judgement's Reach"] = "rbxassetid://82191642276319",
+    Highlight = true,
+    GlobalChamColor = Color3.fromRGB(0, 170, 255),
+    FillTransparency = 0.5,
+    OutlineTransparency = 0,
 }
-local animationId = PresetAnimations["Crushing Blow"]
 
--- Saved locations for teleport targets
-local SavedLocations = {}    -- map name -> Vector3
-local SelectedLocationName = nil
-local locationsDropdown = nil
-local delayBeforeGoing = 0.2
-local saveLocationName = ""
-
--- Bring movement methods
-local BringMethods = { "New Version", "Old Version" }
-local SelectedBringMethod = BringMethods[1]
-
-local connection  -- To store the animation connection for disconnection on respawn
-
--- File-based storage for saved locations (similar to CustomSequences)
-local locationsFolder = 'TrisSploit/locations'
-local function sanitizeFilename(name)
-    return tostring(name):gsub("[\\/:*?\"<>|]", "_")
+local function readFillAlpha(idx)
+    local keys = {
+        "BoxFillCustomColor" .. idx .. "Transparency",
+        "BoxFillCustomColor" .. idx .. "Trans",
+        "BoxFillColor" .. idx .. "Trans",
+        "BoxFillColor" .. idx .. "Transparency",
+        "BoxFillAlpha" .. idx,
+        "BoxFillColor" .. idx .. "A",
+    }
+    for _, k in ipairs(keys) do
+        local v = ESPSettings[k]
+        if type(v) == "number" then
+            return math.clamp(v, 0, 1)
+        end
+    end
+    return 0.5
 end
 
-local function SaveLocationToFile(name, pos)
-    if not isfolder(locationsFolder) then pcall(makefolder, locationsFolder) end
-    local fname = sanitizeFilename(name)
-    local content = string.format("{%f,%f,%f}", pos.X, pos.Y, pos.Z)
-    pcall(function() writefile(locationsFolder.."/"..fname..".txt", content) end)
+-- Spin integrator & constants
+local AUTOROTATE_SPEED = 60 -- degrees per second for fill gradient
+local SpinAngle = PERSIST.SpinAngle or RotationAngle -- persistent integrated angle
+local MAX_DT = 0.01 -- cap delta to avoid huge single-frame jumps (seconds)
+
+-- Utility functions
+-- rainbow removed
+
+local function createGradientSequence(color1, color2, color3)
+    return ColorSequence.new{
+        ColorSequenceKeypoint.new(0, color1),
+        ColorSequenceKeypoint.new(0.5, color2),
+        ColorSequenceKeypoint.new(1, color3)
+    }
 end
 
-local function LoadSavedLocations()
-    for k in pairs(SavedLocations) do SavedLocations[k] = nil end
-    local ok = pcall(function()
-        if not isfolder(locationsFolder) then return end
-        for _, file in ipairs(listfiles(locationsFolder)) do
-            if file:match("%.txt$") then
-                local name = file:match("([^/\\]+)%.txt$")
-                if name then
-                    local content = readfile(file)
-                    local loader = loadstring("return " .. content)
-                    if loader then
-                        local s, tbl = pcall(loader)
-                        if s and type(tbl) == "table" and #tbl >= 3 then
-                            SavedLocations[name] = Vector3.new(tbl[1], tbl[2], tbl[3])
+
+
+local function lerpColor(c1, c2, t)
+    return Color3.new(
+        c1.R + (c2.R - c1.R) * t,
+        c1.G + (c2.G - c1.G) * t,
+        c1.B + (c2.B - c1.B) * t
+    )
+end
+
+local function getHealthColor(ratio)
+    if ratio > 0.75 then
+        return Color3.fromRGB(0, 255, 0)
+    elseif ratio > 0.5 then
+        return Color3.fromRGB(255, 255, 0)
+    elseif ratio > 0.25 then
+        return Color3.fromRGB(255, 170, 0)
+    else
+        return Color3.fromRGB(255, 0, 0)
+    end
+end
+
+local function isSameTeam(player1, player2)
+    if not player1 or not player2 or player1 == player2 then return false end
+    if player1.Team and player2.Team then
+        return player1.Team == player2.Team
+    end
+    return false
+end
+
+local function shouldShowPlayer(player)
+    if not player or player == LocalPlayer then return false end
+    if ESPSettings.TeamCheckEnabled then
+        -- hide teammates (standard behaviour)
+        if isSameTeam(player, LocalPlayer) then
+            return false
+        end
+        -- hide players on any configured custom team names
+        if player.Team then
+            for _, tname in ipairs(ESPSettings.CustomTeams or {}) do
+                if tostring(player.Team.Name) == tostring(tname) then
+                    return false
+                end
+            end
+                -- hide players on any configured team objects (support many types)
+                for _, tobj in ipairs(ESPSettings.CustomTeamObjects or {}) do
+                    -- direct Team instance
+                    if typeof and typeof(tobj) == "Instance" and tobj:IsA("Team") then
+                        if player.Team == tobj then return false end
+                    end
+                    -- if tobj is a Folder/Container with children named after players or containing values
+                    if typeof and typeof(tobj) == "Instance" then
+                        if tobj:FindFirstChild(player.Name) then return false end
+                        -- check for ObjectValue/StringValue children referencing player
+                        for _, child in ipairs(tobj:GetChildren()) do
+                            if child:IsA("ObjectValue") and child.Value == player then return false end
+                            if child:IsA("StringValue") and child.Value == player.Name then return false end
                         end
+                    end
+                    -- if tobj is a plain table (list of players/names/ids)
+                    if type(tobj) == "table" then
+                        for _, v in ipairs(tobj) do
+                            if v == player or v == player.UserId or v == player.Name then return false end
+                        end
+                    end
+                    -- if tobj is a number (userid)
+                    if type(tobj) == "number" and tobj == player.UserId then return false end
+                    -- if tobj is a string (team name) handled earlier in CustomTeams loop
+                end
+        end
+    end
+    return true
+end
+
+local function getScreenRectForCharacter(char)
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local ok, extents = pcall(function() return char:GetExtentsSize() end)
+        if ok and extents and extents.Y > 0 then
+            local halfH = extents.Y / 2
+            local topWorld = hrp.Position + Vector3.new(0, halfH, 0)
+            local bottomWorld = hrp.Position - Vector3.new(0, halfH, 0)
+            local spTop = Camera:WorldToViewportPoint(topWorld)
+            local spBottom = Camera:WorldToViewportPoint(bottomWorld)
+            if spTop.Z > 0 and spBottom.Z > 0 then
+                local h = math.abs(spBottom.Y - spTop.Y)
+                local w = h * 0.55
+                local cx = (spTop.X + spBottom.X) / 2
+                local x = cx - w / 2
+                local y = spTop.Y
+                return { x = x, y = y, w = w, h = h, cx = cx, cy = y + h/2 }
+            end
+        end
+    end
+    return nil
+end
+
+-- Create ESP object
+local function createESPObject()
+    local container = Instance.new("Frame")
+    container.Name = "ESPContainer"
+    container.BackgroundTransparency = 1
+    container.Size = UDim2.new(1, 0, 1, 0)
+    container.Parent = ESPHolder
+    
+    local espObj = {
+        Container = container,
+        Player = nil,
+    }
+    espObj.GradientAngle = nil
+    espObj.HealthGradientPhase = nil
+    
+    -- Name label
+    espObj.Name = Instance.new("TextLabel")
+    espObj.Name.Name = "NameLabel"
+    espObj.Name.BackgroundTransparency = 1
+    espObj.Name.Size = UDim2.new(0, 100, 0, 20)
+    -- anchor the name to the bottom-center so it sits directly above the box
+    espObj.Name.AnchorPoint = Vector2.new(0.5, 1)
+    espObj.Name.Font = Enum.Font.Code
+    espObj.Name.TextSize = 13
+    espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Name.TextStrokeTransparency = 0
+    espObj.Name.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.Name.RichText = true
+    espObj.Name.Visible = false
+    espObj.Name.ZIndex = 10
+    espObj.Name.Parent = container
+    
+    -- Distance label
+    espObj.Distance = Instance.new("TextLabel")
+    espObj.Distance.Name = "DistanceLabel"
+    espObj.Distance.BackgroundTransparency = 1
+    espObj.Distance.Size = UDim2.new(0, 100, 0, 20)
+    espObj.Distance.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.Distance.Font = Enum.Font.Code
+    espObj.Distance.TextSize = 13
+    espObj.Distance.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Distance.TextStrokeTransparency = 0
+    espObj.Distance.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.Distance.Visible = false
+    espObj.Distance.ZIndex = 10
+    espObj.Distance.Parent = container
+
+    -- Custom text entries (external scripts may populate `espObj.CustomTexts`)
+    espObj.CustomTexts = {} -- array of strings
+    espObj.CustomTextLabels = {} -- generated TextLabel instances
+    
+    -- Weapon label
+    espObj.Weapon = Instance.new("TextLabel")
+    espObj.Weapon.Name = "WeaponLabel"
+    espObj.Weapon.BackgroundTransparency = 1
+    espObj.Weapon.Size = UDim2.new(0, 100, 0, 20)
+    espObj.Weapon.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.Weapon.Font = Enum.Font.Code
+    espObj.Weapon.TextSize = 13
+    espObj.Weapon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Weapon.TextStrokeTransparency = 0
+    espObj.Weapon.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.Weapon.Visible = false
+    espObj.Weapon.ZIndex = 10
+    espObj.Weapon.Parent = container
+    
+    -- Box fill
+    espObj.Box = Instance.new("Frame")
+    espObj.Box.Name = "BoxFill"
+    espObj.Box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.Box.BackgroundTransparency = 0.75
+    espObj.Box.BorderSizePixel = 0
+    espObj.Box.Visible = false
+    espObj.Box.ZIndex = 1
+    espObj.Box.Parent = container
+    
+    -- Box fill gradient
+    espObj.BoxGradient = Instance.new("UIGradient")
+    espObj.BoxGradient.Name = "FillGradient"
+    espObj.BoxGradient.Enabled = true
+    -- default rotation upright (fix inverted gradients)
+    espObj.BoxGradient.Rotation = 90
+    espObj.BoxGradient.Parent = espObj.Box
+    
+    -- Box outline (UIStroke)
+    espObj.BoxOutline = Instance.new("UIStroke")
+    espObj.BoxOutline.Name = "BoxOutline"
+    espObj.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
+    espObj.BoxOutline.Thickness = 1
+    espObj.BoxOutline.Transparency = 0
+    espObj.BoxOutline.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxOutline.Parent = espObj.Box
+    
+    -- Box outline gradient (for colored outlines)
+    espObj.OutlineGradient = Instance.new("UIGradient")
+    espObj.OutlineGradient.Name = "OutlineGradient"
+    espObj.OutlineGradient.Enabled = false
+    espObj.OutlineGradient.Rotation = 90
+    espObj.OutlineGradient.Parent = espObj.Box
+    
+    -- Tracer line
+    espObj.Tracer = Instance.new("Frame")
+    espObj.Tracer.Name = "Tracer"
+    espObj.Tracer.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.Tracer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Tracer.BorderSizePixel = 0
+    espObj.Tracer.Visible = false
+    espObj.Tracer.ZIndex = 2
+    espObj.Tracer.Parent = container
+    
+    -- Health bar background
+    espObj.HealthBarBG = Instance.new("Frame")
+    espObj.HealthBarBG.Name = "HealthBarBG"
+    espObj.HealthBarBG.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.HealthBarBG.BackgroundTransparency = 0
+    espObj.HealthBarBG.BorderSizePixel = 0
+    espObj.HealthBarBG.Visible = false
+    espObj.HealthBarBG.ZIndex = 3
+    espObj.HealthBarBG.Parent = container
+    
+    -- Health bar fill
+    espObj.HealthBar = Instance.new("Frame")
+    espObj.HealthBar.Name = "HealthBar"
+    espObj.HealthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    espObj.HealthBar.BackgroundTransparency = 0
+    espObj.HealthBar.BorderSizePixel = 0
+    espObj.HealthBar.Visible = false
+    espObj.HealthBar.ZIndex = 4
+    espObj.HealthBar.Parent = container
+    
+    -- Health bar gradient
+    espObj.HealthBarGradient = Instance.new("UIGradient")
+    espObj.HealthBarGradient.Name = "HealthGradient"
+    espObj.HealthBarGradient.Enabled = true
+    -- upright orientation so the healthbar gradient reads top->bottom correctly
+    espObj.HealthBarGradient.Rotation = 90
+    espObj.HealthBarGradient.Color = createGradientSequence(
+        Color3.fromRGB(200, 0, 0),
+        Color3.fromRGB(60, 60, 125),
+        Color3.fromRGB(119, 120, 255)
+    )
+    espObj.HealthBarGradient.Parent = espObj.HealthBar
+    
+    -- Health text
+    espObj.HealthText = Instance.new("TextLabel")
+    espObj.HealthText.Name = "HealthText"
+    espObj.HealthText.BackgroundTransparency = 1
+    espObj.HealthText.Size = UDim2.new(0, 50, 0, 20)
+    espObj.HealthText.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.HealthText.Font = Enum.Font.Code
+    espObj.HealthText.TextSize = 13
+    espObj.HealthText.TextColor3 = Color3.fromRGB(119, 120, 255)
+    espObj.HealthText.TextStrokeTransparency = 0
+    espObj.HealthText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.HealthText.Visible = false
+    espObj.HealthText.ZIndex = 10
+    espObj.HealthText.Parent = container
+    
+    -- Corner boxes (8 frames)
+    espObj.Corners = {}
+    for i = 1, 8 do
+        local corner = Instance.new("Frame")
+        corner.Name = "Corner" .. i
+        corner.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        corner.BorderSizePixel = 0
+        corner.Visible = false
+        corner.ZIndex = 5
+        corner.Parent = container
+        espObj.Corners[i] = corner
+    end
+    
+    -- Highlight/Chams
+    espObj.Highlight = Instance.new("Highlight")
+    espObj.Highlight.Name = "Chams"
+    espObj.Highlight.FillTransparency = 0.5
+    espObj.Highlight.OutlineTransparency = 0
+    espObj.Highlight.FillColor = Color3.fromRGB(0, 170, 255)
+    espObj.Highlight.OutlineColor = Color3.fromRGB(0, 170, 255)
+    espObj.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    espObj.Highlight.Enabled = false
+    espObj.Highlight.Parent = container
+    
+    return espObj
+end
+
+-- Remove ESP
+local function removeESP(espObj)
+    if not espObj then return end
+    if espObj.Container then
+        pcall(function() espObj.Container:Destroy() end)
+    end
+    if espObj.Highlight then
+        pcall(function() espObj.Highlight:Destroy() end)
+    end
+end
+
+-- Hide ESP
+local function hideESP(espObj)
+    if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
+    if espObj.Distance then espObj.Distance.Visible = false espObj.Distance.Text = "" end
+    if espObj.Weapon then espObj.Weapon.Visible = false espObj.Weapon.Text = "" end
+    if espObj.Box then espObj.Box.Visible = false end
+    if espObj.Tracer then espObj.Tracer.Visible = false end
+    if espObj.HealthBar then espObj.HealthBar.Visible = false end
+    if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
+    if espObj.HealthText then espObj.HealthText.Visible = false espObj.HealthText.Text = "" end
+    if espObj.CustomTextLabels then
+        for _, lbl in ipairs(espObj.CustomTextLabels) do
+            lbl.Visible = false
+            if lbl:IsA("TextLabel") then lbl.Text = "" end
+        end
+    end
+    if espObj.Corners then
+        for _, corner in ipairs(espObj.Corners) do
+            corner.Visible = false
+        end
+    end
+    if espObj.Highlight then espObj.Highlight.Enabled = false end
+end
+
+-- Position tracer line
+local function positionTracer(frame, fromX, fromY, toX, toY, thickness)
+    local length = math.sqrt((toX - fromX)^2 + (toY - fromY)^2)
+    local angle = math.atan2(toY - fromY, toX - fromX)
+    
+    frame.Size = UDim2.new(0, length, 0, thickness)
+    frame.Position = UDim2.new(0, (fromX + toX) / 2, 0, (fromY + toY) / 2)
+    frame.Rotation = math.deg(angle)
+end
+
+-- Fade function
+local function fadeElement(element, distance, maxDistance)
+    local transparency = math.max(0.1, 1 - (distance / maxDistance))
+    if element:IsA("TextLabel") then
+        element.TextTransparency = 1 - transparency
+    elseif element:IsA("Frame") then
+        element.BackgroundTransparency = 1 - transparency
+    elseif element:IsA("Highlight") then
+        element.FillTransparency = 1 - transparency
+        element.OutlineTransparency = 1 - transparency
+    end
+end
+
+-- Main update loop
+local function updateESP(deltaTime)
+    deltaTime = deltaTime or (1/60)
+    -- Rotation animation: integrate SpinAngle using deltaTime (with cap) to guarantee continuous spin
+    local dt = math.min(deltaTime or (1/60), MAX_DT)
+    local speed = ESPSettings.BoxRotationSpeed or 300 -- degrees per second
+    if ESPSettings.AnimateBoxRotation then
+        SpinAngle = (SpinAngle + speed * dt) % 360
+        RotationAngle = SpinAngle
+    else
+        -- when animation is disabled, respect the configured static rotation
+        RotationAngle = (ESPSettings.BoxRotation or RotationAngle or -90) % 360
+    end
+    -- persist spin angle across reloads
+    PERSIST.SpinAngle = SpinAngle
+    -- Note: gradient autorotation will be integrated per-object below using deltaTime
+
+    for player, espObj in pairs(ESPObjects) do
+        pcall(function()
+            if not shouldShowPlayer(player) then 
+                hideESP(espObj) 
+                return 
+            end
+            
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            
+            if not char or not hrp or not hum or hum.Health <= 0 then
+                hideESP(espObj)
+                return
+            end
+
+            local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
+            if distance > ESPSettings.MaxDistance then
+                hideESP(espObj)
+                return
+            end
+
+            local rect = getScreenRectForCharacter(char)
+            if not rect then
+                hideESP(espObj)
+                return
+            end
+
+            local x, y, w, h = rect.x, rect.y, rect.w, rect.h
+            local Dist = distance / 3.5714285714
+            
+            -- Render custom texts (e.g., kills) even when global ESP master toggle is off
+            if espObj.CustomTexts and #espObj.CustomTexts > 0 then
+                local startX = x + w + 6 -- place to the right of the box
+                local lineHeight = 16
+                espObj.CustomTextLabels = espObj.CustomTextLabels or {}
+                for i, txt in ipairs(espObj.CustomTexts) do
+                    local lbl = espObj.CustomTextLabels[i]
+                    if not lbl then
+                                lbl = Instance.new("TextLabel")
+                                lbl.BackgroundTransparency = 1
+                                lbl.Font = Enum.Font.Code
+                                lbl.TextSize = 13
+                                lbl.TextColor3 = Color3.fromRGB(255,255,255)
+                                lbl.TextStrokeTransparency = 0
+                                lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+                                lbl.ZIndex = 11
+                                lbl.Size = UDim2.new(0, 160, 0, 16)
+                                lbl.AnchorPoint = Vector2.new(0, 0)
+                                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                                lbl.Parent = espObj.Container
+                        espObj.CustomTextLabels[i] = lbl
+                    end
+                    lbl.Text = tostring(txt or "")
+                    lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
+                    lbl.Visible = true
+                end
+                -- hide any surplus labels
+                for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
+                    if espObj.CustomTextLabels[j] then
+                        espObj.CustomTextLabels[j].Visible = false
+                        if espObj.CustomTextLabels[j]:IsA("TextLabel") then
+                            espObj.CustomTextLabels[j].Text = ""
+                        end
+                    end
+                end
+            else
+                if espObj.CustomTextLabels then
+                    for _, lbl in ipairs(espObj.CustomTextLabels) do
+                        lbl.Visible = false
+                        if lbl:IsA("TextLabel") then lbl.Text = "" end
                     end
                 end
             end
-        end
-    end)
-    return ok
-end
 
--- Movement helper: use a unique name to avoid collisions with any existing moveTo
-local function Move_Combat(position, timeout)
-    local char = player.Character
-    if not char or not position then return end
-
-    local rootPart = char:FindFirstChild("HumanoidRootPart")
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not rootPart or not humanoid then return end
-
-    -- If already very close, skip
-    if (rootPart.Position - position).Magnitude <= arrivalThreshold then return end
-
-    local bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    bv.Velocity = Vector3.new(0,0,0)
-    bv.Parent = rootPart
-
-    local bg = Instance.new("BodyGyro")
-    bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-    bg.CFrame = CFrame.new(rootPart.Position, position)
-    bg.Parent = rootPart
-
-    humanoid.PlatformStand = true
-
-    local startTime = tick()
-    local rs = game:GetService("RunService")
-    while rootPart and (rootPart.Position - position).Magnitude > arrivalThreshold do
-        if timeout and (tick() - startTime) > timeout then break end
-        local dir = (position - rootPart.Position)
-        local dirUnit = dir.Magnitude > 0 and dir.Unit or Vector3.new(0,0,0)
-        bv.Velocity = dirUnit * speed
-        bg.CFrame = CFrame.new(rootPart.Position, position)
-        rs.RenderStepped:Wait()
-    end
-
-    if bv and bv.Parent then pcall(function() bv:Destroy() end) end
-    if bg and bg.Parent then pcall(function() bg:Destroy() end) end
-    pcall(function() humanoid.PlatformStand = false end)
-end
-
--- Alternative movement method using PlatformStand + AssemblyLinearVelocity + CFrame rotation
-local function Move_PlatformAssemblyLinear(position, timeout)
-    local char = player.Character
-    if not char or not position then return end
-    local rootPart = char:FindFirstChild("HumanoidRootPart")
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not rootPart or not humanoid then return end
-
-    humanoid.PlatformStand = true
-    local startTime = tick()
-    local rs = game:GetService("RunService")
-    while rootPart and (rootPart.Position - position).Magnitude > arrivalThreshold do
-        if timeout and (tick() - startTime) > timeout then break end
-        local dir = (position - rootPart.Position)
-        local horizontal = Vector3.new(dir.X, 0, dir.Z)
-        -- compute a constant horizontal velocity (no easing)
-        local horizSpeed = speed
-        local vertSpeed = math.clamp(dir.Y, -speed, speed)
-        local vel = Vector3.new(0, vertSpeed, 0)
-        if horizontal.Magnitude > 0.001 then
-            local horizUnit = horizontal.Unit
-            vel = Vector3.new(horizUnit.X * horizSpeed, vertSpeed, horizUnit.Z * horizSpeed)
-        end
-        -- apply velocity directly for linear movement (no slowdown)
-        pcall(function() rootPart.AssemblyLinearVelocity = vel end)
-        -- rotate toward target only on yaw (avoid pitch)
-        local camDir = Vector3.new((position - rootPart.Position).X, 0, (position - rootPart.Position).Z)
-        if camDir.Magnitude > 0.001 then
-            pcall(function() rootPart.CFrame = CFrame.new(rootPart.Position, rootPart.Position + camDir.Unit) end)
-        end
-        rs.RenderStepped:Wait()
-    end
-    -- stop movement
-    pcall(function() rootPart.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
-    pcall(function() humanoid.PlatformStand = false end)
-end
-
-    -- Dispatcher for bring movement
-    local function BringPlayerMoveTo(position, timeout)
-        if not position then return end
-        if SelectedBringMethod == "New Version" then
-            return Move_PlatformAssemblyLinear(position, timeout)
-        else
-            return Move_Combat(position, timeout)
-        end
-    end
-
-    -- Ensure follow methods mirror the available bring methods (set after BringMethods defined)
-    -- (This will be re-assigned again below once BringMethods is declared.)
-
--- Dispatcher that calls the selected bring method
-
--- Function to set up animation detection on a given character
-local function setupAnimationDetection(char)
-    local humanoid = char:WaitForChild("Humanoid", 10)
-    local animator = humanoid:WaitForChild("Animator", 10)
-    if not humanoid or not animator then return end  -- Bail if not found
-
-    -- Disconnect previous connection if it exists
-    if connection then
-        connection:Disconnect()
-        connection = nil
-    end
-
-    connection = animator.AnimationPlayed:Connect(function(track)
-        -- Toggle check
-        if not MovementEnabled then return end
-
-        -- Animation ID check (robust string comparison)
-        if not track or not track.Animation or tostring(track.Animation.AnimationId) ~= tostring(animationId) then
-            return
-        end
-
-        -- Target range check if enabled
-        if BringRequireTarget then
-            if not Target.CurrentTarget then return end
-            local targetChar = Target.CurrentTarget.Character
-            if not targetChar then return end
-            local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
-            local lpHrp = char:FindFirstChild("HumanoidRootPart")
-            if not targetHrp or not lpHrp then return end
-            local dist = (targetHrp.Position - lpHrp.Position).Magnitude
-            if dist > BringTargetRange then return end
-        end
-
-        -- Run movement safely and restore fly state afterwards
-        task.spawn(function()
-            local wasFly = FlyEnabled
-            local targetToCheck = BringStopOnTargetDeath and Target.CurrentTarget or nil
-            local ok, err = pcall(function()
-                local rootPart = char:FindFirstChild("HumanoidRootPart")
-                if not rootPart then return end
-                local originalPosition = rootPart.Position
-
-                local targetPosition = nil
-                if SelectedLocationName then
-                    targetPosition = SavedLocations[SelectedLocationName]
-                end
-                if not targetPosition then
-                    if Library and Library.Notify then
-                        pcall(function() Library:Notify("No saved location selected for Bring Player") end)
+            if ESPSettings.Enabled then
+                -- Name
+                if ESPSettings.ShowName and espObj.Name then
+                    local nameText = ""
+                    -- Only allow showing either the Roblox username or the display name
+                    if ESPSettings.NameMode == "Name" then
+                        nameText = (player.Name or player.DisplayName or "")
+                    else
+                        nameText = (player.DisplayName or player.Name or "")
                     end
-                    return
-                end
-
-                task.wait(delayBeforeGoing)
-                
-                -- Check if target died before starting (if death check enabled)
-                if targetToCheck then
-                    local targetChar = targetToCheck.Character
-                    if not targetChar then
-                        if Library and Library.Notify then
-                            pcall(function() Library:Notify("Target died, bring cancelled") end)
-                        end
-                        return
-                    end
-                    local targetHum = targetChar:FindFirstChild("Humanoid")
-                    if not targetHum or targetHum.Health <= 0 then
-                        if Library and Library.Notify then
-                            pcall(function() Library:Notify("Target died, bring cancelled") end)
-                        end
-                        return
-                    end
+                    espObj.Name.Text = nameText
+                    -- with AnchorPoint (0.5,1) position the name so its bottom aligns to the box top
+                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y)
+                    espObj.Name.Visible = true
+                else
+                    if espObj.Name then espObj.Name.Visible = false espObj.Name.Text = "" end
                 end
                 
-                if type(BringPlayerMoveTo) == "function" then
-                    -- disable flying when starting a bring
-                    pcall(function() StopFly() end)
-                    -- attempt to reach target for at most bringMaxAttempt seconds
-                    local bringStartTime = tick()
-                    BringPlayerMoveTo(targetPosition, bringMaxAttempt)
-                    
-                    -- Check if target died during bring (if death check enabled)
-                    if targetToCheck then
-                        local targetChar = targetToCheck.Character
-                        if not targetChar or not targetChar:FindFirstChild("Humanoid") or targetChar.Humanoid.Health <= 0 then
-                            if Library and Library.Notify then
-                                pcall(function() Library:Notify("Target died, stopping bring") end)
-                            end
-                            return
+                -- Distance
+                if ESPSettings.ShowDistance and espObj.Distance then
+                    espObj.Distance.Text = string.format("[%d st]", math.floor(Dist))
+                    espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
+                    espObj.Distance.Visible = true
+                else
+                    if espObj.Distance then espObj.Distance.Visible = false espObj.Distance.Text = "" end
+                end
+                
+                -- Weapon (placeholder)
+                if espObj.Weapon then
+                    espObj.Weapon.Text = "none"
+                    espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 20)
+                    espObj.Weapon.Visible = false
+                    espObj.Weapon.Text = ""
+                end
+                
+                -- Box
+                if espObj.Box then
+                    if ESPSettings.Boxes then
+                        if ESPSettings.BoxType == "Square" then
+                        espObj.Box.Position = UDim2.new(0, x, 0, y)
+                        espObj.Box.Size = UDim2.new(0, w, 0, h)
+                        espObj.Box.Visible = true
+                        
+                        -- Update gradient + fill
+                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
+                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
+                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
+                        -- Base rotation for the gradient: box rotation (if enabled) plus internal autorotation (time-based)
+                        -- use the computed RotationAngle (either animated or static)
+                        local baseRotation = RotationAngle % 360
+                        -- Compensate gradient angular velocity by the projected perpendicular span
+                        -- so travel speed of colors appears uniform across rotations/box shapes.
+                        -- Use the box's base rotation for span calculation so the
+                        -- span multiplier doesn't vary with the internal gradient angle.
+                        local rad = math.rad(baseRotation % 360)
+                        local absSin = math.abs(math.sin(rad))
+                        local absCos = math.abs(math.cos(rad))
+                        local perpSpan = w * absSin + h * absCos
+
+                        -- Exact average span over a full rotation for a rectangle: (2/pi)*(w+h)
+                        local averageSpan = (2 / math.pi) * (w + h)
+                        if averageSpan == 0 then averageSpan = 1 end
+
+                        local multiplier = perpSpan / averageSpan
+                        local effectiveSpeed = AUTOROTATE_SPEED * multiplier
+
+                        espObj.GradientAngle = espObj.GradientAngle or 0
+                        if ESPSettings.AnimateBoxRotation then
+                            espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        else
+                            espObj.GradientAngle = 0
+                        end
+                        -- add 180 deg offset so gradient orientation is upright (fix inverted visuals)
+                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle + 180) % 360
+                        -- persist per-player gradient angle
+                        if espObj.Player and espObj.Player.UserId then
+                            PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
+                        end
+
+                        -- Three-stop fill gradient — restore full custom stops
+                        local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
+                        local gc2 = c2 or ESPSettings.BoxFillColor or gc1
+                        local gc3 = c3 or ESPSettings.BoxFillColor or gc2
+                        espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                        espObj.BoxGradient.Enabled = (ESPSettings.BoxFill == true)
+
+
+                        -- Box fill transparency and base color (base color uses middle stop)
+                        if ESPSettings.BoxFill then
+                            -- Use per-stop alpha (fallback to 0.5)
+                            local a1 = readFillAlpha(1)
+                            local a2 = readFillAlpha(2)
+                            local a3 = readFillAlpha(3)
+                            -- Keep frame opaque and let the UIGradient control per-stop transparency
+                            espObj.Box.BackgroundTransparency = 0
+                            espObj.BoxGradient.Transparency = NumberSequence.new{
+                                NumberSequenceKeypoint.new(0, a1),
+                                NumberSequenceKeypoint.new(0.5, a2),
+                                NumberSequenceKeypoint.new(1, a3),
+                            }
+                            espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
+                        else
+                            espObj.Box.BackgroundTransparency = 1
+                        end
+                        
+                        -- Outline color (use configured outline color or default)
+                        espObj.BoxOutline.Color = ESPSettings.BoxOutlineColor or Color3.fromRGB(0, 0, 0)
+                        espObj.BoxOutline.Thickness = 1
+                        -- If an outline gradient is desired, enable and set it to the box custom colors
+                        espObj.OutlineGradient.Color = createGradientSequence(
+                            ESPSettings.BoxCustomColor1 or ESPSettings.BoxColor,
+                            ESPSettings.BoxCustomColor2 or ESPSettings.BoxColor,
+                            ESPSettings.BoxCustomColor3 or ESPSettings.BoxColor
+                        )
+                        espObj.OutlineGradient.Enabled = false
+                        
+                        -- Hide corners for square mode
+                        for _, corner in ipairs(espObj.Corners) do
+                            corner.Visible = false
+                        end
+                        elseif ESPSettings.BoxType == "Corner" then
+                        espObj.Box.Visible = false
+                        
+                        -- Corner boxes
+                        local cornerLen = math.min(w, h) * 0.25
+                        
+                        -- Top left
+                        espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
+                        espObj.Corners[1].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[1].Visible = true
+                        
+                        espObj.Corners[2].Position = UDim2.new(0, x, 0, y)
+                        espObj.Corners[2].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[2].Visible = true
+                        
+                        -- Top right
+                        espObj.Corners[3].Position = UDim2.new(0, x + w - cornerLen, 0, y)
+                        espObj.Corners[3].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[3].Visible = true
+                        
+                        espObj.Corners[4].Position = UDim2.new(0, x + w - 1, 0, y)
+                        espObj.Corners[4].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[4].Visible = true
+                        
+                        -- Bottom left
+                        espObj.Corners[5].Position = UDim2.new(0, x, 0, y + h - 1)
+                        espObj.Corners[5].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[5].Visible = true
+                        
+                        espObj.Corners[6].Position = UDim2.new(0, x, 0, y + h - cornerLen)
+                        espObj.Corners[6].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[6].Visible = true
+                        
+                        -- Bottom right
+                        espObj.Corners[7].Position = UDim2.new(0, x + w - cornerLen, 0, y + h - 1)
+                        espObj.Corners[7].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[7].Visible = true
+                        
+                        espObj.Corners[8].Position = UDim2.new(0, x + w - 1, 0, y + h - cornerLen)
+                        espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[8].Visible = true
+                        end
+                    elseif ESPSettings.BoxFill then
+                        -- Render fill even when box outlines/corners are disabled
+                        espObj.Box.Position = UDim2.new(0, x, 0, y)
+                        espObj.Box.Size = UDim2.new(0, w, 0, h)
+                        espObj.Box.Visible = true
+
+                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
+                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
+                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
+                        local baseRotation = RotationAngle % 360
+                        local rad = math.rad(baseRotation % 360)
+                        local absSin = math.abs(math.sin(rad))
+                        local absCos = math.abs(math.cos(rad))
+                        local perpSpan = w * absSin + h * absCos
+                        local averageSpan = (2 / math.pi) * (w + h)
+                        if averageSpan == 0 then averageSpan = 1 end
+                        local multiplier = perpSpan / averageSpan
+                        local effectiveSpeed = AUTOROTATE_SPEED * multiplier
+
+                        espObj.GradientAngle = espObj.GradientAngle or 0
+                        if ESPSettings.AnimateBoxRotation then
+                            espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        else
+                            espObj.GradientAngle = 0
+                        end
+                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle + 180) % 360
+
+                        local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
+                        local gc2 = c2 or ESPSettings.BoxFillColor or gc1
+                        local gc3 = c3 or ESPSettings.BoxFillColor or gc2
+                        espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                        espObj.BoxGradient.Enabled = true
+
+                        if ESPSettings.BoxFill then
+                            local a1 = readFillAlpha(1)
+                            local a2 = readFillAlpha(2)
+                            local a3 = readFillAlpha(3)
+                            espObj.Box.BackgroundTransparency = 0
+                            espObj.BoxGradient.Transparency = NumberSequence.new{
+                                NumberSequenceKeypoint.new(0, a1),
+                                NumberSequenceKeypoint.new(0.5, a2),
+                                NumberSequenceKeypoint.new(1, a3),
+                            }
+                            espObj.Box.BackgroundColor3 = Color3.new(1,1,1)
+                        else
+                            espObj.Box.BackgroundTransparency = 1
+                        end
+
+                        -- disable outline and corners when only fill is requested
+                        if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
+                        if espObj.OutlineGradient then espObj.OutlineGradient.Enabled = false end
+                        for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
+                    else
+                        -- Neither boxes nor fill requested: ensure box elements are hidden
+                        if espObj.Box then
+                            espObj.Box.Position = UDim2.new(0, x, 0, y)
+                            espObj.Box.Size = UDim2.new(0, w, 0, h)
+                            espObj.Box.Visible = false
+                            espObj.BoxGradient.Enabled = false
+                            espObj.Box.BackgroundTransparency = 1
+                        end
+                        if espObj.BoxOutline then espObj.BoxOutline.Thickness = 0 end
+                        if espObj.OutlineGradient then espObj.OutlineGradient.Enabled = false end
+                        if espObj.Corners then
+                            for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
                         end
                     end
                 else
-                    if Library and Library.Notify then pcall(function() Library:Notify("BringPlayerMoveTo not available") end) end
-                end
-                
-                task.wait(0.5)
-                if ReturnAfterBring then
-                    if type(BringPlayerMoveTo) == "function" then
-                        BringPlayerMoveTo(originalPosition, returnTimeout)
-                        -- clear the captured return location so subsequent uses don't reuse it
-                        originalPosition = nil
+                    -- ensure box elements are hidden when boxes disabled
+                    if espObj.Box then
+                        espObj.Box.Visible = false
+                        espObj.BoxGradient.Enabled = false
+                    end
+                    if espObj.BoxOutline then
+                        espObj.BoxOutline.Thickness = 0
+                    end
+                    if espObj.Corners then
+                        for _, corner in ipairs(espObj.Corners) do
+                            corner.Visible = false
+                        end
                     end
                 end
-            end)
 
-            -- Re-enable fly only if it was enabled before the bring started
-            if wasFly then
-                pcall(function() StartFly() end)
-            end
+                -- Health bar
+                    if ESPSettings.HealthBarEnabled and espObj.HealthBar then
+                    local healthRatio = 1
+                    if hum.MaxHealth and hum.MaxHealth > 0 then
+                        healthRatio = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                    end
+                    local barHeight = h * healthRatio
 
-            if not ok then
-                if Library and Library.Notify then
-                    pcall(function() Library:Notify("BringPlayer movement error: " .. tostring(err)) end)
+                    -- Use neutral background so gradient displays correctly
+                    espObj.HealthBar.BackgroundColor3 = Color3.new(1, 1, 1)
+                    -- Animate health gradient upward by shifting keypoint positions
+                    local speed = ESPSettings.HealthGradientSpeed or 0.5 -- cycles per second
+                    espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0)
+                    espObj.HealthGradientPhase = (espObj.HealthGradientPhase + speed * dt) % 1
+                    if espObj.Player and espObj.Player.UserId then
+                        PERSIST.HealthPhase[tostring(espObj.Player.UserId)] = espObj.HealthGradientPhase
+                    end
+
+                    -- Health gradient colors
+                    local hc1 = ESPSettings.HealthBarColor1 or Color3.fromRGB(255, 0, 0)
+                    local hc2 = ESPSettings.HealthBarColor2 or Color3.fromRGB(255, 170, 0)
+                    local hc3 = ESPSettings.HealthBarColor3 or Color3.fromRGB(0, 255, 0)
+
+                    -- Setup blending/sampling helper (fixed linear blending)
+                    local function applyBlend(t)
+                        t = math.clamp(t, 0, 1)
+                        -- linear blending only
+                        return t
+                    end
+
+                    local function sampleBase(u)
+                        u = (u % 1 + 1) % 1
+                        if u < (1/3) then
+                            local t2 = u / (1/3)
+                            return lerpColor(hc1, hc2, applyBlend(t2))
+                        elseif u < (2/3) then
+                            local t2 = (u - (1/3)) / (1/3)
+                            return lerpColor(hc2, hc3, applyBlend(t2))
+                        else
+                            local t2 = (u - (2/3)) / (1/3)
+                            return lerpColor(hc3, hc1, applyBlend(t2))
+                        end
+                    end
+
+                    -- If animation is disabled, use a static 3-stop sequence
+                    if not ESPSettings.HealthGradientEnabled then
+                        espObj.HealthBarGradient.Color = createGradientSequence(hc1, hc2, hc3)
+                    else
+                        -- fixed sample density for blending/smoothness (12 samples)
+                        local sampleCount = 12
+                        local samples = {}
+                        for i = 0, (sampleCount - 1) do
+                            local basePos = i / (sampleCount - 1)
+                            -- subtract phase so sampled colors appear to move upward
+                            local samplePos = (basePos - espObj.HealthGradientPhase) % 1
+                            samples[i+1] = { pos = basePos, color = sampleBase(samplePos) }
+                        end
+                        local cs = {}
+                        for _, s in ipairs(samples) do
+                            table.insert(cs, ColorSequenceKeypoint.new(s.pos, s.color))
+                        end
+                        espObj.HealthBarGradient.Color = ColorSequence.new(cs)
+                    end
+
+                    -- Determine a color sample for the health text (match gradient at filled/top position)
+                    local samplePhase = ESPSettings.HealthGradientEnabled and (espObj.HealthGradientPhase or 0) or 0
+                    local samplePosForText = (healthRatio - samplePhase) % 1
+                    local healthTextColor = sampleBase(samplePosForText)
+
+                    -- Outline: fixed 1px black border (not configurable)
+                    espObj.HealthBarBG.BorderSizePixel = 1
+                    espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
+
+                    local thickness = ESPSettings.HealthBarThickness or 2.5
+                    local padding = 4
+
+                    if ESPSettings.HealthOutlineFollow then
+                        -- Position the background/outline to match the filled portion height
+                        if ESPSettings.HealthBarPosition == "Right" then
+                            local bgX = x + w + padding
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        else
+                            local bgX = x - (thickness + padding)
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        end
+
+                        espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, barHeight)
+                        espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
+                    else
+                        -- Background remains full height; filled bar sits inside it
+                        if ESPSettings.HealthBarPosition == "Right" then
+                            local bgX = x + w + padding
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        else
+                            local bgX = x - (thickness + padding)
+                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                        end
+
+                        espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
+                        espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
+                    end
+
+                    espObj.HealthBarBG.Visible = true
+                    espObj.HealthBar.Visible = true
+
+                    -- Health text: place near the top of the filled portion and match gradient
+                    if ESPSettings.ShowHealthText and espObj.HealthText then
+                        local healthPercent = math.floor((healthRatio or 0) * 100)
+                        espObj.HealthText.Text = string.format("%d%%", healthPercent)
+                        if ESPSettings.HealthBarPosition == "Right" then
+                            espObj.HealthText.Position = UDim2.new(0, x + w + padding, 0, y + h - barHeight + 3)
+                        else
+                            espObj.HealthText.Position = UDim2.new(0, x - (thickness + padding), 0, y + h - barHeight + 3)
+                        end
+                        espObj.HealthText.TextColor3 = healthTextColor or espObj.HealthText.TextColor3
+                        espObj.HealthText.Visible = true
+                    end
+                else
+                    -- hide health elements when disabled
+                    if espObj.HealthBar then espObj.HealthBar.Visible = false end
+                    if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
+                    if espObj.HealthText then espObj.HealthText.Visible = false espObj.HealthText.Text = "" end
                 end
+                
+                -- Tracer
+                if ESPSettings.Tracers and espObj.Tracer then
+                    local tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                    if ESPSettings.TracerFrom == "Top" then
+                        tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, 0)
+                    elseif ESPSettings.TracerFrom == "Center" then
+                        tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                    end
+                    
+                    local tracerTo = Vector2.new(x + w/2, y + h/2)
+                    positionTracer(espObj.Tracer, tracerFrom.X, tracerFrom.Y, tracerTo.X, tracerTo.Y, ESPSettings.TracerThickness)
+                    espObj.Tracer.BackgroundColor3 = ESPSettings.TracerColor
+                    espObj.Tracer.Visible = true
+                else
+                    if espObj.Tracer then espObj.Tracer.Visible = false end
+                end
+                
+                -- Chams
+                if ESPSettings.Highlight and espObj.Highlight then
+                    espObj.Highlight.Adornee = char
+                    espObj.Highlight.FillColor = ESPSettings.GlobalChamColor
+                    espObj.Highlight.OutlineColor = ESPSettings.GlobalChamColor
+                    espObj.Highlight.FillTransparency = ESPSettings.FillTransparency
+                    espObj.Highlight.OutlineTransparency = ESPSettings.OutlineTransparency
+                    espObj.Highlight.Enabled = true
+                else
+                    if espObj.Highlight then espObj.Highlight.Enabled = false end
+                end
+            else
+                hideESP(espObj)
             end
         end)
-    end)
+    end
 end
 
--- Initial setup
-if player.Character then
-    setupAnimationDetection(player.Character)
-end
-player.CharacterAdded:Connect(setupAnimationDetection)
-
--- UI elements
-BringPlayerTab:AddToggle("BringPlayerToggle", {
-    Text = "Enable",
-    Risky = true,
-    Default = false,
-    Callback = function(Value)
-        MovementEnabled = Value
-    end
-})
-
-local animNames = {}
-for name in PresetAnimations do table.insert(animNames, name) end
-table.sort(animNames)
-BringPlayerTab:AddDropdown("BringAnimationSelect", {
-    Text = "Move",
-    Values = animNames,
-    Default = #animNames > 0 and 1 or nil,
-    Callback = function(value)
-        animationId = PresetAnimations[value]
-    end
-})
-
--- Settings tab configurations
-SettingsBringTab:AddSlider("SpeedSlider", {
-    Text = "Bring Speed",
-    Default = 100,
-    Min = 10,
-    Compact = true,
-    Max = 1000,
-    Rounding = 0,
-    Callback = function(Value)
-        speed = Value
-    end
-})
-
-SettingsBringTab:AddSlider("ArrivalThresholdSlider", {
-    Text = "Arrivial Threshold",
-    Default = 1,
-    Min = 0.01,
-    Compact = true,
-    Max = 5,
-    Rounding = 2,
-    Callback = function(Value)
-        arrivalThreshold = Value
-    end
-})
-
-SettingsBringTab:AddSlider("ReturnTimeoutSlider", {
-    Text = "Max Return Time (S)",
-    Default = 5,
-    Min = 1,
-    Compact = true,
-    Max = 30,
-    Rounding = 0,
-    Callback = function(Value)
-        returnTimeout = Value
-    end
-})
-
-SettingsBringTab:AddSlider("BringMaxAttemptSlider", {
-    Text = "Max Bring Time (S)",
-    Default = bringMaxAttempt,
-    Min = 1,
-    Max = 10,
-    Compact = true,
-    Rounding = 0,
-    Callback = function(Value)
-        bringMaxAttempt = Value
-    end
-})
-
-SettingsBringTab:AddSlider("BringDelaySlider", {
-    Text = "Start Delay (S)",
-    Min = 0.01,
-    Max = 2,
-    Default = delayBeforeGoing,
-    Rounding = 2,
-    Compact = true,
-    Callback = function(Value)
-        delayBeforeGoing = Value
-    end
-})
-
-SettingsBringTab:AddDropdown("BringMethodSelect", {
-    Text = "Bring Method",
-    Values = BringMethods,
-    Default = 1,
-    Callback = function(value)
-        SelectedBringMethod = value
-    end
-})
-
-SettingsBringTab:AddToggle("ReturnAfterBringToggle", {
-    Text = "Return to Original Position",
-    Default = ReturnAfterBring,
-    Callback = function(Value)
-        ReturnAfterBring = Value
-    end
-})
-
-SettingsBringTab:AddDivider()
-
-SettingsBringTab:AddToggle("BringRequireTargetToggle", {
-    Text = "Require Target in Range",
-    Default = BringRequireTarget,
-    Callback = function(Value)
-        BringRequireTarget = Value
-        UpdateBringVisualizer()
-    end
-})
-
-
-
-SettingsBringTab:AddToggle("BringShowVisualizerToggle", {
-    Text = "Show Range Visualizer",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            UpdateBringVisualizer()
-        else
-            if bringVisualizerPart then bringVisualizerPart.Parent = nil end
-            if bringVisualizerConnection then bringVisualizerConnection:Disconnect() end
-        end
-    end
-})
-
-
-SettingsBringTab:AddToggle("BringStopOnTargetDeathToggle", {
-    Text = "Stop if Target Dies",
-    Default = BringStopOnTargetDeath,
-    Callback = function(Value)
-        BringStopOnTargetDeath = Value
-    end
-})
-
-SettingsBringTab:AddSlider("BringTargetRangeSlider", {
-    Text = "Target Range (studs)",
-    Default = BringTargetRange,
-    Min = 10,
-    Max = 500,
-    Compact = true,
-    Rounding = 0,
-    Callback = function(Value)
-        BringTargetRange = Value
-        UpdateBringVisualizer()
-    end
-})
--- Locations dropdown and save button
-locationsDropdown = SettingsBringTab:AddDropdown("BringLocationSelect", {
-    Text = "Location",
-    Values = {},
-    Default = nil,
-    Callback = function(value)
-        SelectedLocationName = value
-    end
-})
-
-local function UpdateLocationsDropdown()
-    local names = {}
-    for name in pairs(SavedLocations) do table.insert(names, name) end
-    table.sort(names)
-    locationsDropdown.Values = names
-    if locationsDropdown then
-        if locationsDropdown.BuildDropdownList then
-            pcall(function() locationsDropdown:BuildDropdownList() end)
-        end
-        if #names > 0 then
-            if locationsDropdown.SetValue then
-                pcall(function() locationsDropdown:SetValue(names[1]) end)
-            end
-            SelectedLocationName = names[1]
-        else
-            if locationsDropdown.SetValue then pcall(function() locationsDropdown:SetValue(nil) end) end
-            SelectedLocationName = nil
-        end
+-- Add ESP for player
+local function addESP(player)
+    if ESPObjects[player] then return end
+    local espObj = createESPObject()
+    espObj.Player = player
+    -- Restore persistent phases/angles if available
+    if player and player.UserId then
+        local id = tostring(player.UserId)
+        espObj.HealthGradientPhase = PERSIST.HealthPhase[id] or math.random()
+        espObj.GradientAngle = PERSIST.GradientAngle[id] or 0
     else
-        SelectedLocationName = #names > 0 and names[1] or nil
+        espObj.HealthGradientPhase = espObj.HealthGradientPhase or math.random()
+        espObj.GradientAngle = espObj.GradientAngle or 0
+    end
+    ESPObjects[player] = espObj
+end
+
+-- Remove ESP for player
+local function removePlayerESP(player)
+    local espObj = ESPObjects[player]
+    if espObj then
+        hideESP(espObj)
+        removeESP(espObj)
+        ESPObjects[player] = nil
     end
 end
--- Input for save name
-SettingsBringTab:AddInput("SaveLocationNameInput", {
-    Text = "Save Name",
-    Default = "",
-    Callback = function(Value)
-        saveLocationName = tostring(Value or "")
+
+-- Initialize ESP for all players
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        addESP(player)
     end
-})
-SettingsBringTab:AddButton({
-    Text = "Save Current Location",
-    Func = function()
-        local char = player.Character
-        if not char then if Library and Library.Notify then pcall(function() Library:Notify("No character to save location from") end) end; return end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if not hrp then if Library and Library.Notify then pcall(function() Library:Notify("No HumanoidRootPart to save") end) end; return end
-        local name = tostring(saveLocationName or "")
-        if name == "" then if Library and Library.Notify then pcall(function() Library:Notify("Provide a name in the 'Save Name' input before saving") end) end; return end
-        if SavedLocations[name] then if Library and Library.Notify then pcall(function() Library:Notify("A saved location with that name already exists") end) end; return end
-        SavedLocations[name] = hrp.Position
-        -- persist to disk like custom combos
-        pcall(function() SaveLocationToFile(name, hrp.Position) end)
-        LoadSavedLocations()
-        UpdateLocationsDropdown()
-        if locationsDropdown and locationsDropdown.SetValue then pcall(function() locationsDropdown:SetValue(name) end) end
-        SelectedLocationName = name
-        if Library and Library.Notify then pcall(function() Library:Notify("Saved location: " .. name) end) end
+end
+
+-- Player added/removed events
+Players.PlayerAdded:Connect(function(player)
+    if player ~= LocalPlayer then
+        addESP(player)
     end
-})
+end)
 
+Players.PlayerRemoving:Connect(function(player)
+    removePlayerESP(player)
+end)
 
+-- Main render loop
+renderConn = RunService.RenderStepped:Connect(function(delta)
+    updateESP(delta)
+end)
 
--- Initialize locations dropdown on load
-LoadSavedLocations()
-UpdateLocationsDropdown()
+-- Global API
+getgenv().TrisESP = {
+    Settings = ESPSettings,
+    Unload = function()
+        if renderConn then renderConn:Disconnect() end
+        for player, espObj in pairs(ESPObjects) do
+            removeESP(espObj)
+        end
+        ESPObjects = {}
+        if ESPHolder then ESPHolder:Destroy() end
+    end,
 
--- (Previously provided rename UI removed; saving now uses the 'Save Name' input.)
-------------------------
+    -- Helper to resolve a player reference (player object, userId number, or player name)
+    _resolvePlayer = function(ref)
+        if not ref then return nil end
+        -- Accept Player instance directly
+        if typeof and typeof(ref) == "Instance" then
+            if ref and ref.IsA and ref:IsA("Player") then return ref end
+        end
+        if type(ref) == "table" and ref.UserId then return ref end
+        if type(ref) == "number" then
+            for _,p in ipairs(Players:GetPlayers()) do
+                if p.UserId == ref then return p end
+            end
+            return nil
+        elseif type(ref) == "string" then
+            return Players:FindFirstChild(ref)
+        end
+        return nil
+    end,
 
--- Setup SaveManager and ThemeManager
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetFolder('TrisSploit/jujutsu-shenanigans')
-SaveManager:BuildConfigSection(Tabs.Settings)
-ThemeManager:SetLibrary(Library)
-ThemeManager:SetFolder('TrisSploit/themes')
-ThemeManager:ApplyToTab(Tabs.Settings)
+    AddCustomText = function(playerRef, text)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        if not ESPObjects[p] then addESP(p) end
+        local esp = ESPObjects[p]
+        esp.CustomTexts = esp.CustomTexts or {}
+        -- sanitize and limit external input to avoid UI overflow or malicious strings
+        local s = tostring(text or "")
+        if #s > 200 then
+            s = string.sub(s, 1, 200)
+        end
+        -- trim leading/trailing whitespace
+        s = s:gsub("^%s+", ""):gsub("%s+$", "")
+        table.insert(esp.CustomTexts, s)
+        -- ensure a TextLabel exists for this custom text immediately so it appears without waiting
+        esp.CustomTextLabels = esp.CustomTextLabels or {}
+        local idx = #esp.CustomTexts
+        local lbl = esp.CustomTextLabels[idx]
+        if not lbl then
+            lbl = Instance.new("TextLabel")
+            lbl.BackgroundTransparency = 1
+            lbl.Font = Enum.Font.Code
+            lbl.TextSize = 13
+            lbl.TextColor3 = Color3.fromRGB(255,255,255)
+            lbl.TextStrokeTransparency = 0
+            lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+            lbl.ZIndex = 11
+            lbl.Size = UDim2.new(0, 160, 0, 16)
+            lbl.AnchorPoint = Vector2.new(0, 0)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            if esp.Container then
+                lbl.Parent = esp.Container
+            else
+                lbl.Parent = ESPHolder
+            end
+            esp.CustomTextLabels[idx] = lbl
+        end
+        lbl.Text = s
+        -- Try to position immediately based on character screen rect so it appears without waiting
+        local lineHeight = 16
+        local rect = nil
+        if p and p.Character then
+            rect = getScreenRectForCharacter(p.Character)
+        end
+        if rect then
+            local sx, sy, sw = rect.x, rect.y, rect.w
+            lbl.Position = UDim2.new(0, sx + sw + 6, 0, sy + (#esp.CustomTexts-1) * lineHeight)
+            lbl.Visible = true
+        else
+            lbl.Visible = false
+        end
+        return true
+    end,
 
-local Debugnigger = Tabs.Settings:AddRightGroupbox("Debug Notifications")
+    RemoveCustomText = function(playerRef, idxOrText)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p or not ESPObjects[p] then return false end
+        local esp = ESPObjects[p]
+        esp.CustomTexts = esp.CustomTexts or {}
+        if type(idxOrText) == "number" then
+            if idxOrText >= 1 and idxOrText <= #esp.CustomTexts then
+                -- remove corresponding label if present
+                if esp.CustomTextLabels and esp.CustomTextLabels[idxOrText] then
+                    pcall(function()
+                        esp.CustomTextLabels[idxOrText].Visible = false
+                        esp.CustomTextLabels[idxOrText].Text = ""
+                        esp.CustomTextLabels[idxOrText]:Destroy()
+                    end)
+                    table.remove(esp.CustomTextLabels, idxOrText)
+                end
+                table.remove(esp.CustomTexts, idxOrText)
+                return true
+            end
+            return false
+        else
+            for i, v in ipairs(esp.CustomTexts) do
+                if v == tostring(idxOrText) then
+                    if esp.CustomTextLabels and esp.CustomTextLabels[i] then
+                        pcall(function()
+                            esp.CustomTextLabels[i].Visible = false
+                            esp.CustomTextLabels[i].Text = ""
+                            esp.CustomTextLabels[i]:Destroy()
+                        end)
+                        table.remove(esp.CustomTextLabels, i)
+                    end
+                    table.remove(esp.CustomTexts, i)
+                    return true
+                end
+            end
+            return false
+        end
+    end,
 
--- Add debug notifications toggle to Settings tab
-Debugnigger:AddToggle("DebugNotificationsToggle", {
-    Text = "Debug Notifications",
-    Default = DebugNotifications,
-    Callback = function(Value)
-        DebugNotifications = Value
-    end
-})
+    ClearCustomText = function(playerRef)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p or not ESPObjects[p] then return false end
+        local esp = ESPObjects[p]
+        esp.CustomTexts = {}
+        if esp.CustomTextLabels then
+            for _, lbl in ipairs(esp.CustomTextLabels) do
+                pcall(function()
+                    lbl.Visible = false
+                    lbl.Text = ""
+                    lbl:Destroy()
+                end)
+            end
+            esp.CustomTextLabels = {}
+        end
+        return true
+    end,
 
-SaveManager:LoadAutoloadConfig()
+    -- Team utilities
+    _resolveTeam = function(ref)
+        if not ref then return nil end
+        if typeof and typeof(ref) == "Instance" then
+            return ref
+        end
+        if type(ref) == "table" then
+            return ref
+        end
+        if type(ref) == "string" then
+            -- try to find a Team by name first
+            for _, t in ipairs(Teams:GetTeams()) do
+                if t.Name == ref then return t end
+            end
+            return ref -- fallback to name string
+        end
+        if type(ref) == "number" then
+            return ref
+        end
+        return nil
+    end,
 
--- Status Labels settings: allow user to provide a GitHub raw URL to populate the Status box
--- Status labels are loaded from a pre-configured GitHub raw URL.
--- Replace the URL below with your repository's raw file URL (JSON array or Lua table returning labels).
--- Status labels removed; no auto-load or UI for status labels.
+    AddCustomTeam = function(teamRef)
+        local t = getgenv().TrisESP._resolveTeam(teamRef)
+        if not t then return false end
+        if type(t) == "string" then
+            ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
+            for _, v in ipairs(ESPSettings.CustomTeams) do if v == t then return true end end
+            table.insert(ESPSettings.CustomTeams, t)
+            return true
+        else
+            ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
+            for _, v in ipairs(ESPSettings.CustomTeamObjects) do if v == t then return true end end
+            table.insert(ESPSettings.CustomTeamObjects, t)
+            return true
+        end
+    end,
 
--- Initialize
-AntiDebuff.StartListener()
-if RangeCheck.ShowVisualizer then
-    UpdateVisualizer()
-end
-if AutoBlock.ShowVisualizer then
-    UpdateAutoBlockVisualizer()
-end
-if AutoBlock.BlockM1s then
-    UpdateBlockM1Visualizer()
-end
-if AutoBlock.BlockDashes then
-    UpdateDashVisualizer()
-end
+    RemoveCustomTeam = function(teamRef)
+        local t = getgenv().TrisESP._resolveTeam(teamRef)
+        if not t then return false end
+        if type(t) == "string" then
+            ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
+            for i, v in ipairs(ESPSettings.CustomTeams) do
+                if v == t then table.remove(ESPSettings.CustomTeams, i) return true end
+            end
+            return false
+        else
+            ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
+            for i, v in ipairs(ESPSettings.CustomTeamObjects) do
+                if v == t then table.remove(ESPSettings.CustomTeamObjects, i) return true end
+            end
+            return false
+        end
+    end,
 
+    ClearCustomTeams = function()
+        ESPSettings.CustomTeams = {}
+        ESPSettings.CustomTeamObjects = {}
+        return true
+    end,
+}
+
+print("TrisESP (ScreenGui) loaded successfully!")
