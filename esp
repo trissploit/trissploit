@@ -672,7 +672,8 @@ local function updateESP(deltaTime)
                     local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2) or getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2)
                     local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3) or getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3)
 
-                    local baseRotation = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation) and (RotationAngle % 360) or -90
+                    local animateBox = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation)
+                    local baseRotation = animateBox and (RotationAngle % 360) or -90
                     local rad = math.rad(baseRotation % 360)
                     local absSin = math.abs(math.sin(rad))
                     local absCos = math.abs(math.cos(rad))
@@ -682,11 +683,21 @@ local function updateESP(deltaTime)
                     local multiplier = perpSpan / averageSpan
                     local effectiveSpeed = AUTOROTATE_SPEED * multiplier
 
-                    espObj.GradientAngle = (espObj.GradientAngle or 0)
-                    espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
-                    espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle) % 360
-                    if espObj.Player and espObj.Player.UserId then
-                        PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
+                    if animateBox then
+                        espObj.GradientAngle = (espObj.GradientAngle or 0)
+                        espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle) % 360
+                        if espObj.Player and espObj.Player.UserId then
+                            PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
+                        end
+                    else
+                        -- Ensure no dynamic rotation when animation is disabled
+                        if espObj.Player and espObj.Player.UserId then
+                            espObj.GradientAngle = PERSIST.GradientAngle[tostring(espObj.Player.UserId)] or (espObj.GradientAngle or 0)
+                        else
+                            espObj.GradientAngle = espObj.GradientAngle or 0
+                        end
+                        espObj.BoxGradient.Rotation = (baseRotation) % 360
                     end
 
                     -- Three-stop fill gradient
@@ -739,11 +750,21 @@ local function updateESP(deltaTime)
                         -- Use neutral background so gradient displays correctly
                         espObj.HealthBar.BackgroundColor3 = Color3.new(1, 1, 1)
                         -- Animate health gradient upward by shifting keypoint positions
+                        local healthAnim = getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled)
                         local speed = getSetting("HealthGradientSpeed", ESPSettings.HealthGradientSpeed) or 0.5 -- cycles per second
-                        espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0)
-                        espObj.HealthGradientPhase = (espObj.HealthGradientPhase + speed * dt) % 1
-                        if espObj.Player and espObj.Player.UserId then
-                            PERSIST.HealthPhase[tostring(espObj.Player.UserId)] = espObj.HealthGradientPhase
+                        if healthAnim then
+                            espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0)
+                            espObj.HealthGradientPhase = (espObj.HealthGradientPhase + speed * dt) % 1
+                            if espObj.Player and espObj.Player.UserId then
+                                PERSIST.HealthPhase[tostring(espObj.Player.UserId)] = espObj.HealthGradientPhase
+                            end
+                        else
+                            -- preserve any persisted phase but do not advance it while animation disabled
+                            if espObj.Player and espObj.Player.UserId then
+                                espObj.HealthGradientPhase = PERSIST.HealthPhase[tostring(espObj.Player.UserId)] or (espObj.HealthGradientPhase or 0)
+                            else
+                                espObj.HealthGradientPhase = espObj.HealthGradientPhase or 0
+                            end
                         end
 
                         -- Health gradient colors
@@ -752,7 +773,7 @@ local function updateESP(deltaTime)
                         local hc3 = getSetting("HealthBarColor3", ESPSettings.HealthBarColor3) or Color3.fromRGB(0, 255, 0)
 
                         -- Setup blending/sampling helper (used by static and animated modes)
-                        local blendMode = ESPSettings.HealthGradientBlend or "linear"
+                        local blendMode = getSetting("HealthGradientBlend", ESPSettings.HealthGradientBlend) or "linear"
                         local function applyBlend(t)
                             t = math.clamp(t, 0, 1)
                             if blendMode == "smooth" then
@@ -779,7 +800,7 @@ local function updateESP(deltaTime)
                         end
 
                         -- If animation is disabled, use a static 3-stop sequence
-                        if not ESPSettings.HealthGradientEnabled then
+                        if not healthAnim then
                             espObj.HealthBarGradient.Color = createGradientSequence(hc1, hc2, hc3)
                         else
                             -- fixed sample density for blending/smoothness (12 samples)
@@ -799,7 +820,7 @@ local function updateESP(deltaTime)
                         end
 
                         -- Determine a color sample for the health text (match gradient at filled/top position)
-                        local samplePhase = ESPSettings.HealthGradientEnabled and (espObj.HealthGradientPhase or 0) or 0
+                        local samplePhase = healthAnim and (espObj.HealthGradientPhase or 0) or 0
                         local samplePosForText = (healthRatio - samplePhase) % 1
                         local healthTextColor = sampleBase(samplePosForText)
                         -- Force health bar outline to 1px black (do not change)
