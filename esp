@@ -57,10 +57,6 @@ local ESPSettings = {
     -- Custom team filters (strings = team names, objects = Team instances)
     CustomTeams = {},
     CustomTeamObjects = {},
-    -- Automatically add players at startup (false = only add explicitly or by team mappings)
-    AutoAddPlayers = false,
-    -- Team color mappings: list of { ref = <teamRef>, color = Color3 }
-    TeamColorMap = {},
     
     -- Display settings
     ShowName = true,
@@ -217,73 +213,6 @@ local function shouldShowPlayer(player)
         end
     end
     return true
-end
-
--- Helper to match a teamRef (string/Instance/table/number) against a player
-local function matchTeamRef(teamRef, player)
-    if not teamRef or not player then return false end
-    -- Team instance
-    if typeof and typeof(teamRef) == "Instance" and teamRef:IsA("Team") then
-        return player.Team == teamRef
-    end
-    -- string team name
-    if type(teamRef) == "string" then
-        if player.Team and tostring(player.Team.Name) == tostring(teamRef) then return true end
-        return false
-    end
-    -- folder/instance containing player name/value
-    if typeof and typeof(teamRef) == "Instance" then
-        if teamRef:FindFirstChild(player.Name) then return true end
-        for _, child in ipairs(teamRef:GetChildren()) do
-            if child:IsA("ObjectValue") and child.Value == player then return true end
-            if child:IsA("StringValue") and child.Value == player.Name then return true end
-        end
-    end
-    -- table/list
-    if type(teamRef) == "table" then
-        for _, v in ipairs(teamRef) do
-            if v == player or v == player.UserId or v == player.Name then return true end
-        end
-    end
-    -- number userId
-    if type(teamRef) == "number" and teamRef == player.UserId then return true end
-    return false
-end
-
--- Return a Color3 if the player matches a TeamColorMap entry
-local function getTeamColor(player)
-    if not ESPSettings.TeamColorMap then return nil end
-    for _, entry in ipairs(ESPSettings.TeamColorMap) do
-        local ref = entry.ref
-        local col = entry.color
-        if matchTeamRef(ref, player) then
-            return col
-        end
-    end
-    return nil
-end
-
--- Determine whether we should create an ESP object for this player at startup/add
-local function needsESP(player)
-    if not player or player == LocalPlayer then return false end
-    -- explicit player overrides
-    if ESPSettings.PlayerOverrides then
-        if ESPSettings.PlayerOverrides[tostring(player.UserId)] or ESPSettings.PlayerOverrides[player.Name] then
-            return true
-        end
-    end
-    -- team-based mapping
-    for _, tname in ipairs(ESPSettings.CustomTeams or {}) do
-        if player.Team and tostring(player.Team.Name) == tostring(tname) then return true end
-    end
-    for _, tobj in ipairs(ESPSettings.CustomTeamObjects or {}) do
-        if matchTeamRef(tobj, player) then return true end
-    end
-    -- team color mappings
-    if getTeamColor(player) then return true end
-    -- global auto-add flag
-    if ESPSettings.AutoAddPlayers then return true end
-    return false
 end
 
 local function getScreenRectForCharacter(char)
@@ -623,6 +552,8 @@ local function updateESP(deltaTime)
                         nameText = (player.Name or player.DisplayName or "")
                     end
                     espObj.Name.Text = nameText
+                    -- Name color (support per-player override)
+                    espObj.Name.TextColor3 = getSetting("NameColor", espObj.Name.TextColor3)
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
                     espObj.Name.Visible = true
                 end
@@ -631,6 +562,7 @@ local function updateESP(deltaTime)
                 if getSetting("ShowDistance", ESPSettings.ShowDistance) and espObj.Distance then
                     espObj.Distance.Text = string.format("[%d st]", math.floor(Dist))
                     espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
+                    espObj.Distance.TextColor3 = getSetting("DistanceColor", espObj.Distance.TextColor3)
                     espObj.Distance.Visible = true
                 end
                 
@@ -652,12 +584,6 @@ local function updateESP(deltaTime)
                         local c1 = getSetting("BoxFillCustomColor1", ESPSettings.BoxFillCustomColor1) or getSetting("BoxCustomColor1", ESPSettings.BoxCustomColor1)
                         local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2) or getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2)
                         local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3) or getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3)
-                        local teamCol = getTeamColor(player)
-                        if teamCol then
-                            c1 = teamCol
-                            c2 = teamCol
-                            c3 = teamCol
-                        end
                         -- Base rotation for the gradient: box rotation (if enabled) plus internal autorotation (time-based)
                         local baseRotation = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation) and (RotationAngle % 360) or -90
                         -- Compensate gradient angular velocity by the projected perpendicular span
@@ -689,12 +615,12 @@ local function updateESP(deltaTime)
                         local gc2 = c2 or ESPSettings.BoxFillColor or gc1
                         local gc3 = c3 or ESPSettings.BoxFillColor or gc2
                         espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
-                        espObj.BoxGradient.Enabled = (ESPSettings.BoxFill == true)
+                        espObj.BoxGradient.Enabled = (getSetting("BoxFill", ESPSettings.BoxFill) == true)
 
 
                         -- Box fill transparency and base color (base color uses middle stop)
-                        if ESPSettings.BoxFill then
-                            espObj.Box.BackgroundTransparency = math.clamp(ESPSettings.BoxFillTransparency or 0.5, 0, 1)
+                        if getSetting("BoxFill", ESPSettings.BoxFill) then
+                            espObj.Box.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
                             -- Leave BackgroundColor neutral so the UIGradient shows all three stops
                             espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
                         else
@@ -810,12 +736,6 @@ local function updateESP(deltaTime)
                     local hc1 = getSetting("HealthBarColor1", ESPSettings.HealthBarColor1) or Color3.fromRGB(255, 0, 0)
                     local hc2 = getSetting("HealthBarColor2", ESPSettings.HealthBarColor2) or Color3.fromRGB(255, 170, 0)
                     local hc3 = getSetting("HealthBarColor3", ESPSettings.HealthBarColor3) or Color3.fromRGB(0, 255, 0)
-                    local teamCol = getTeamColor(player)
-                    if teamCol then
-                        hc1 = teamCol
-                        hc2 = teamCol
-                        hc3 = teamCol
-                    end
 
                     -- Setup blending/sampling helper (used by static and animated modes)
                     local blendMode = ESPSettings.HealthGradientBlend or "linear"
@@ -966,14 +886,14 @@ end
 
 -- Initialize ESP for all players
 for _, player in ipairs(Players:GetPlayers()) do
-    if needsESP(player) then
+    if player ~= LocalPlayer then
         addESP(player)
     end
 end
 
 -- Player added/removed events
 Players.PlayerAdded:Connect(function(player)
-    if needsESP(player) then
+    if player ~= LocalPlayer then
         addESP(player)
     end
 end)
@@ -1083,96 +1003,43 @@ getgenv().TrisESP = {
         return nil
     end,
 
-    AddCustomTeam = function(teamRef, color)
+    AddCustomTeam = function(teamRef)
         local t = getgenv().TrisESP._resolveTeam(teamRef)
         if not t then return false end
         if type(t) == "string" then
             ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
             for _, v in ipairs(ESPSettings.CustomTeams) do if v == t then return true end end
             table.insert(ESPSettings.CustomTeams, t)
+            return true
         else
             ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
             for _, v in ipairs(ESPSettings.CustomTeamObjects) do if v == t then return true end end
             table.insert(ESPSettings.CustomTeamObjects, t)
+            return true
         end
-        -- store optional team color mapping
-        if color then
-            ESPSettings.TeamColorMap = ESPSettings.TeamColorMap or {}
-            table.insert(ESPSettings.TeamColorMap, { ref = t, color = color })
-        end
-        -- ensure ESP created for existing players matching this team
-        for _, p in ipairs(Players:GetPlayers()) do
-            if matchTeamRef(t, p) then
-                if not ESPObjects[p] then addESP(p) end
-            end
-        end
-        return true
     end,
 
     RemoveCustomTeam = function(teamRef)
         local t = getgenv().TrisESP._resolveTeam(teamRef)
         if not t then return false end
-        local found = false
-        ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
-        for i, v in ipairs(ESPSettings.CustomTeams) do
-            if v == t then table.remove(ESPSettings.CustomTeams, i) found = true break end
-        end
-        ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
-        for i, v in ipairs(ESPSettings.CustomTeamObjects) do
-            if v == t then table.remove(ESPSettings.CustomTeamObjects, i) found = true break end
-        end
-        -- remove team color mappings referencing this ref
-        if ESPSettings.TeamColorMap then
-            for i = #ESPSettings.TeamColorMap, 1, -1 do
-                local entry = ESPSettings.TeamColorMap[i]
-                if entry and entry.ref == t then
-                    table.remove(ESPSettings.TeamColorMap, i)
-                    found = true
-                end
+        if type(t) == "string" then
+            ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
+            for i, v in ipairs(ESPSettings.CustomTeams) do
+                if v == t then table.remove(ESPSettings.CustomTeams, i) return true end
             end
+            return false
+        else
+            ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
+            for i, v in ipairs(ESPSettings.CustomTeamObjects) do
+                if v == t then table.remove(ESPSettings.CustomTeamObjects, i) return true end
+            end
+            return false
         end
-        return found
     end,
 
     ClearCustomTeams = function()
         ESPSettings.CustomTeams = {}
         ESPSettings.CustomTeamObjects = {}
-        return true
-    end,
-    -- Add per-player ESP with optional color (Color3) or settings table
-    AddPlayerESP = function(playerRef, colorOrSettings)
-        local p = getgenv().TrisESP._resolvePlayer(playerRef)
-        if not p then return false end
-        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
-        local key = tostring(p.UserId)
-        local entry = {}
-        if type(colorOrSettings) == "table" then
-            entry = colorOrSettings
-        elseif typeof and typeof(colorOrSettings) == "Color3" then
-            entry.BoxCustomColor1 = colorOrSettings
-            entry.BoxCustomColor2 = colorOrSettings
-            entry.BoxCustomColor3 = colorOrSettings
-            entry.HealthBarColor1 = colorOrSettings
-            entry.HealthBarColor2 = colorOrSettings
-            entry.HealthBarColor3 = colorOrSettings
-        elseif type(colorOrSettings) == "userdata" then
-            -- attempt to treat as Color3-like
-            entry.BoxCustomColor1 = colorOrSettings
-            entry.HealthBarColor1 = colorOrSettings
-        end
-        entry.Enabled = true
-        ESPSettings.PlayerOverrides[key] = entry
-        if not ESPObjects[p] then addESP(p) end
-        return true
-    end,
-
-    RemovePlayerESP = function(playerRef)
-        local p = getgenv().TrisESP._resolvePlayer(playerRef)
-        if not p then return false end
-        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
-        ESPSettings.PlayerOverrides[tostring(p.UserId)] = nil
-        ESPSettings.PlayerOverrides[p.Name] = nil
-        removePlayerESP(p)
         return true
     end,
 }
