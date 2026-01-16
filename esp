@@ -41,7 +41,7 @@ if not ESPHolder.Parent then
 end
 
 local ESPSettings = {
-    Enabled = false,
+    Enabled = true,
     MaxDistance = 1500,
     
     PlayerOverrides = {},
@@ -100,7 +100,7 @@ local ESPSettings = {
     TracerColor = Color3.fromRGB(0, 170, 255),
     
     -- Health bar
-    HealthBarEnabled = true,
+    HealthBarEnabled = false,
     HealthBarPosition = "Left",
     HealthBarThickness = 2.5,
     -- Health bar custom gradient (3 stops)
@@ -120,7 +120,7 @@ local ESPSettings = {
     HealthOutlineFollow = false,
     
     -- Chams
-    Highlight = true,
+    Highlight = false,
     GlobalChamColor = Color3.fromRGB(0, 170, 255),
     FillTransparency = 0.5,
     OutlineTransparency = 0,
@@ -305,24 +305,17 @@ local function createESPObject()
     espObj.Weapon.ZIndex = 10
     espObj.Weapon.Parent = container
     
-    -- Box fill
+    -- Box outline frame (used for the 1px outline / corner boxes)
     espObj.Box = Instance.new("Frame")
-    espObj.Box.Name = "BoxFill"
-    espObj.Box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    espObj.Box.BackgroundTransparency = 0.75
+    espObj.Box.Name = "BoxOutlineFrame"
+    espObj.Box.BackgroundColor3 = Color3.fromRGB(1, 1, 1)
+    espObj.Box.BackgroundTransparency = 1
     espObj.Box.BorderSizePixel = 0
     espObj.Box.Visible = false
     espObj.Box.ZIndex = 1
     espObj.Box.Parent = container
-    
-    -- Box fill gradient
-    espObj.BoxGradient = Instance.new("UIGradient")
-    espObj.BoxGradient.Name = "FillGradient"
-    espObj.BoxGradient.Enabled = true
-    espObj.BoxGradient.Rotation = -90
-    espObj.BoxGradient.Parent = espObj.Box
-    
-    -- Box outline (UIStroke)
+
+    -- Box outline stroke (always 1px when enabled)
     espObj.BoxOutline = Instance.new("UIStroke")
     espObj.BoxOutline.Name = "BoxOutline"
     espObj.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
@@ -330,13 +323,30 @@ local function createESPObject()
     espObj.BoxOutline.Transparency = 0
     espObj.BoxOutline.LineJoinMode = Enum.LineJoinMode.Miter
     espObj.BoxOutline.Parent = espObj.Box
-    
+
     -- Box outline gradient (for colored outlines)
     espObj.OutlineGradient = Instance.new("UIGradient")
     espObj.OutlineGradient.Name = "OutlineGradient"
     espObj.OutlineGradient.Enabled = false
     espObj.OutlineGradient.Rotation = -90
     espObj.OutlineGradient.Parent = espObj.Box
+
+    -- Separate Box Fill frame (completely independent of Box outline)
+    espObj.BoxFill = Instance.new("Frame")
+    espObj.BoxFill.Name = "BoxFillLayer"
+    espObj.BoxFill.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.BoxFill.BackgroundTransparency = 1
+    espObj.BoxFill.BorderSizePixel = 0
+    espObj.BoxFill.Visible = false
+    espObj.BoxFill.ZIndex = 0
+    espObj.BoxFill.Parent = container
+
+    -- Box fill gradient (independent)
+    espObj.BoxGradient = Instance.new("UIGradient")
+    espObj.BoxGradient.Name = "FillGradient"
+    espObj.BoxGradient.Enabled = true
+    espObj.BoxGradient.Rotation = -90
+    espObj.BoxGradient.Parent = espObj.BoxFill
     
     -- Tracer line
     espObj.Tracer = Instance.new("Frame")
@@ -440,6 +450,7 @@ local function hideESP(espObj)
     if espObj.Distance then espObj.Distance.Visible = false end
     if espObj.Weapon then espObj.Weapon.Visible = false end
     if espObj.Box then espObj.Box.Visible = false end
+    if espObj.BoxFill then espObj.BoxFill.Visible = false end
     if espObj.Tracer then espObj.Tracer.Visible = false end
     if espObj.HealthBar then espObj.HealthBar.Visible = false end
     if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
@@ -592,124 +603,97 @@ local function updateESP(deltaTime)
                     espObj.Weapon.Visible = false
                 end
                 
-                -- Box: separate concerns for outline (Boxes) and fill (BoxFill)
-                if espObj.Box then
-                    local boxesEnabled = getSetting("Boxes", ESPSettings.Boxes)
-                    local fillEnabled = getSetting("BoxFill", ESPSettings.BoxFill)
-                    if boxesEnabled or fillEnabled then
+                -- Box outline (completely separate from BoxFill)
+                if getSetting("Boxes", ESPSettings.Boxes) and espObj.Box then
+                    if getSetting("BoxType", ESPSettings.BoxType) == "Square" then
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
-                    else
-                        espObj.Box.Visible = false
-                    end
-
-                    if ESPSettings.BoxType == "Square" then
-                        -- Update gradient + fill
-                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
-                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
-                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
-                        -- Base rotation for the gradient: box rotation (if enabled) plus internal autorotation (time-based)
-                        local baseRotation = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation) and (RotationAngle % 360) or -90
-                        -- Compensate gradient angular velocity by the projected perpendicular span
-                        -- so travel speed of colors appears uniform across rotations/box shapes.
-                        -- Use the box's base rotation for span calculation so the
-                        -- span multiplier doesn't vary with the internal gradient angle.
-                        local rad = math.rad(baseRotation % 360)
-                        local absSin = math.abs(math.sin(rad))
-                        local absCos = math.abs(math.cos(rad))
-                        local perpSpan = w * absSin + h * absCos
-
-                        -- Exact average span over a full rotation for a rectangle: (2/pi)*(w+h)
-                        local averageSpan = (2 / math.pi) * (w + h)
-                        if averageSpan == 0 then averageSpan = 1 end
-
-                        local multiplier = perpSpan / averageSpan
-                        local effectiveSpeed = AUTOROTATE_SPEED * multiplier
-
-                        espObj.GradientAngle = (espObj.GradientAngle or 0 + 0) -- ensure non-nil
-                        espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
-                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle) % 360
-                        -- persist per-player gradient angle
-                        if espObj.Player and espObj.Player.UserId then
-                            PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
-                        end
-
-                        -- Three-stop fill gradient — restore full custom stops
-                        local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
-                        local gc2 = c2 or ESPSettings.BoxFillColor or gc1
-                        local gc3 = c3 or ESPSettings.BoxFillColor or gc2
-                        espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
-                        espObj.BoxGradient.Enabled = fillEnabled
-
-                        -- Box fill transparency and base color (base color uses middle stop)
-                        if fillEnabled then
-                            espObj.Box.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
-                            -- Leave BackgroundColor neutral so the UIGradient shows all three stops
-                            espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
-                        else
-                            espObj.Box.BackgroundTransparency = 1
-                        end
-
-                        -- Outline color (use configured outline color or default)
+                        -- Outline color always respects configured outline color
                         espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
-                        -- Force box outline to 1px when visible, otherwise hide
-                        espObj.BoxOutline.Thickness = (boxesEnabled or fillEnabled) and 1 or 0
-                        -- If an outline gradient is desired, enable and set it to the box custom colors
+                        -- Force outline thickness to 1px per user request
+                        espObj.BoxOutline.Thickness = 1
+                        -- Outline gradient left disabled by default
                         espObj.OutlineGradient.Color = createGradientSequence(
                             ESPSettings.BoxCustomColor1 or ESPSettings.BoxColor,
                             ESPSettings.BoxCustomColor2 or ESPSettings.BoxColor,
                             ESPSettings.BoxCustomColor3 or ESPSettings.BoxColor
                         )
                         espObj.OutlineGradient.Enabled = false
-                        
-                        -- Hide corners for square mode
+                        -- Hide corner frames when square outline in use
                         for _, corner in ipairs(espObj.Corners) do
                             corner.Visible = false
                         end
                     elseif getSetting("BoxType", ESPSettings.BoxType) == "Corner" then
-                        -- When corner mode, don't show the full box background; only show corners and outline if Boxes enabled
-                        espObj.Box.Visible = fillEnabled -- keep box background only if fill enabled
-                        
-                        -- Corner boxes
+                        espObj.Box.Visible = true
+                        espObj.Box.BackgroundTransparency = 1
                         local cornerLen = math.min(w, h) * 0.25
-                        
-                        -- Top left
                         espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
                         espObj.Corners[1].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[1].Visible = getSetting("Boxes", ESPSettings.Boxes)
-                        
+                        espObj.Corners[1].Visible = true
                         espObj.Corners[2].Position = UDim2.new(0, x, 0, y)
                         espObj.Corners[2].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[2].Visible = getSetting("Boxes", ESPSettings.Boxes)
-                        
-                        -- Top right
+                        espObj.Corners[2].Visible = true
                         espObj.Corners[3].Position = UDim2.new(0, x + w - cornerLen, 0, y)
                         espObj.Corners[3].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[3].Visible = getSetting("Boxes", ESPSettings.Boxes)
-                        
+                        espObj.Corners[3].Visible = true
                         espObj.Corners[4].Position = UDim2.new(0, x + w - 1, 0, y)
                         espObj.Corners[4].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[4].Visible = getSetting("Boxes", ESPSettings.Boxes)
-                        
-                        -- Bottom left
+                        espObj.Corners[4].Visible = true
                         espObj.Corners[5].Position = UDim2.new(0, x, 0, y + h - 1)
                         espObj.Corners[5].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[5].Visible = getSetting("Boxes", ESPSettings.Boxes)
-                        
+                        espObj.Corners[5].Visible = true
                         espObj.Corners[6].Position = UDim2.new(0, x, 0, y + h - cornerLen)
                         espObj.Corners[6].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[6].Visible = getSetting("Boxes", ESPSettings.Boxes)
-                        
-                        -- Bottom right
+                        espObj.Corners[6].Visible = true
                         espObj.Corners[7].Position = UDim2.new(0, x + w - cornerLen, 0, y + h - 1)
                         espObj.Corners[7].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[7].Visible = getSetting("Boxes", ESPSettings.Boxes)
-                        
+                        espObj.Corners[7].Visible = true
                         espObj.Corners[8].Position = UDim2.new(0, x + w - 1, 0, y + h - cornerLen)
                         espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[8].Visible = getSetting("Boxes", ESPSettings.Boxes)
+                        espObj.Corners[8].Visible = true
                     end
+                else
+                    if espObj.Box then espObj.Box.Visible = false end
+                    for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
+                end
+
+                -- Box Fill (fully independent of Box outline)
+                if getSetting("BoxFill", ESPSettings.BoxFill) and espObj.BoxFill then
+                    espObj.BoxFill.Position = UDim2.new(0, x, 0, y)
+                    espObj.BoxFill.Size = UDim2.new(0, w, 0, h)
+                    espObj.BoxFill.Visible = true
+
+                    local c1 = getSetting("BoxFillCustomColor1", ESPSettings.BoxFillCustomColor1) or getSetting("BoxCustomColor1", ESPSettings.BoxCustomColor1)
+                    local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2) or getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2)
+                    local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3) or getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3)
+
+                    local baseRotation = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation) and (RotationAngle % 360) or -90
+                    local rad = math.rad(baseRotation % 360)
+                    local absSin = math.abs(math.sin(rad))
+                    local absCos = math.abs(math.cos(rad))
+                    local perpSpan = w * absSin + h * absCos
+                    local averageSpan = (2 / math.pi) * (w + h)
+                    if averageSpan == 0 then averageSpan = 1 end
+                    local multiplier = perpSpan / averageSpan
+                    local effectiveSpeed = AUTOROTATE_SPEED * multiplier
+
+                    espObj.GradientAngle = (espObj.GradientAngle or 0)
+                    espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                    espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle) % 360
+                    if espObj.Player and espObj.Player.UserId then
+                        PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
+                    end
+
+                    -- Three-stop fill gradient
+                    local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
+                    local gc2 = c2 or ESPSettings.BoxFillColor or gc1
+                    local gc3 = c3 or ESPSettings.BoxFillColor or gc2
+                    espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                    espObj.BoxFill.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
+                    espObj.BoxFill.BackgroundColor3 = Color3.new(1, 1, 1)
+                else
+                    if espObj.BoxFill then espObj.BoxFill.Visible = false end
                 end
                 
                 -- Health bar
