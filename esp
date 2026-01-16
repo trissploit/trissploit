@@ -40,13 +40,13 @@ if not ESPHolder.Parent then
 end
 
 local ESPSettings = {
-    Enabled = true,
+    Enabled = false,
     MaxDistance = 1500,
     
     PlayerOverrides = {},
     
     -- Box animation settings
-    AnimateBoxRotation = true,
+    AnimateBoxRotation = false,
     BoxRotationSpeed = 300,
     
     -- Filtering
@@ -59,13 +59,13 @@ local ESPSettings = {
     CustomTeamObjects = {},
     
     -- Display settings
-    ShowName = true,
+    ShowName = false,
     -- Name display mode: "Name" | "DisplayName" | "Both"
     -- "Name" shows the Roblox username, "DisplayName" shows the player's display name,
     -- "Both" shows `DisplayName (Name)`
     NameMode = "DisplayName",
-    ShowHealthText = true,
-    ShowDistance = true,
+    ShowHealthText = false,
+    ShowDistance = false,
     
     -- Gradient settings (autorotate enabled internally)
     -- NOTE: UI gradient autorotation is handled internally; GUI animation controls removed
@@ -81,14 +81,14 @@ local ESPSettings = {
     BoxFillCustomColor3 = Color3.fromRGB(255, 0, 212),
     
     -- Box settings
-    Boxes = true,
+    Boxes = false,
     BoxType = "Square",
     BoxColor = Color3.fromRGB(0, 170, 255),
     Thickness = 2,
     BoxOutlineColor = Color3.new(0, 0, 0),
     
     -- Box fill
-    BoxFill = true,
+    BoxFill = false,
     BoxFillColor = Color3.fromRGB(0, 170, 255),
     BoxFillTransparency = 0.5,
     
@@ -124,6 +124,9 @@ local ESPSettings = {
     FillTransparency = 0.5,
     OutlineTransparency = 0,
 }
+
+-- Track last-known enabled state so we can remove/recreate ESP objects on toggle
+local LastEnabled = ESPSettings.Enabled
 
 -- Spin integrator & constants
 local AUTOROTATE_SPEED = 60 -- degrees per second for fill gradient
@@ -495,6 +498,23 @@ local function updateESP(deltaTime)
     PERSIST.SpinAngle = SpinAngle
     -- Note: gradient autorotation will be integrated per-object below using deltaTime
 
+    -- handle global enabled/disabled transitions: remove/recreate objects when user toggles
+    local currentEnabled = ESPSettings.Enabled
+    if not currentEnabled and LastEnabled then
+        for player, espObj in pairs(ESPObjects) do
+            removeESP(espObj)
+            ESPObjects[player] = nil
+        end
+        LastEnabled = currentEnabled
+        return
+    elseif currentEnabled and not LastEnabled then
+        -- re-add ESP objects for current players
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then addESP(p) end
+        end
+        LastEnabled = currentEnabled
+    end
+
     for player, espObj in pairs(ESPObjects) do
         pcall(function()
             -- per-player setting accessor: checks ESPSettings.PlayerOverrides by UserId or Name
@@ -511,9 +531,9 @@ local function updateESP(deltaTime)
                 return default
             end
 
-            if not shouldShowPlayer(player) then 
-                hideESP(espObj) 
-                return 
+            if not shouldShowPlayer(player) then
+                hideESP(espObj)
+                return
             end
             
             local char = player.Character
@@ -570,17 +590,17 @@ local function updateESP(deltaTime)
                     espObj.Weapon.Visible = false
                 end
                 
-                -- Box
-                if getSetting("Boxes", ESPSettings.Boxes) and espObj.Box then
+                -- Box (allow BoxFill to work independently of Boxes)
+                if (getSetting("Boxes", ESPSettings.Boxes) or getSetting("BoxFill", ESPSettings.BoxFill)) and espObj.Box then
                     if ESPSettings.BoxType == "Square" then
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
                         
-                        -- Update gradient + fill (use per-player overrides when present)
-                        local c1 = getSetting("BoxFillCustomColor1") or getSetting("BoxCustomColor1")
-                        local c2 = getSetting("BoxFillCustomColor2") or getSetting("BoxCustomColor2")
-                        local c3 = getSetting("BoxFillCustomColor3") or getSetting("BoxCustomColor3")
+                        -- Update gradient + fill
+                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
+                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
+                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
                         -- Base rotation for the gradient: box rotation (if enabled) plus internal autorotation (time-based)
                         local baseRotation = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation) and (RotationAngle % 360) or -90
                         -- Compensate gradient angular velocity by the projected perpendicular span
@@ -607,33 +627,32 @@ local function updateESP(deltaTime)
                             PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
                         end
 
-                        -- Three-stop fill gradient — apply configured stops if present
-                        if c1 and c2 and c3 then
-                            espObj.BoxGradient.Color = createGradientSequence(c1, c2, c3)
-                            espObj.BoxGradient.Enabled = (getSetting("BoxFill", ESPSettings.BoxFill) == true)
-                        end
-
+                        -- Three-stop fill gradient — restore full custom stops
+                        local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
+                        local gc2 = c2 or ESPSettings.BoxFillColor or gc1
+                        local gc3 = c3 or ESPSettings.BoxFillColor or gc2
+                        espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                        espObj.BoxGradient.Enabled = (getSetting("BoxFill", ESPSettings.BoxFill) == true)
 
                         -- Box fill transparency and base color (base color uses middle stop)
                         if getSetting("BoxFill", ESPSettings.BoxFill) then
                             espObj.Box.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
+                            -- Leave BackgroundColor neutral so the UIGradient shows all three stops
                             espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
                         else
                             espObj.Box.BackgroundTransparency = 1
                         end
                         
-                        -- Outline color (use configured outline color if provided)
-                        local outlineCol = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor)
-                        if outlineCol then espObj.BoxOutline.Color = outlineCol end
+                        -- Outline color (use configured outline color or default)
+                        espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
                         espObj.BoxOutline.Thickness = 1
                         -- If an outline gradient is desired, enable and set it to the box custom colors
-                        local oc1 = getSetting("BoxCustomColor1")
-                        local oc2 = getSetting("BoxCustomColor2")
-                        local oc3 = getSetting("BoxCustomColor3")
-                        if oc1 and oc2 and oc3 then
-                            espObj.OutlineGradient.Color = createGradientSequence(oc1, oc2, oc3)
-                            espObj.OutlineGradient.Enabled = false
-                        end
+                        espObj.OutlineGradient.Color = createGradientSequence(
+                            ESPSettings.BoxCustomColor1 or ESPSettings.BoxColor,
+                            ESPSettings.BoxCustomColor2 or ESPSettings.BoxColor,
+                            ESPSettings.BoxCustomColor3 or ESPSettings.BoxColor
+                        )
+                        espObj.OutlineGradient.Enabled = false
                         
                         -- Hide corners for square mode
                         for _, corner in ipairs(espObj.Corners) do
@@ -735,7 +754,7 @@ local function updateESP(deltaTime)
                     local hc3 = getSetting("HealthBarColor3", ESPSettings.HealthBarColor3) or Color3.fromRGB(0, 255, 0)
 
                     -- Setup blending/sampling helper (used by static and animated modes)
-                    local blendMode = ESPSettings.HealthGradientBlend or "linear"
+                    local blendMode = getSetting("HealthGradientBlend", ESPSettings.HealthGradientBlend) or "linear"
                     local function applyBlend(t)
                         t = math.clamp(t, 0, 1)
                         if blendMode == "smooth" then
@@ -762,7 +781,7 @@ local function updateESP(deltaTime)
                     end
 
                     -- If animation is disabled, use a static 3-stop sequence
-                    if not ESPSettings.HealthGradientEnabled then
+                    if not getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled) then
                         espObj.HealthBarGradient.Color = createGradientSequence(hc1, hc2, hc3)
                     else
                         -- fixed sample density for blending/smoothness (12 samples)
@@ -785,8 +804,14 @@ local function updateESP(deltaTime)
                     local samplePhase = getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled) and (espObj.HealthGradientPhase or 0) or 0
                     local samplePosForText = (healthRatio - samplePhase) % 1
                     local healthTextColor = sampleBase(samplePosForText)
-                    -- Force health bar outline to 1px black (do not change)
-                    espObj.HealthBarBG.BorderSizePixel = 1
+                    -- Health bar outline resizing (toggleable)
+                    local outlineFollow = getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow)
+                    if outlineFollow then
+                        local computed = math.max(1, math.floor(barHeight * 0.05))
+                        espObj.HealthBarBG.BorderSizePixel = computed
+                    else
+                        espObj.HealthBarBG.BorderSizePixel = 1
+                    end
                     espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
 
                     local thickness = getSetting("HealthBarThickness", ESPSettings.HealthBarThickness) or 2
@@ -824,7 +849,7 @@ local function updateESP(deltaTime)
                 end
                 
                 -- Tracer
-                if getSetting("Tracers", ESPSettings.Tracers) and espObj.Tracer then
+                if ESPSettings.Tracers and espObj.Tracer then
                     local tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
                     if ESPSettings.TracerFrom == "Top" then
                         tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, 0)
@@ -834,23 +859,17 @@ local function updateESP(deltaTime)
                     
                     local tracerTo = Vector2.new(x + w/2, y + h/2)
                     positionTracer(espObj.Tracer, tracerFrom.X, tracerFrom.Y, tracerTo.X, tracerTo.Y, ESPSettings.TracerThickness)
-                    local tracerCol = getSetting("TracerColor", ESPSettings.TracerColor)
-                    if tracerCol then espObj.Tracer.BackgroundColor3 = tracerCol end
+                    espObj.Tracer.BackgroundColor3 = ESPSettings.TracerColor
                     espObj.Tracer.Visible = true
                 end
                 
                 -- Chams
-                if getSetting("Highlight", ESPSettings.Highlight) and espObj.Highlight then
+                if ESPSettings.Highlight and espObj.Highlight then
                     espObj.Highlight.Adornee = char
-                    local cham = getSetting("GlobalChamColor", ESPSettings.GlobalChamColor)
-                    if cham then
-                        espObj.Highlight.FillColor = cham
-                        espObj.Highlight.OutlineColor = cham
-                    end
-                    local ft = getSetting("FillTransparency", ESPSettings.FillTransparency)
-                    if ft ~= nil then espObj.Highlight.FillTransparency = ft end
-                    local ot = getSetting("OutlineTransparency", ESPSettings.OutlineTransparency)
-                    if ot ~= nil then espObj.Highlight.OutlineTransparency = ot end
+                    espObj.Highlight.FillColor = ESPSettings.GlobalChamColor
+                    espObj.Highlight.OutlineColor = ESPSettings.GlobalChamColor
+                    espObj.Highlight.FillTransparency = ESPSettings.FillTransparency
+                    espObj.Highlight.OutlineTransparency = ESPSettings.OutlineTransparency
                     espObj.Highlight.Enabled = true
                 end
             else
