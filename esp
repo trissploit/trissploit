@@ -592,13 +592,19 @@ local function updateESP(deltaTime)
                     espObj.Weapon.Visible = false
                 end
                 
-                -- Box (allow BoxFill to work even when Boxes is disabled)
-                if (getSetting("Boxes", ESPSettings.Boxes) or getSetting("BoxFill", ESPSettings.BoxFill)) and espObj.Box then
-                    if ESPSettings.BoxType == "Square" then
+                -- Box: separate concerns for outline (Boxes) and fill (BoxFill)
+                if espObj.Box then
+                    local boxesEnabled = getSetting("Boxes", ESPSettings.Boxes)
+                    local fillEnabled = getSetting("BoxFill", ESPSettings.BoxFill)
+                    if boxesEnabled or fillEnabled then
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
-                        
+                    else
+                        espObj.Box.Visible = false
+                    end
+
+                    if ESPSettings.BoxType == "Square" then
                         -- Update gradient + fill
                         local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
                         local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
@@ -634,22 +640,21 @@ local function updateESP(deltaTime)
                         local gc2 = c2 or ESPSettings.BoxFillColor or gc1
                         local gc3 = c3 or ESPSettings.BoxFillColor or gc2
                         espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
-                        espObj.BoxGradient.Enabled = (ESPSettings.BoxFill == true)
-
+                        espObj.BoxGradient.Enabled = fillEnabled
 
                         -- Box fill transparency and base color (base color uses middle stop)
-                        if ESPSettings.BoxFill then
-                            espObj.Box.BackgroundTransparency = math.clamp(ESPSettings.BoxFillTransparency or 0.5, 0, 1)
+                        if fillEnabled then
+                            espObj.Box.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
                             -- Leave BackgroundColor neutral so the UIGradient shows all three stops
                             espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
                         else
                             espObj.Box.BackgroundTransparency = 1
                         end
-                        
+
                         -- Outline color (use configured outline color or default)
                         espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
-                        -- Only show outline thickness when full Boxes are enabled; otherwise keep minimal/hidden
-                        espObj.BoxOutline.Thickness = getSetting("Boxes", ESPSettings.Boxes) and (ESPSettings.Thickness or 1) or 0
+                        -- Force box outline to 1px when visible, otherwise hide
+                        espObj.BoxOutline.Thickness = (boxesEnabled or fillEnabled) and 1 or 0
                         -- If an outline gradient is desired, enable and set it to the box custom colors
                         espObj.OutlineGradient.Color = createGradientSequence(
                             ESPSettings.BoxCustomColor1 or ESPSettings.BoxColor,
@@ -663,7 +668,8 @@ local function updateESP(deltaTime)
                             corner.Visible = false
                         end
                     elseif getSetting("BoxType", ESPSettings.BoxType) == "Corner" then
-                        espObj.Box.Visible = false
+                        -- When corner mode, don't show the full box background; only show corners and outline if Boxes enabled
+                        espObj.Box.Visible = fillEnabled -- keep box background only if fill enabled
                         
                         -- Corner boxes
                         local cornerLen = math.min(w, h) * 0.25
@@ -671,38 +677,38 @@ local function updateESP(deltaTime)
                         -- Top left
                         espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
                         espObj.Corners[1].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[1].Visible = true
+                        espObj.Corners[1].Visible = getSetting("Boxes", ESPSettings.Boxes)
                         
                         espObj.Corners[2].Position = UDim2.new(0, x, 0, y)
                         espObj.Corners[2].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[2].Visible = true
+                        espObj.Corners[2].Visible = getSetting("Boxes", ESPSettings.Boxes)
                         
                         -- Top right
                         espObj.Corners[3].Position = UDim2.new(0, x + w - cornerLen, 0, y)
                         espObj.Corners[3].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[3].Visible = true
+                        espObj.Corners[3].Visible = getSetting("Boxes", ESPSettings.Boxes)
                         
                         espObj.Corners[4].Position = UDim2.new(0, x + w - 1, 0, y)
                         espObj.Corners[4].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[4].Visible = true
+                        espObj.Corners[4].Visible = getSetting("Boxes", ESPSettings.Boxes)
                         
                         -- Bottom left
                         espObj.Corners[5].Position = UDim2.new(0, x, 0, y + h - 1)
                         espObj.Corners[5].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[5].Visible = true
+                        espObj.Corners[5].Visible = getSetting("Boxes", ESPSettings.Boxes)
                         
                         espObj.Corners[6].Position = UDim2.new(0, x, 0, y + h - cornerLen)
                         espObj.Corners[6].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[6].Visible = true
+                        espObj.Corners[6].Visible = getSetting("Boxes", ESPSettings.Boxes)
                         
                         -- Bottom right
                         espObj.Corners[7].Position = UDim2.new(0, x + w - cornerLen, 0, y + h - 1)
                         espObj.Corners[7].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[7].Visible = true
+                        espObj.Corners[7].Visible = getSetting("Boxes", ESPSettings.Boxes)
                         
                         espObj.Corners[8].Position = UDim2.new(0, x + w - 1, 0, y + h - cornerLen)
                         espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[8].Visible = true
+                        espObj.Corners[8].Visible = getSetting("Boxes", ESPSettings.Boxes)
                     end
                 end
                 
