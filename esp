@@ -587,6 +587,8 @@ local function updateESP(deltaTime)
                     espObj.Name.Text = nameText
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
                     espObj.Name.Visible = true
+                else
+                    if espObj.Name then espObj.Name.Visible = false end
                 end
                 
                 -- Distance
@@ -594,6 +596,8 @@ local function updateESP(deltaTime)
                     espObj.Distance.Text = string.format("[%d st]", math.floor(Dist))
                     espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
                     espObj.Distance.Visible = true
+                else
+                    if espObj.Distance then espObj.Distance.Visible = false end
                 end
                 
                 -- Weapon (placeholder)
@@ -698,7 +702,7 @@ local function updateESP(deltaTime)
                 
                 -- Health bar
                     -- Custom text ESP: create/update right-side stacked labels
-                    if espObj.CustomTexts and #espObj.CustomTexts > 0 then
+                        if espObj.CustomTexts and #espObj.CustomTexts > 0 then
                         local startX = x + w + 6 -- place to the right of the box
                         local lineHeight = 16
                         for i, txt in ipairs(espObj.CustomTexts) do
@@ -723,7 +727,12 @@ local function updateESP(deltaTime)
                         for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
                             if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
                         end
-                    end
+                        else
+                            -- hide all custom text labels when none configured
+                            if espObj.CustomTextLabels then
+                                for _, lbl in ipairs(espObj.CustomTextLabels) do lbl.Visible = false end
+                            end
+                        end
 
                     if getSetting("HealthBarEnabled", ESPSettings.HealthBarEnabled) and espObj.HealthBar then
                     local healthRatio = 1
@@ -798,8 +807,13 @@ local function updateESP(deltaTime)
                     local samplePhase = ESPSettings.HealthGradientEnabled and (espObj.HealthGradientPhase or 0) or 0
                     local samplePosForText = (healthRatio - samplePhase) % 1
                     local healthTextColor = sampleBase(samplePosForText)
-                    -- Force health bar outline to 1px black (do not change)
-                    espObj.HealthBarBG.BorderSizePixel = 1
+                    -- Health bar outline sizing (can follow fill height when enabled)
+                    if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
+                        local outlineThickness = math.clamp(math.max(1, math.floor(barHeight / 10)), 1, 6)
+                        espObj.HealthBarBG.BorderSizePixel = outlineThickness
+                    else
+                        espObj.HealthBarBG.BorderSizePixel = 1
+                    end
                     espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
 
                     local thickness = ESPSettings.HealthBarThickness or 2
@@ -823,7 +837,7 @@ local function updateESP(deltaTime)
                     espObj.HealthBar.Visible = true
 
                     -- Health text: place near the top of the filled portion and match gradient
-                    if ESPSettings.ShowHealthText and espObj.HealthText then
+                    if getSetting("ShowHealthText", ESPSettings.ShowHealthText) and espObj.HealthText then
                         local healthPercent = math.floor((healthRatio or 0) * 100)
                         espObj.HealthText.Text = string.format("%d%%", healthPercent)
                         if ESPSettings.HealthBarPosition == "Right" then
@@ -833,7 +847,15 @@ local function updateESP(deltaTime)
                         end
                         espObj.HealthText.TextColor3 = healthTextColor or espObj.HealthText.TextColor3
                         espObj.HealthText.Visible = true
+                    else
+                        if espObj.HealthText then espObj.HealthText.Visible = false end
                     end
+                end
+                else
+                    -- HealthBar disabled: ensure elements hidden
+                    if espObj.HealthBar then espObj.HealthBar.Visible = false end
+                    if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
+                    if espObj.HealthText then espObj.HealthText.Visible = false end
                 end
                 
                 -- Tracer
