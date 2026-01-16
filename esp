@@ -552,8 +552,6 @@ local function updateESP(deltaTime)
                         nameText = (player.Name or player.DisplayName or "")
                     end
                     espObj.Name.Text = nameText
-                    -- Name color (support per-player override)
-                    espObj.Name.TextColor3 = getSetting("NameColor", espObj.Name.TextColor3)
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
                     espObj.Name.Visible = true
                 end
@@ -562,7 +560,6 @@ local function updateESP(deltaTime)
                 if getSetting("ShowDistance", ESPSettings.ShowDistance) and espObj.Distance then
                     espObj.Distance.Text = string.format("[%d st]", math.floor(Dist))
                     espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
-                    espObj.Distance.TextColor3 = getSetting("DistanceColor", espObj.Distance.TextColor3)
                     espObj.Distance.Visible = true
                 end
                 
@@ -581,9 +578,9 @@ local function updateESP(deltaTime)
                         espObj.Box.Visible = true
                         
                         -- Update gradient + fill
-                        local c1 = getSetting("BoxFillCustomColor1", ESPSettings.BoxFillCustomColor1) or getSetting("BoxCustomColor1", ESPSettings.BoxCustomColor1)
-                        local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2) or getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2)
-                        local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3) or getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3)
+                        local c1 = ESPSettings.BoxFillCustomColor1 or ESPSettings.BoxCustomColor1
+                        local c2 = ESPSettings.BoxFillCustomColor2 or ESPSettings.BoxCustomColor2
+                        local c3 = ESPSettings.BoxFillCustomColor3 or ESPSettings.BoxCustomColor3
                         -- Base rotation for the gradient: box rotation (if enabled) plus internal autorotation (time-based)
                         local baseRotation = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation) and (RotationAngle % 360) or -90
                         -- Compensate gradient angular velocity by the projected perpendicular span
@@ -615,12 +612,12 @@ local function updateESP(deltaTime)
                         local gc2 = c2 or ESPSettings.BoxFillColor or gc1
                         local gc3 = c3 or ESPSettings.BoxFillColor or gc2
                         espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
-                        espObj.BoxGradient.Enabled = (getSetting("BoxFill", ESPSettings.BoxFill) == true)
+                        espObj.BoxGradient.Enabled = (ESPSettings.BoxFill == true)
 
 
                         -- Box fill transparency and base color (base color uses middle stop)
-                        if getSetting("BoxFill", ESPSettings.BoxFill) then
-                            espObj.Box.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
+                        if ESPSettings.BoxFill then
+                            espObj.Box.BackgroundTransparency = math.clamp(ESPSettings.BoxFillTransparency or 0.5, 0, 1)
                             -- Leave BackgroundColor neutral so the UIGradient shows all three stops
                             espObj.Box.BackgroundColor3 = Color3.new(1, 1, 1)
                         else
