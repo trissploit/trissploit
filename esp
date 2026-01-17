@@ -1086,6 +1086,35 @@ getgenv().TrisESP = {
         ESPSettings.CustomTeamObjects = {}
         return true
     end,
+    -- Apply per-player settings (merge into PlayerOverrides)
+    AddPlayerESP = function(playerRef, settings)
+        if not settings then return false end
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
+        local idKey = tostring(p.UserId)
+        ESPSettings.PlayerOverrides[idKey] = ESPSettings.PlayerOverrides[idKey] or {}
+        for k, v in pairs(settings) do
+            ESPSettings.PlayerOverrides[idKey][k] = v
+        end
+        return true
+    end,
+
+    -- Remove per-player override for a player
+    RemovePlayerESP = function(playerRef)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
+        local idKey = tostring(p.UserId)
+        ESPSettings.PlayerOverrides[idKey] = nil
+        return true
+    end,
+
+    -- Clear all player overrides
+    ClearPlayerOverrides = function()
+        ESPSettings.PlayerOverrides = {}
+        return true
+    end,
 }
 
 print("TrisESP (ScreenGui) loaded successfully!")
