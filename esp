@@ -799,28 +799,23 @@ local function updateESP(deltaTime)
                             end
                         end
 
-                        -- If animation is disabled, use a static 3-stop sequence
-                        if not healthAnim then
-                            espObj.HealthBarGradient.Color = createGradientSequence(hc1, hc2, hc3)
-                        else
-                            -- fixed sample density for blending/smoothness (12 samples)
-                            local sampleCount = 12
-                            local samples = {}
-                            for i = 0, (sampleCount - 1) do
-                                local basePos = i / (sampleCount - 1)
-                                -- subtract phase so sampled colors appear to move upward
-                                local samplePos = (basePos - espObj.HealthGradientPhase) % 1
-                                samples[i+1] = { pos = basePos, color = sampleBase(samplePos) }
-                            end
-                            local cs = {}
-                            for _, s in ipairs(samples) do
-                                table.insert(cs, ColorSequenceKeypoint.new(s.pos, s.color))
-                            end
-                            espObj.HealthBarGradient.Color = ColorSequence.new(cs)
+                        -- Build the health gradient from sampled keypoints so static and animated modes match
+                        local sampleCount = 12
+                        local samples = {}
+                        for i = 0, (sampleCount - 1) do
+                            local basePos = i / (sampleCount - 1)
+                            -- subtract phase so sampled colors appear to move upward
+                            local samplePos = (basePos - (espObj.HealthGradientPhase or 0)) % 1
+                            samples[i+1] = { pos = basePos, color = sampleBase(samplePos) }
                         end
+                        local cs = {}
+                        for _, s in ipairs(samples) do
+                            table.insert(cs, ColorSequenceKeypoint.new(s.pos, s.color))
+                        end
+                        espObj.HealthBarGradient.Color = ColorSequence.new(cs)
 
                         -- Determine a color sample for the health text (match gradient at filled/top position)
-                        local samplePhase = healthAnim and (espObj.HealthGradientPhase or 0) or 0
+                        local samplePhase = (espObj.HealthGradientPhase or 0)
                         local samplePosForText = (healthRatio - samplePhase) % 1
                         local healthTextColor = sampleBase(samplePosForText)
                         -- Force health bar outline to 1px black (do not change)
