@@ -8185,145 +8185,6 @@ function Library:CreateWindow(WindowInfo)
             return Tab:AddGroupbox({ Side = 2, Name = Name, IconName = IconName })
         end
 
-        function Tab:AddESPPreview(Info)
-            Info = Library:Validate(Info or {}, {
-                Side = 2,
-                Height = 300,
-                Name = "ESP Preview",
-                IconName = nil,
-            })
-
-            local PreviewGroupbox = Tab:AddGroupbox({ Side = Info.Side, Name = Info.Name, IconName = Info.IconName })
-            
-            local ViewportFrame = New("ViewportFrame", {
-                BackgroundColor3 = "MainColor",
-                BorderSizePixel = 0,
-                Size = UDim2.new(1, 0, 0, Info.Height),
-                Parent = PreviewGroupbox.Container,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = ViewportFrame,
-            })
-            Library:AddOutline(ViewportFrame)
-
-            local Camera = Instance.new("Camera")
-            Camera.Parent = ViewportFrame
-            ViewportFrame.CurrentCamera = Camera
-
-            local CharacterModel
-            local UpdateConnection
-
-            local function UpdateCamera()
-                if CharacterModel and CharacterModel:FindFirstChild("Head") then
-                    local Head = CharacterModel.Head
-                    local HumanoidRootPart = CharacterModel:FindFirstChild("HumanoidRootPart")
-                    
-                    if HumanoidRootPart then
-                        Camera.CFrame = CFrame.new(
-                            HumanoidRootPart.Position + Vector3.new(0, 1, 5),
-                            HumanoidRootPart.Position + Vector3.new(0, 1, 0)
-                        )
-                    end
-                end
-            end
-
-            local function LoadCharacter()
-                if CharacterModel then
-                    CharacterModel:Destroy()
-                end
-
-                local Character = Library.LocalPlayer.Character
-                if not Character then
-                    return
-                end
-                local ok, cloned = pcall(function()
-                    return Character:Clone()
-                end)
-                if not ok or not cloned then
-                    return
-                end
-
-                CharacterModel = cloned
-
-                -- Safely iterate descendants and clean up scripts/humanoids
-                local descendants = {}
-                if CharacterModel and CharacterModel.GetDescendants then
-                    descendants = CharacterModel:GetDescendants()
-                end
-
-                local hrpPos = nil
-                for _, Obj in ipairs(descendants) do
-                    if not Obj then
-                        continue
-                    end
-                    if Obj:IsA("Script") or Obj:IsA("LocalScript") or Obj:IsA("ModuleScript") then
-                        Obj:Destroy()
-                    elseif Obj:IsA("Humanoid") then
-                        Obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-                    elseif Obj:IsA("BasePart") then
-                        Obj.Anchored = true
-                        Obj.CanCollide = false
-                        if not hrpPos and Obj.Name == "HumanoidRootPart" then
-                            hrpPos = Obj.Position
-                        end
-                    end
-                end
-
-                -- Reposition cloned model near origin so camera can view it inside the viewport
-                if hrpPos then
-                    for _, Obj in ipairs(descendants) do
-                        if Obj and Obj:IsA("BasePart") then
-                            Obj.CFrame = Obj.CFrame - hrpPos + Vector3.new(0, 1, 0)
-                        end
-                    end
-                end
-
-                CharacterModel.Parent = ViewportFrame
-                UpdateCamera()
-            end
-
-            local ESPPreview = {
-                Viewport = ViewportFrame,
-                Camera = Camera,
-                CharacterModel = CharacterModel,
-                Groupbox = PreviewGroupbox,
-            }
-
-            function ESPPreview:Refresh()
-                LoadCharacter()
-            end
-
-            function ESPPreview:GetCharacter()
-                return CharacterModel
-            end
-
-            function ESPPreview:Destroy()
-                if UpdateConnection then
-                    UpdateConnection:Disconnect()
-                end
-                if CharacterModel then
-                    CharacterModel:Destroy()
-                end
-                PreviewGroupbox.BoxHolder:Destroy()
-            end
-
-            -- Load character initially
-            task.defer(LoadCharacter)
-
-            -- Reload character when it respawns
-            Library:GiveSignal(Library.LocalPlayer.CharacterAdded:Connect(function()
-                if Tab == Library.ActiveTab then
-                    task.wait(0.1)
-                    LoadCharacter()
-                end
-            end))
-
-            PreviewGroupbox:Resize()
-            
-            return ESPPreview
-        end
-
         function Tab:AddTabbox(Info)
             local BoxHolder = New("Frame", {
                 AutomaticSize = Enum.AutomaticSize.Y,
@@ -8535,6 +8396,14 @@ function Library:CreateWindow(WindowInfo)
             if Library.Searching then
                 Library:UpdateSearch(Library.SearchText)
             end
+
+            -- Show ESP Preview if this tab has it enabled
+            if Tab.ESPPreviewEnabled and Library.ESPPreviewHolder then
+                Library.ESPPreviewHolder.Visible = true
+                if Library.UpdateESPPreviewCharacter then
+                    Library.UpdateESPPreviewCharacter()
+                end
+            end
         end
 
         function Tab:Hide()
@@ -8558,6 +8427,158 @@ function Library:CreateWindow(WindowInfo)
             CurrentTabInfo.Visible = false
 
             Library.ActiveTab = nil
+
+            -- Hide ESP Preview if this tab has it enabled
+            if Tab.ESPPreviewEnabled and Library.ESPPreviewHolder then
+                Library.ESPPreviewHolder.Visible = false
+            end
+        end
+
+        --// ESP Preview \\--
+        Tab.ESPPreviewEnabled = false
+
+        function Tab:SetESPPreview(Enabled)
+            Tab.ESPPreviewEnabled = Enabled == true
+
+            -- Create ESP Preview holder if it doesn't exist
+            if not Library.ESPPreviewHolder then
+                local PreviewHolder = New("Frame", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    BackgroundColor3 = "BackgroundColor",
+                    Position = UDim2.new(1, -6, 0.5, 0),
+                    Size = UDim2.fromOffset(180, 280),
+                    Visible = false,
+                    ZIndex = 10,
+                    Parent = ScreenGui,
+                })
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, Library.CornerRadius),
+                    Parent = PreviewHolder,
+                })
+                Library:AddOutline(PreviewHolder)
+                Library:MakeDraggable(PreviewHolder, PreviewHolder, true)
+
+                local PreviewTitle = New("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(0, 0),
+                    Size = UDim2.new(1, 0, 0, 30),
+                    Text = "ESP Preview",
+                    TextSize = 14,
+                    Parent = PreviewHolder,
+                })
+
+                Library:MakeLine(PreviewHolder, {
+                    Position = UDim2.fromOffset(0, 30),
+                    Size = UDim2.new(1, 0, 0, 1),
+                })
+
+                local ViewportHolder = New("Frame", {
+                    BackgroundColor3 = "MainColor",
+                    Position = UDim2.fromOffset(6, 36),
+                    Size = UDim2.new(1, -12, 1, -42),
+                    Parent = PreviewHolder,
+                })
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, Library.CornerRadius),
+                    Parent = ViewportHolder,
+                })
+
+                local Viewport = New("ViewportFrame", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.fromScale(1, 1),
+                    Parent = ViewportHolder,
+                })
+
+                local WorldModel = Instance.new("WorldModel")
+                WorldModel.Parent = Viewport
+
+                local Camera = Instance.new("Camera")
+                Camera.FieldOfView = 50
+                Camera.Parent = Viewport
+                Viewport.CurrentCamera = Camera
+
+                Library.ESPPreviewHolder = PreviewHolder
+                Library.ESPPreviewViewport = Viewport
+                Library.ESPPreviewWorldModel = WorldModel
+                Library.ESPPreviewCamera = Camera
+                Library.ESPPreviewCharacter = nil
+
+                -- Function to update the character model
+                local function UpdateCharacterModel()
+                    if Library.ESPPreviewCharacter then
+                        Library.ESPPreviewCharacter:Destroy()
+                        Library.ESPPreviewCharacter = nil
+                    end
+
+                    local Character = LocalPlayer.Character
+                    if not Character then return end
+
+                    local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+                    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                    if not HumanoidRootPart or not Humanoid then return end
+
+                    -- Clone the character
+                    local ClonedCharacter = Instance.new("Model")
+                    ClonedCharacter.Name = "ESPPreviewCharacter"
+
+                    for _, Part in ipairs(Character:GetDescendants()) do
+                        if Part:IsA("BasePart") or Part:IsA("Decal") or Part:IsA("Texture") then
+                            local Clone = Part:Clone()
+                            if Clone:IsA("BasePart") then
+                                Clone.Anchored = true
+                                Clone.CanCollide = false
+                                Clone.CastShadow = false
+                            end
+                            Clone.Parent = ClonedCharacter
+                        elseif Part:IsA("Accessory") then
+                            local AccessoryClone = Part:Clone()
+                            for _, Desc in ipairs(AccessoryClone:GetDescendants()) do
+                                if Desc:IsA("BasePart") then
+                                    Desc.Anchored = true
+                                    Desc.CanCollide = false
+                                    Desc.CastShadow = false
+                                end
+                            end
+                            AccessoryClone.Parent = ClonedCharacter
+                        end
+                    end
+
+                    -- Clone Humanoid for animations display
+                    local HumanoidClone = Humanoid:Clone()
+                    HumanoidClone.Parent = ClonedCharacter
+
+                    ClonedCharacter.PrimaryPart = ClonedCharacter:FindFirstChild("HumanoidRootPart")
+                    ClonedCharacter.Parent = WorldModel
+
+                    Library.ESPPreviewCharacter = ClonedCharacter
+
+                    -- Position camera to view the character
+                    if ClonedCharacter.PrimaryPart then
+                        local CharPos = ClonedCharacter.PrimaryPart.Position
+                        Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
+                    end
+                end
+
+                -- Update character when it changes
+                Library:GiveSignal(LocalPlayer.CharacterAdded:Connect(function()
+                    task.wait(0.5)
+                    if Library.ESPPreviewHolder and Library.ESPPreviewHolder.Visible then
+                        UpdateCharacterModel()
+                    end
+                end))
+
+                Library.UpdateESPPreviewCharacter = UpdateCharacterModel
+            end
+
+            -- Show/hide based on current tab
+            if Tab.ESPPreviewEnabled and Library.ActiveTab == Tab then
+                Library.ESPPreviewHolder.Visible = true
+                if Library.UpdateESPPreviewCharacter then
+                    Library.UpdateESPPreviewCharacter()
+                end
+            elseif Library.ESPPreviewHolder then
+                Library.ESPPreviewHolder.Visible = false
+            end
         end
 
         --// Execution \\--
