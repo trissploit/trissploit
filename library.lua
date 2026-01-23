@@ -8228,85 +8228,58 @@ function Library:CreateWindow(WindowInfo)
                 end
             end
 
-            local function safeGetDescendants(inst)
-                local ok, res = pcall(function() return inst:GetDescendants() end)
-                if ok and res then
-                    return res
-                end
-
-                local out = {}
-                local function recurse(node)
-                    for _, c in ipairs(node:GetChildren()) do
-                        table.insert(out, c)
-                        recurse(c)
-                    end
-                end
-                recurse(inst)
-                return out
-            end
-
             local function LoadCharacter()
                 if CharacterModel then
-                    pcall(function() CharacterModel:Destroy() end)
-                    CharacterModel = nil
+                    CharacterModel:Destroy()
                 end
 
-                local Character = Library.LocalPlayer and Library.LocalPlayer.Character
+                local Character = Library.LocalPlayer.Character
                 if not Character then
                     return
                 end
-
-                -- Clone the character safely
-                local ok, cloned = pcall(function() return Character:Clone() end)
+                local ok, cloned = pcall(function()
+                    return Character:Clone()
+                end)
                 if not ok or not cloned then
                     return
                 end
+
                 CharacterModel = cloned
 
-                -- Remove scripts and other unnecessary components (safe)
-                for _, Obj in ipairs(safeGetDescendants(CharacterModel)) do
-                    local ok2, isA = pcall(function() return Obj:IsA("Script") end)
-                    if ok2 and isA then
+                -- Safely iterate descendants and clean up scripts/humanoids
+                local descendants = {}
+                if CharacterModel and CharacterModel.GetDescendants then
+                    descendants = CharacterModel:GetDescendants()
+                end
+
+                local hrpPos = nil
+                for _, Obj in ipairs(descendants) do
+                    if not Obj then
+                        continue
+                    end
+                    if Obj:IsA("Script") or Obj:IsA("LocalScript") or Obj:IsA("ModuleScript") then
                         Obj:Destroy()
-                    else
-                        -- check other types safely
-                        local ok3, isLocal = pcall(function() return Obj:IsA("LocalScript") end)
-                        if ok3 and isLocal then Obj:Destroy() end
-                        local ok4, isModule = pcall(function() return Obj:IsA("ModuleScript") end)
-                        if ok4 and isModule then Obj:Destroy() end
-                        local ok5, isHum = pcall(function() return Obj:IsA("Humanoid") end)
-                        if ok5 and isHum then
-                            pcall(function() Obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end)
+                    elseif Obj:IsA("Humanoid") then
+                        Obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+                    elseif Obj:IsA("BasePart") then
+                        Obj.Anchored = true
+                        Obj.CanCollide = false
+                        if not hrpPos and Obj.Name == "HumanoidRootPart" then
+                            hrpPos = Obj.Position
                         end
                     end
                 end
 
-                -- Ensure model has no runtime scripts and parent into viewport
-                CharacterModel.Name = "ESPPreviewCharacter"
+                -- Reposition cloned model near origin so camera can view it inside the viewport
+                if hrpPos then
+                    for _, Obj in ipairs(descendants) do
+                        if Obj and Obj:IsA("BasePart") then
+                            Obj.CFrame = Obj.CFrame - hrpPos + Vector3.new(0, 1, 0)
+                        end
+                    end
+                end
+
                 CharacterModel.Parent = ViewportFrame
-
-                -- Position camera to frame the model. Prefer HumanoidRootPart or Head.
-                local primaryPos
-                local hrp = CharacterModel:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    primaryPos = hrp.Position
-                else
-                    local head = CharacterModel:FindFirstChild("Head")
-                    if head then
-                        primaryPos = head.Position
-                    else
-                        -- fallback to model bounding box center
-                        local okbb, cframe, size = pcall(function() return CharacterModel:GetBoundingBox() end)
-                        if okbb and cframe then
-                            primaryPos = cframe.Position
-                        end
-                    end
-                end
-
-                if primaryPos then
-                    Camera.CFrame = CFrame.new(primaryPos + Vector3.new(0, 1.5, 5), primaryPos + Vector3.new(0, 1.5, 0))
-                end
-
                 UpdateCamera()
             end
 
