@@ -55,6 +55,8 @@ local ESPSettings = {
     WhitelistedPlayers = {},
     BlacklistedPlayers = {},
     TeamCheckEnabled = false,
+    -- Show ESP on LocalPlayer (used for preview mode)
+    ShowLocalPlayer = false,
     -- Custom team filters (strings = team names, objects = Team instances)
     CustomTeams = {},
     CustomTeamObjects = {},
@@ -243,7 +245,8 @@ local function isSameTeam(player1, player2)
 end
 
 local function shouldShowPlayer(player)
-    if not player or player == LocalPlayer then return false end
+    if not player then return false end
+    if player == LocalPlayer and not ESPSettings.ShowLocalPlayer then return false end
     if ESPSettings.TeamCheckEnabled then
         -- hide teammates (standard behaviour)
         if isSameTeam(player, LocalPlayer) then
@@ -1155,177 +1158,6 @@ getgenv().TrisESP = {
         ESPSettings.CustomTeams = {}
         ESPSettings.CustomTeamObjects = {}
         return true
-    end,
-
-    -- Create ESP preview for a character model (for use in ViewportFrames)
-    CreatePreviewESP = function(character, parentFrame)
-        if not character or not parentFrame then return nil end
-        
-        local previewESP = {
-            Container = parentFrame,
-            Character = character,
-            Elements = {}
-        }
-        
-        -- Create box outline
-        local box = Instance.new("Frame")
-        box.Name = "PreviewBox"
-        box.BackgroundTransparency = 1
-        box.BorderSizePixel = 0
-        box.Visible = false
-        box.ZIndex = 5
-        box.Parent = parentFrame
-        
-        local boxOutline = Instance.new("UIStroke")
-        boxOutline.Color = ESPSettings.BoxOutlineColor
-        boxOutline.Thickness = 1
-        boxOutline.Transparency = 0
-        boxOutline.LineJoinMode = Enum.LineJoinMode.Miter
-        boxOutline.Parent = box
-        
-        local boxGradient = Instance.new("UIGradient")
-        boxGradient.Enabled = false
-        boxGradient.Rotation = -90
-        boxGradient.Parent = box
-        
-        previewESP.Elements.Box = box
-        previewESP.Elements.BoxOutline = boxOutline
-        previewESP.Elements.BoxGradient = boxGradient
-        
-        -- Create box fill
-        local boxFill = Instance.new("Frame")
-        boxFill.Name = "PreviewBoxFill"
-        boxFill.BackgroundTransparency = 1
-        boxFill.BorderSizePixel = 0
-        boxFill.Visible = false
-        boxFill.ZIndex = 4
-        boxFill.Parent = parentFrame
-        
-        local fillGradient = Instance.new("UIGradient")
-        fillGradient.Enabled = true
-        fillGradient.Rotation = -90
-        fillGradient.Parent = boxFill
-        
-        previewESP.Elements.BoxFill = boxFill
-        previewESP.Elements.FillGradient = fillGradient
-        
-        -- Create health bar background
-        local healthBG = Instance.new("Frame")
-        healthBG.Name = "PreviewHealthBG"
-        healthBG.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        healthBG.BackgroundTransparency = 0
-        healthBG.BorderSizePixel = 1
-        healthBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
-        healthBG.Visible = false
-        healthBG.ZIndex = 6
-        healthBG.Parent = parentFrame
-        
-        local healthBar = Instance.new("Frame")
-        healthBar.Name = "PreviewHealthBar"
-        healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        healthBar.BackgroundTransparency = 0
-        healthBar.BorderSizePixel = 0
-        healthBar.Visible = false
-        healthBar.ZIndex = 7
-        healthBar.Parent = parentFrame
-        
-        local healthGradient = Instance.new("UIGradient")
-        healthGradient.Enabled = true
-        healthGradient.Rotation = -90
-        healthGradient.Parent = healthBar
-        
-        previewESP.Elements.HealthBG = healthBG
-        previewESP.Elements.HealthBar = healthBar
-        previewESP.Elements.HealthGradient = healthGradient
-        
-        -- Update function
-        previewESP.Update = function()
-            if not character or not character.Parent then return end
-            
-            local hrp = character:FindFirstChild("HumanoidRootPart")
-            local humanoid = character:FindFirstChildOfClass("Humanoid")
-            if not hrp or not humanoid then return end
-            
-            -- Get character bounds in viewport
-            local size = character:GetExtentsSize()
-            local cf = hrp.CFrame
-            
-            -- Calculate screen-space box (simplified for viewport)
-            local boxWidth = 100
-            local boxHeight = 150
-            local boxX = parentFrame.AbsoluteSize.X / 2 - boxWidth / 2
-            local boxY = parentFrame.AbsoluteSize.Y / 2 - boxHeight / 2
-            
-            -- Always show box in preview (even if Boxes setting is disabled globally)
-            -- This ensures the preview always displays something
-            box.Position = UDim2.new(0, boxX, 0, boxY)
-            box.Size = UDim2.new(0, boxWidth, 0, boxHeight)
-            box.Visible = true
-            
-            -- Update box gradient (show if Boxes enabled OR always in preview)
-            if ESPSettings.Boxes then
-                boxGradient.Enabled = true
-                boxGradient.Color = createGradientSequence(
-                    ESPSettings.BoxCustomColor1,
-                    ESPSettings.BoxCustomColor2,
-                    ESPSettings.BoxCustomColor3
-                )
-                boxGradient.Rotation = RotationAngle
-            else
-                -- Show basic white outline when Boxes disabled
-                boxGradient.Enabled = false
-                boxOutline.Color = Color3.fromRGB(255, 255, 255)
-            end
-            
-            -- Update box fill (only if enabled)
-            if ESPSettings.BoxFill then
-                boxFill.Position = UDim2.new(0, boxX, 0, boxY)
-                boxFill.Size = UDim2.new(0, boxWidth, 0, boxHeight)
-                boxFill.BackgroundTransparency = ESPSettings.BoxFillTransparency
-                boxFill.Visible = true
-                
-                fillGradient.Color = createGradientSequence(
-                    ESPSettings.BoxFillCustomColor1,
-                    ESPSettings.BoxFillCustomColor2,
-                    ESPSettings.BoxFillCustomColor3
-                )
-                fillGradient.Rotation = RotationAngle
-            else
-                boxFill.Visible = false
-            end
-            
-            -- Update health bar (only if enabled)
-            if ESPSettings.HealthBarEnabled then
-                local healthRatio = humanoid.Health / humanoid.MaxHealth
-                local barThickness = ESPSettings.HealthBarThickness
-                local barHeight = boxHeight
-                
-                local barX = ESPSettings.HealthBarPosition == "Right" and (boxX + boxWidth + 2) or (boxX - barThickness - 2)
-                
-                healthBG.Position = UDim2.new(0, barX, 0, boxY)
-                healthBG.Size = UDim2.new(0, barThickness, 0, barHeight)
-                healthBG.Visible = true
-                
-                local filledHeight = barHeight * healthRatio
-                healthBar.Position = UDim2.new(0, barX, 0, boxY + (barHeight - filledHeight))
-                healthBar.Size = UDim2.new(0, barThickness, 0, filledHeight)
-                healthBar.Visible = true
-                
-                healthGradient.Color = createGradientSequence(
-                    ESPSettings.HealthBarColor1,
-                    ESPSettings.HealthBarColor2,
-                    ESPSettings.HealthBarColor3
-                )
-            else
-                healthBG.Visible = false
-                healthBar.Visible = false
-            end
-        end
-        
-        -- Initial update
-        previewESP.Update()
-        
-        return previewESP
     end,
 
     -- Player-specific overrides helpers
