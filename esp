@@ -1256,13 +1256,14 @@ getgenv().TrisESP = {
             local boxX = parentFrame.AbsoluteSize.X / 2 - boxWidth / 2
             local boxY = parentFrame.AbsoluteSize.Y / 2 - boxHeight / 2
             
-            -- Update box
+            -- Always show box in preview (even if Boxes setting is disabled globally)
+            -- This ensures the preview always displays something
+            box.Position = UDim2.new(0, boxX, 0, boxY)
+            box.Size = UDim2.new(0, boxWidth, 0, boxHeight)
+            box.Visible = true
+            
+            -- Update box gradient (show if Boxes enabled OR always in preview)
             if ESPSettings.Boxes then
-                box.Position = UDim2.new(0, boxX, 0, boxY)
-                box.Size = UDim2.new(0, boxWidth, 0, boxHeight)
-                box.Visible = true
-                
-                -- Update box gradient
                 boxGradient.Enabled = true
                 boxGradient.Color = createGradientSequence(
                     ESPSettings.BoxCustomColor1,
@@ -1271,10 +1272,12 @@ getgenv().TrisESP = {
                 )
                 boxGradient.Rotation = RotationAngle
             else
-                box.Visible = false
+                -- Show basic white outline when Boxes disabled
+                boxGradient.Enabled = false
+                boxOutline.Color = Color3.fromRGB(255, 255, 255)
             end
             
-            -- Update box fill
+            -- Update box fill (only if enabled)
             if ESPSettings.BoxFill then
                 boxFill.Position = UDim2.new(0, boxX, 0, boxY)
                 boxFill.Size = UDim2.new(0, boxWidth, 0, boxHeight)
@@ -1291,7 +1294,7 @@ getgenv().TrisESP = {
                 boxFill.Visible = false
             end
             
-            -- Update health bar
+            -- Update health bar (only if enabled)
             if ESPSettings.HealthBarEnabled then
                 local healthRatio = humanoid.Health / humanoid.MaxHealth
                 local barThickness = ESPSettings.HealthBarThickness
