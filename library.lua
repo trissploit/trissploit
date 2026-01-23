@@ -8506,57 +8506,73 @@ function Library:CreateWindow(WindowInfo)
                 -- Function to update the character model
                 local function UpdateCharacterModel()
                     if Library.ESPPreviewCharacter then
-                        Library.ESPPreviewCharacter:Destroy()
+                        pcall(function()
+                            Library.ESPPreviewCharacter:Destroy()
+                        end)
                         Library.ESPPreviewCharacter = nil
                     end
 
-                    local Character = LocalPlayer.Character
-                    if not Character then return end
+                    -- Prefer using the server-provided appearance so the preview is not the actual local character
+                    local success, charModel = pcall(function()
+                        return Players:GetCharacterAppearanceAsync(LocalPlayer.UserId)
+                    end)
 
-                    local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
-                    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-                    if not HumanoidRootPart or not Humanoid then return end
-
-                    -- Clone the character
-                    local ClonedCharacter = Instance.new("Model")
-                    ClonedCharacter.Name = "ESPPreviewCharacter"
-
-                    for _, Part in ipairs(Character:GetDescendants()) do
-                        if Part:IsA("BasePart") or Part:IsA("Decal") or Part:IsA("Texture") then
-                            local Clone = Part:Clone()
-                            if Clone:IsA("BasePart") then
-                                Clone.Anchored = true
-                                Clone.CanCollide = false
-                                Clone.CastShadow = false
-                            end
-                            Clone.Parent = ClonedCharacter
-                        elseif Part:IsA("Accessory") then
-                            local AccessoryClone = Part:Clone()
-                            for _, Desc in ipairs(AccessoryClone:GetDescendants()) do
-                                if Desc:IsA("BasePart") then
-                                    Desc.Anchored = true
-                                    Desc.CanCollide = false
-                                    Desc.CastShadow = false
+                    if not success or not charModel then
+                        -- Fallback: try humanoid description -> CreateHumanoidModelFromDescription if available
+                        local ok, desc = pcall(function()
+                            return Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
+                        end)
+                        if ok and desc then
+                            local ok2, created = pcall(function()
+                                -- Some environments require passing a rig type, try R15 then omit if fails
+                                local createdModel = nil
+                                local pcall_ok, res = pcall(function()
+                                    return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+                                end)
+                                if pcall_ok and res then
+                                    createdModel = res
+                                else
+                                    pcall(function()
+                                        createdModel = Players:CreateHumanoidModelFromDescription(desc)
+                                    end)
                                 end
+                                return createdModel
+                            end)
+                            if ok2 and created then
+                                charModel = created
                             end
-                            AccessoryClone.Parent = ClonedCharacter
                         end
                     end
 
-                    -- Clone Humanoid for animations display
-                    local HumanoidClone = Humanoid:Clone()
-                    HumanoidClone.Parent = ClonedCharacter
-
-                    ClonedCharacter.PrimaryPart = ClonedCharacter:FindFirstChild("HumanoidRootPart")
-                    ClonedCharacter.Parent = WorldModel
-
-                    Library.ESPPreviewCharacter = ClonedCharacter
-
-                    -- Position camera to view the character
-                    if ClonedCharacter.PrimaryPart then
-                        local CharPos = ClonedCharacter.PrimaryPart.Position
-                        Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
+                    if not charModel then
+                        return
                     end
+
+                    -- Move to our WorldModel container and sanitize
+                    pcall(function()
+                        charModel.Name = "ESPPreviewCharacter"
+                        -- remove scripts and local scripts
+                        for _, d in ipairs(charModel:GetDescendants()) do
+                            if d:IsA("Script") or d:IsA("LocalScript") then
+                                d:Destroy()
+                            elseif d:IsA("BasePart") then
+                                d.Anchored = true
+                                d.CanCollide = false
+                                d.CastShadow = false
+                            end
+                        end
+
+                        -- Parent into WorldModel for ViewportFrame rendering
+                        charModel.Parent = WorldModel
+                        Library.ESPPreviewCharacter = charModel
+
+                        -- Find a sensible pivot for camera placement
+                        local root = charModel:FindFirstChild("HumanoidRootPart") or charModel.PrimaryPart
+                        if root then
+                            local CharPos = root.Position
+                            Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
+                        end
+                    end)
                 end
 
                 -- Update character when it changes
