@@ -8492,6 +8492,16 @@ function Library:CreateWindow(WindowInfo)
                 local WorldModel = Instance.new("WorldModel")
                 WorldModel.Parent = Viewport
 
+                -- Preview highlight (shows chams/highlight on the cloned character inside the viewport)
+                local PreviewHighlight = Instance.new("Highlight")
+                PreviewHighlight.Name = "ESPPreviewHighlight"
+                PreviewHighlight.FillTransparency = 0.5
+                PreviewHighlight.OutlineTransparency = 0
+                PreviewHighlight.FillColor = Library.Scheme.AccentColor or Color3.fromRGB(0, 170, 255)
+                PreviewHighlight.OutlineColor = Library.Scheme.AccentColor or Color3.fromRGB(0, 170, 255)
+                PreviewHighlight.Enabled = false
+                PreviewHighlight.Parent = PreviewHolder
+
                 local Camera = Instance.new("Camera")
                 Camera.FieldOfView = 50
                 Camera.Parent = Viewport
@@ -8502,6 +8512,7 @@ function Library:CreateWindow(WindowInfo)
                 Library.ESPPreviewWorldModel = WorldModel
                 Library.ESPPreviewCamera = Camera
                 Library.ESPPreviewCharacter = nil
+                Library.ESPPreviewHighlight = PreviewHighlight
 
                 -- Function to update the character model
                 local function UpdateCharacterModel()
@@ -8510,47 +8521,18 @@ function Library:CreateWindow(WindowInfo)
                         Library.ESPPreviewCharacter = nil
                     end
 
-                    -- Try to find another player's character to preview (not the local player)
-                    local SourceCharacter = nil
-                    for _, pl in ipairs(Players:GetPlayers()) do
-                        if pl ~= LocalPlayer and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and pl.Character:FindFirstChildOfClass("Humanoid") then
-                            SourceCharacter = pl.Character
-                            break
-                        end
-                    end
+                    local Character = LocalPlayer.Character
+                    if not Character then return end
 
-                    local CreatedDummy = false
-                    if not SourceCharacter then
-                        -- Create a simple dummy character model when no other players are available
-                        SourceCharacter = Instance.new("Model")
-                        SourceCharacter.Name = "ESPPreviewDummySource"
+                    local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+                    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                    if not HumanoidRootPart or not Humanoid then return end
 
-                        local HRP = Instance.new("Part")
-                        HRP.Name = "HumanoidRootPart"
-                        HRP.Size = Vector3.new(2, 2, 1)
-                        HRP.Anchored = true
-                        HRP.Position = Vector3.new(0, 1, 0)
-                        HRP.Parent = SourceCharacter
-
-                        local Head = Instance.new("Part")
-                        Head.Name = "Head"
-                        Head.Size = Vector3.new(2, 1, 1)
-                        Head.Anchored = true
-                        Head.Position = HRP.Position + Vector3.new(0, 1.5, 0)
-                        Head.Parent = SourceCharacter
-
-                        local Hum = Instance.new("Humanoid")
-                        Hum.Parent = SourceCharacter
-
-                        SourceCharacter.PrimaryPart = HRP
-                        CreatedDummy = true
-                    end
-
-                    -- Build cloned model for the preview
+                    -- Clone the character
                     local ClonedCharacter = Instance.new("Model")
                     ClonedCharacter.Name = "ESPPreviewCharacter"
 
-                    for _, Part in ipairs(SourceCharacter:GetDescendants()) do
+                    for _, Part in ipairs(Character:GetDescendants()) do
                         if Part:IsA("BasePart") or Part:IsA("Decal") or Part:IsA("Texture") then
                             local Clone = Part:Clone()
                             if Clone:IsA("BasePart") then
@@ -8569,35 +8551,29 @@ function Library:CreateWindow(WindowInfo)
                                 end
                             end
                             AccessoryClone.Parent = ClonedCharacter
-                        elseif Part:IsA("Humanoid") then
-                            local HumanoidClone = Part:Clone()
-                            HumanoidClone.Parent = ClonedCharacter
                         end
                     end
 
-                    -- Ensure PrimaryPart exists
-                    ClonedCharacter.PrimaryPart = ClonedCharacter:FindFirstChild("HumanoidRootPart") or ClonedCharacter:FindFirstChild("HumanoidRootPart")
-                    if not ClonedCharacter.PrimaryPart then
-                        -- pick any BasePart as primary
-                        for _, v in ipairs(ClonedCharacter:GetChildren()) do
-                            if v:IsA("BasePart") then
-                                ClonedCharacter.PrimaryPart = v
-                                break
-                            end
-                        end
-                    end
+                    -- Clone Humanoid for animations display
+                    local HumanoidClone = Humanoid:Clone()
+                    HumanoidClone.Parent = ClonedCharacter
 
+                    ClonedCharacter.PrimaryPart = ClonedCharacter:FindFirstChild("HumanoidRootPart")
                     ClonedCharacter.Parent = WorldModel
+
                     Library.ESPPreviewCharacter = ClonedCharacter
+                    -- Update preview highlight adornee
+                    if Library.ESPPreviewHighlight then
+                        pcall(function()
+                            Library.ESPPreviewHighlight.Adornee = ClonedCharacter
+                            Library.ESPPreviewHighlight.Enabled = true
+                        end)
+                    end
 
                     -- Position camera to view the character
                     if ClonedCharacter.PrimaryPart then
                         local CharPos = ClonedCharacter.PrimaryPart.Position
                         Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
-                    end
-                    -- Cleanup the temporary source dummy if created
-                    if CreatedDummy then
-                        SourceCharacter:Destroy()
                     end
                 end
 
@@ -8620,6 +8596,12 @@ function Library:CreateWindow(WindowInfo)
                 end
             elseif Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = false
+                if Library.ESPPreviewHighlight then
+                    pcall(function()
+                        Library.ESPPreviewHighlight.Adornee = nil
+                        Library.ESPPreviewHighlight.Enabled = false
+                    end)
+                end
             end
         end
 
