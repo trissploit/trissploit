@@ -1,6 +1,8 @@
 local cloneref = (cloneref or clonereference or function(instance: any)
     return instance
 end)
+
+--// Execution \\\--
 local CoreGui: CoreGui = cloneref(game:GetService("CoreGui"))
 local Players: Players = cloneref(game:GetService("Players"))
 local RunService: RunService = cloneref(game:GetService("RunService"))
@@ -8882,10 +8884,10 @@ function Library:CreateWindow(WindowInfo)
                     charConn = nil
                 end
             end
-        end
-        end
+            end
 
-        --// Execution \--
+        --// Execution \\\--
+        if WindowInfo.MobileButtonsSide == "Right" then
             ToggleButton.Button.Position = UDim2.new(1, -6, 0, 6)
             ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
 
