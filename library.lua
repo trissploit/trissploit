@@ -8239,8 +8239,8 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 CharacterModel = Character:Clone()
-                
-                -- Remove scripts and other unnecessary components
+
+                -- Remove scripts and other unnecessary components, prepare parts
                 for _, Obj in pairs(CharacterModel:GetDescendants()) do
                     if Obj:IsA("Script") or Obj:IsA("LocalScript") or Obj:IsA("ModuleScript") then
                         Obj:Destroy()
@@ -8249,8 +8249,46 @@ function Library:CreateWindow(WindowInfo)
                     end
                 end
 
+                -- Ensure we have a primary part and anchor parts so the model stays still
+                local primaryPart
+                for _, part in ipairs(CharacterModel:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        primaryPart = primaryPart or part
+                        part.Anchored = true
+                    end
+                end
+                if primaryPart then
+                    CharacterModel.PrimaryPart = primaryPart
+                end
+
+                -- Center the model inside the viewport at origin
+                local ok, bboxCFrame, bboxSize = pcall(function()
+                    return CharacterModel:GetBoundingBox()
+                end)
+                if ok and bboxSize then
+                    if CharacterModel.PrimaryPart then
+                        CharacterModel:SetPrimaryPartCFrame(CFrame.new(0, bboxSize.Y / 2, 0))
+                    else
+                        for _, part in ipairs(CharacterModel:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CFrame = part.CFrame - bboxCFrame.Position + Vector3.new(0, bboxSize.Y / 2, 0)
+                            end
+                        end
+                    end
+                end
+
                 CharacterModel.Parent = ViewportFrame
-                UpdateCamera()
+
+                -- Position the camera to look at the model
+                local centerY = (bboxSize and bboxSize.Y / 2) or 1
+                Camera.CFrame = CFrame.new(Vector3.new(0, centerY, 5), Vector3.new(0, centerY, 0))
+                -- keep camera updated in case of respawn/changes
+                if UpdateConnection and UpdateConnection.Connected then
+                    UpdateConnection:Disconnect()
+                end
+                UpdateConnection = RunService.RenderStepped:Connect(function()
+                    Camera.CFrame = CFrame.new(Vector3.new(0, centerY, 5), Vector3.new(0, centerY, 0))
+                end)
             end
 
             local ESPPreview = {
