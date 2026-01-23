@@ -1,8 +1,6 @@
 local cloneref = (cloneref or clonereference or function(instance: any)
     return instance
 end)
-
---// Execution \\\--
 local CoreGui: CoreGui = cloneref(game:GetService("CoreGui"))
 local Players: Players = cloneref(game:GetService("Players"))
 local RunService: RunService = cloneref(game:GetService("RunService"))
@@ -6062,6 +6060,242 @@ do
         return Viewport
     end
 
+    function Funcs:AddESPPreview(Idx, Info)
+        Info = Info or {}
+        Info.Height = Info.Height or 300
+        Info.Visible = Info.Visible ~= false
+
+        local Groupbox = self
+        local Container = Groupbox.Container
+
+        local ESPPreview = {
+            Visible = Info.Visible,
+            Type = "ESPPreview",
+            Character = nil,
+            Viewport = nil,
+            ESPElements = {},
+        }
+
+        local Holder = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, Info.Height),
+            Visible = ESPPreview.Visible,
+            Parent = Container,
+        })
+
+        local Box = New("Frame", {
+            AnchorPoint = Vector2.new(0, 1),
+            BackgroundColor3 = "MainColor",
+            BorderColor3 = "OutlineColor",
+            BorderSizePixel = 1,
+            Position = UDim2.fromScale(0, 1),
+            Size = UDim2.fromScale(1, 1),
+            Parent = Holder,
+        })
+
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 3),
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 8),
+            PaddingTop = UDim.new(0, 4),
+            Parent = Box,
+        })
+
+        local ViewportFrame = New("ViewportFrame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Parent = Box,
+        })
+
+        local Camera = Instance.new("Camera")
+        Camera.Parent = ViewportFrame
+        ViewportFrame.CurrentCamera = Camera
+
+        -- ESP Overlay Elements
+        local ESPOverlay = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            ZIndex = 10,
+            Parent = ViewportFrame,
+        })
+
+        -- ESP Box (outline)
+        local ESPBox = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(100, 200),
+            ZIndex = 11,
+            Parent = ESPOverlay,
+        })
+
+        local BoxOutline = New("UIStroke", {
+            Color = Color3.fromRGB(255, 255, 255),
+            Thickness = 2,
+            Transparency = 0,
+            Parent = ESPBox,
+        })
+
+        -- Name Label
+        local NameLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0.5, 0, 0, -20),
+            AnchorPoint = Vector2.new(0.5, 1),
+            Size = UDim2.fromOffset(200, 18),
+            Text = Library.LocalPlayer.Name,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextSize = 14,
+            TextStrokeTransparency = 0.5,
+            ZIndex = 12,
+            Parent = ESPBox,
+        })
+
+        -- Health Bar Background
+        local HealthBarBG = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+            Position = UDim2.new(0, -5, 0.5, 0),
+            Size = UDim2.fromOffset(4, 200),
+            ZIndex = 11,
+            Parent = ESPBox,
+        })
+
+        -- Health Bar Fill
+        local HealthBarFill = New("Frame", {
+            AnchorPoint = Vector2.new(0, 1),
+            BackgroundColor3 = Color3.fromRGB(0, 255, 0),
+            Position = UDim2.fromScale(0, 1),
+            Size = UDim2.fromScale(1, 1),
+            BorderSizePixel = 0,
+            ZIndex = 12,
+            Parent = HealthBarBG,
+        })
+
+        -- Distance Label
+        local DistanceLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0.5, 0, 1, 5),
+            AnchorPoint = Vector2.new(0.5, 0),
+            Size = UDim2.fromOffset(200, 16),
+            Text = "[Preview]",
+            TextColor3 = Color3.fromRGB(200, 200, 200),
+            TextSize = 12,
+            TextStrokeTransparency = 0.5,
+            ZIndex = 12,
+            Parent = ESPBox,
+        })
+
+        ESPPreview.ESPElements = {
+            Box = ESPBox,
+            BoxOutline = BoxOutline,
+            NameLabel = NameLabel,
+            HealthBarBG = HealthBarBG,
+            HealthBarFill = HealthBarFill,
+            DistanceLabel = DistanceLabel,
+        }
+
+        local function LoadCharacter()
+            if ESPPreview.Character then
+                ESPPreview.Character:Destroy()
+            end
+
+            local Character = Library.LocalPlayer.Character
+            if not Character then
+                return
+            end
+
+            -- Clone the character
+            local CharClone = Character:Clone()
+            
+            -- Remove unnecessary parts
+            for _, obj in pairs(CharClone:GetDescendants()) do
+                if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+                    obj:Destroy()
+                elseif obj:IsA("Humanoid") then
+                    obj:Destroy()
+                end
+            end
+
+            CharClone.Parent = ViewportFrame
+            ESPPreview.Character = CharClone
+
+            -- Position camera
+            local HRP = CharClone:FindFirstChild("HumanoidRootPart") or CharClone:FindFirstChild("Torso")
+            if HRP then
+                local CharSize = CharClone:GetExtentsSize()
+                local MaxExtent = math.max(CharSize.X, CharSize.Y, CharSize.Z)
+                local CameraDistance = MaxExtent * 1.5
+                local CharPosition = HRP.Position
+
+                Camera.CFrame = CFrame.new(CharPosition + Vector3.new(0, 0, CameraDistance), CharPosition)
+            end
+        end
+
+        function ESPPreview:UpdateESP()
+            if not ESPPreview.Character then
+                return
+            end
+
+            -- Update box size based on character
+            local CharSize = ESPPreview.Character:GetExtentsSize()
+            ESPBox.Size = UDim2.fromOffset(math.max(CharSize.X * 40, 80), math.max(CharSize.Y * 40, 150))
+            HealthBarBG.Size = UDim2.fromOffset(4, math.max(CharSize.Y * 40, 150))
+
+            -- Animate health bar (for preview)
+            local HealthPercent = 0.75 + math.sin(tick() * 2) * 0.15
+            HealthBarFill.Size = UDim2.fromScale(1, math.clamp(HealthPercent, 0, 1))
+            
+            -- Update health bar color
+            local R = math.clamp(255 * (1 - HealthPercent), 0, 255)
+            local G = math.clamp(255 * HealthPercent, 0, 255)
+            HealthBarFill.BackgroundColor3 = Color3.fromRGB(R, G, 0)
+        end
+
+        function ESPPreview:SetVisible(Visible: boolean)
+            ESPPreview.Visible = Visible
+            Holder.Visible = Visible
+            Groupbox:Resize()
+        end
+
+        function ESPPreview:SetHeight(Height: number)
+            Holder.Size = UDim2.new(1, 0, 0, Height)
+            Groupbox:Resize()
+        end
+
+        function ESPPreview:SetBoxColor(Color: Color3)
+            BoxOutline.Color = Color
+        end
+
+        function ESPPreview:SetNameColor(Color: Color3)
+            NameLabel.TextColor3 = Color
+        end
+
+        function ESPPreview:Reload()
+            LoadCharacter()
+        end
+
+        -- Initial load
+        task.defer(LoadCharacter)
+
+        -- Update ESP elements continuously
+        local UpdateConnection
+        UpdateConnection = Library:GiveSignal(RunService.RenderStepped:Connect(function()
+            if Library.Unloaded or not ESPPreview.Visible or not Holder.Visible then
+                return
+            end
+            ESPPreview:UpdateESP()
+        end))
+
+        Groupbox:Resize()
+
+        ESPPreview.Holder = Holder
+        table.insert(Groupbox.Elements, ESPPreview)
+
+        Options[Idx] = ESPPreview
+
+        return ESPPreview
+    end
+
     function Funcs:AddImage(Idx, Info)
         Info = Library:Validate(Info, Templates.Image)
 
@@ -8796,97 +9030,7 @@ function Library:CreateWindow(WindowInfo)
             Library.CantDragForced = not Library.CantDragForced
             self:SetText(Library.CantDragForced and "Unlock" or "Lock")
         end)
-        -- Add an 'ESP Preview' tab that shows an external character model with simple ESP outlines
-        do
-            local ESPTab = Window:AddTab("ESP Preview", nil, "Preview your character with ESP")
 
-            -- Create a model to hold preview parts
-            local PreviewModel = Instance.new("Model")
-            PreviewModel.Name = "ESPPreviewModel"
-
-            -- Create the viewport inside the tab (uses BaseGroupbox:AddViewport via metatable)
-            local PreviewViewport = ESPTab:AddViewport("ESPPreviewViewport", {
-                Object = PreviewModel,
-                Clone = false,
-                AutoFocus = true,
-                Interactive = false,
-                Height = 240,
-                Visible = true,
-            })
-
-            local SelectionBoxes = {}
-            local function ClearPreview()
-                for _, v in pairs(PreviewModel:GetChildren()) do
-                    v:Destroy()
-                end
-                for _, sb in pairs(SelectionBoxes) do
-                    if sb and sb.Parent then sb:Destroy() end
-                end
-                SelectionBoxes = {}
-            end
-
-            local function BuildPreviewFromCharacter(char)
-                if not char then
-                    ClearPreview()
-                    return
-                end
-
-                ClearPreview()
-
-                for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        local pClone = part:Clone()
-                        pClone.Anchored = true
-                        pClone.CanCollide = false
-                        pClone.Parent = PreviewModel
-
-                        local sel = Instance.new("SelectionBox")
-                        sel.Adornee = pClone
-                        sel.LineThickness = 0.02
-                        sel.Color3 = Library.Scheme.AccentColor
-                        sel.SurfaceTransparency = 1
-                        sel.Parent = pClone
-                        table.insert(SelectionBoxes, sel)
-                    end
-                end
-
-                -- focus camera on new model
-                if PreviewViewport and PreviewViewport.Focus then
-                    PreviewViewport:Focus()
-                end
-            end
-
-            local charConn
-            local function StartPreview()
-                local character = Library.LocalPlayer.Character or Library.LocalPlayer.CharacterAdded and Library.LocalPlayer.CharacterAdded:Wait()
-                BuildPreviewFromCharacter(character)
-
-                if charConn and charConn.Connected then
-                    charConn:Disconnect()
-                end
-                charConn = Library:GiveSignal(Library.LocalPlayer.CharacterAdded:Connect(function(newChar)
-                    BuildPreviewFromCharacter(newChar)
-                end))
-            end
-
-            -- Hook into tab show/hide to control preview
-            local originalShow = ESPTab.Show
-            local originalHide = ESPTab.Hide
-            ESPTab.Show = function(...)
-                originalShow(...)
-                StartPreview()
-            end
-            ESPTab.Hide = function(...)
-                originalHide(...)
-                ClearPreview()
-                if charConn and charConn.Connected then
-                    charConn:Disconnect()
-                    charConn = nil
-                end
-            end
-            end
-
-        --// Execution \\\--
         if WindowInfo.MobileButtonsSide == "Right" then
             ToggleButton.Button.Position = UDim2.new(1, -6, 0, 6)
             ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
