@@ -7548,18 +7548,16 @@ function Library:CreateWindow(WindowInfo)
 
         -- Update tab bar window size when tabs change
         local function UpdateTabBarSize()
-            task.defer(function()
-                if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not LayoutRefs.TabsList then return end
-                local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 12
-                tabsWidth = math.max(tabsWidth, 100)
-                local mainPos = MainFrame.AbsolutePosition
-                local mainSize = MainFrame.AbsoluteSize
-                local centerX = mainPos.X + (mainSize.X / 2)
-                local tabBarY = mainPos.Y - TabBarHeight - 6
+            if not LayoutRefs.TabsFrame or not LayoutRefs.TabBarWindow or not LayoutRefs.TabsList then return end
+            local tabsWidth = LayoutRefs.TabsList.AbsoluteContentSize.X + 12
+            tabsWidth = math.max(tabsWidth, 100)
+            local mainPos = MainFrame.AbsolutePosition
+            local mainSize = MainFrame.AbsoluteSize
+            local centerX = mainPos.X + (mainSize.X / 2)
+            local tabBarY = mainPos.Y - TabBarHeight - 6
 
-                LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(centerX), math.floor(tabBarY))
-                LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), TabBarHeight)
-            end)
+            LayoutRefs.TabBarWindow.Position = UDim2.fromOffset(math.floor(centerX), math.floor(tabBarY))
+            LayoutRefs.TabBarWindow.Size = UDim2.fromOffset(math.floor(tabsWidth), TabBarHeight)
         end
         
         LayoutRefs.TabsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateTabBarSize)
@@ -8796,8 +8794,97 @@ function Library:CreateWindow(WindowInfo)
             Library.CantDragForced = not Library.CantDragForced
             self:SetText(Library.CantDragForced and "Unlock" or "Lock")
         end)
+        -- Add an 'ESP Preview' tab that shows an external character model with simple ESP outlines
+        do
+            local ESPTab = Window:AddTab("ESP Preview", nil, "Preview your character with ESP")
 
-        if WindowInfo.MobileButtonsSide == "Right" then
+            -- Create a model to hold preview parts
+            local PreviewModel = Instance.new("Model")
+            PreviewModel.Name = "ESPPreviewModel"
+
+            -- Create the viewport inside the tab (uses BaseGroupbox:AddViewport via metatable)
+            local PreviewViewport = ESPTab:AddViewport("ESPPreviewViewport", {
+                Object = PreviewModel,
+                Clone = false,
+                AutoFocus = true,
+                Interactive = false,
+                Height = 240,
+                Visible = true,
+            })
+
+            local SelectionBoxes = {}
+            local function ClearPreview()
+                for _, v in pairs(PreviewModel:GetChildren()) do
+                    v:Destroy()
+                end
+                for _, sb in pairs(SelectionBoxes) do
+                    if sb and sb.Parent then sb:Destroy() end
+                end
+                SelectionBoxes = {}
+            end
+
+            local function BuildPreviewFromCharacter(char)
+                if not char then
+                    ClearPreview()
+                    return
+                end
+
+                ClearPreview()
+
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local pClone = part:Clone()
+                        pClone.Anchored = true
+                        pClone.CanCollide = false
+                        pClone.Parent = PreviewModel
+
+                        local sel = Instance.new("SelectionBox")
+                        sel.Adornee = pClone
+                        sel.LineThickness = 0.02
+                        sel.Color3 = Library.Scheme.AccentColor
+                        sel.SurfaceTransparency = 1
+                        sel.Parent = pClone
+                        table.insert(SelectionBoxes, sel)
+                    end
+                end
+
+                -- focus camera on new model
+                if PreviewViewport and PreviewViewport.Focus then
+                    PreviewViewport:Focus()
+                end
+            end
+
+            local charConn
+            local function StartPreview()
+                local character = Library.LocalPlayer.Character or Library.LocalPlayer.CharacterAdded and Library.LocalPlayer.CharacterAdded:Wait()
+                BuildPreviewFromCharacter(character)
+
+                if charConn and charConn.Connected then
+                    charConn:Disconnect()
+                end
+                charConn = Library:GiveSignal(Library.LocalPlayer.CharacterAdded:Connect(function(newChar)
+                    BuildPreviewFromCharacter(newChar)
+                end))
+            end
+
+            -- Hook into tab show/hide to control preview
+            local originalShow = ESPTab.Show
+            local originalHide = ESPTab.Hide
+            ESPTab.Show = function(...)
+                originalShow(...)
+                StartPreview()
+            end
+            ESPTab.Hide = function(...)
+                originalHide(...)
+                ClearPreview()
+                if charConn and charConn.Connected then
+                    charConn:Disconnect()
+                    charConn = nil
+                end
+            end
+        end
+
+        --// Execution \--
             ToggleButton.Button.Position = UDim2.new(1, -6, 0, 6)
             ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
 
