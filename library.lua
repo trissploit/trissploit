@@ -8492,16 +8492,6 @@ function Library:CreateWindow(WindowInfo)
                 local WorldModel = Instance.new("WorldModel")
                 WorldModel.Parent = Viewport
 
-                -- Preview highlight (shows chams/highlight on the cloned character inside the viewport)
-                local PreviewHighlight = Instance.new("Highlight")
-                PreviewHighlight.Name = "ESPPreviewHighlight"
-                PreviewHighlight.FillTransparency = 0.5
-                PreviewHighlight.OutlineTransparency = 0
-                PreviewHighlight.FillColor = Library.Scheme.AccentColor or Color3.fromRGB(0, 170, 255)
-                PreviewHighlight.OutlineColor = Library.Scheme.AccentColor or Color3.fromRGB(0, 170, 255)
-                PreviewHighlight.Enabled = false
-                PreviewHighlight.Parent = PreviewHolder
-
                 local Camera = Instance.new("Camera")
                 Camera.FieldOfView = 50
                 Camera.Parent = Viewport
@@ -8512,7 +8502,6 @@ function Library:CreateWindow(WindowInfo)
                 Library.ESPPreviewWorldModel = WorldModel
                 Library.ESPPreviewCamera = Camera
                 Library.ESPPreviewCharacter = nil
-                Library.ESPPreviewHighlight = PreviewHighlight
 
                 -- Function to update the character model
                 local function UpdateCharacterModel()
@@ -8562,13 +8551,6 @@ function Library:CreateWindow(WindowInfo)
                     ClonedCharacter.Parent = WorldModel
 
                     Library.ESPPreviewCharacter = ClonedCharacter
-                    -- Update preview highlight adornee
-                    if Library.ESPPreviewHighlight then
-                        pcall(function()
-                            Library.ESPPreviewHighlight.Adornee = ClonedCharacter
-                            Library.ESPPreviewHighlight.Enabled = true
-                        end)
-                    end
 
                     -- Position camera to view the character
                     if ClonedCharacter.PrimaryPart then
@@ -8596,12 +8578,6 @@ function Library:CreateWindow(WindowInfo)
                 end
             elseif Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = false
-                if Library.ESPPreviewHighlight then
-                    pcall(function()
-                        Library.ESPPreviewHighlight.Adornee = nil
-                        Library.ESPPreviewHighlight.Enabled = false
-                    end)
-                end
             end
         end
 
