@@ -8506,73 +8506,99 @@ function Library:CreateWindow(WindowInfo)
                 -- Function to update the character model
                 local function UpdateCharacterModel()
                     if Library.ESPPreviewCharacter then
-                        pcall(function()
-                            Library.ESPPreviewCharacter:Destroy()
-                        end)
+                        Library.ESPPreviewCharacter:Destroy()
                         Library.ESPPreviewCharacter = nil
                     end
 
-                    -- Prefer using the server-provided appearance so the preview is not the actual local character
-                    local success, charModel = pcall(function()
-                        return Players:GetCharacterAppearanceAsync(LocalPlayer.UserId)
-                    end)
+                    -- Try to find another player's character to preview (not the local player)
+                    local SourceCharacter = nil
+                    for _, pl in ipairs(Players:GetPlayers()) do
+                        if pl ~= LocalPlayer and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and pl.Character:FindFirstChildOfClass("Humanoid") then
+                            SourceCharacter = pl.Character
+                            break
+                        end
+                    end
 
-                    if not success or not charModel then
-                        -- Fallback: try humanoid description -> CreateHumanoidModelFromDescription if available
-                        local ok, desc = pcall(function()
-                            return Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
-                        end)
-                        if ok and desc then
-                            local ok2, created = pcall(function()
-                                -- Some environments require passing a rig type, try R15 then omit if fails
-                                local createdModel = nil
-                                local pcall_ok, res = pcall(function()
-                                    return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
-                                end)
-                                if pcall_ok and res then
-                                    createdModel = res
-                                else
-                                    pcall(function()
-                                        createdModel = Players:CreateHumanoidModelFromDescription(desc)
-                                    end)
+                    local CreatedDummy = false
+                    if not SourceCharacter then
+                        -- Create a simple dummy character model when no other players are available
+                        SourceCharacter = Instance.new("Model")
+                        SourceCharacter.Name = "ESPPreviewDummySource"
+
+                        local HRP = Instance.new("Part")
+                        HRP.Name = "HumanoidRootPart"
+                        HRP.Size = Vector3.new(2, 2, 1)
+                        HRP.Anchored = true
+                        HRP.Position = Vector3.new(0, 1, 0)
+                        HRP.Parent = SourceCharacter
+
+                        local Head = Instance.new("Part")
+                        Head.Name = "Head"
+                        Head.Size = Vector3.new(2, 1, 1)
+                        Head.Anchored = true
+                        Head.Position = HRP.Position + Vector3.new(0, 1.5, 0)
+                        Head.Parent = SourceCharacter
+
+                        local Hum = Instance.new("Humanoid")
+                        Hum.Parent = SourceCharacter
+
+                        SourceCharacter.PrimaryPart = HRP
+                        CreatedDummy = true
+                    end
+
+                    -- Build cloned model for the preview
+                    local ClonedCharacter = Instance.new("Model")
+                    ClonedCharacter.Name = "ESPPreviewCharacter"
+
+                    for _, Part in ipairs(SourceCharacter:GetDescendants()) do
+                        if Part:IsA("BasePart") or Part:IsA("Decal") or Part:IsA("Texture") then
+                            local Clone = Part:Clone()
+                            if Clone:IsA("BasePart") then
+                                Clone.Anchored = true
+                                Clone.CanCollide = false
+                                Clone.CastShadow = false
+                            end
+                            Clone.Parent = ClonedCharacter
+                        elseif Part:IsA("Accessory") then
+                            local AccessoryClone = Part:Clone()
+                            for _, Desc in ipairs(AccessoryClone:GetDescendants()) do
+                                if Desc:IsA("BasePart") then
+                                    Desc.Anchored = true
+                                    Desc.CanCollide = false
+                                    Desc.CastShadow = false
                                 end
-                                return createdModel
-                            end)
-                            if ok2 and created then
-                                charModel = created
+                            end
+                            AccessoryClone.Parent = ClonedCharacter
+                        elseif Part:IsA("Humanoid") then
+                            local HumanoidClone = Part:Clone()
+                            HumanoidClone.Parent = ClonedCharacter
+                        end
+                    end
+
+                    -- Ensure PrimaryPart exists
+                    ClonedCharacter.PrimaryPart = ClonedCharacter:FindFirstChild("HumanoidRootPart") or ClonedCharacter:FindFirstChild("HumanoidRootPart")
+                    if not ClonedCharacter.PrimaryPart then
+                        -- pick any BasePart as primary
+                        for _, v in ipairs(ClonedCharacter:GetChildren()) do
+                            if v:IsA("BasePart") then
+                                ClonedCharacter.PrimaryPart = v
+                                break
                             end
                         end
                     end
 
-                    if not charModel then
-                        return
+                    ClonedCharacter.Parent = WorldModel
+                    Library.ESPPreviewCharacter = ClonedCharacter
+
+                    -- Position camera to view the character
+                    if ClonedCharacter.PrimaryPart then
+                        local CharPos = ClonedCharacter.PrimaryPart.Position
+                        Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
                     end
-
-                    -- Move to our WorldModel container and sanitize
-                    pcall(function()
-                        charModel.Name = "ESPPreviewCharacter"
-                        -- remove scripts and local scripts
-                        for _, d in ipairs(charModel:GetDescendants()) do
-                            if d:IsA("Script") or d:IsA("LocalScript") then
-                                d:Destroy()
-                            elseif d:IsA("BasePart") then
-                                d.Anchored = true
-                                d.CanCollide = false
-                                d.CastShadow = false
-                            end
-                        end
-
-                        -- Parent into WorldModel for ViewportFrame rendering
-                        charModel.Parent = WorldModel
-                        Library.ESPPreviewCharacter = charModel
-
-                        -- Find a sensible pivot for camera placement
-                        local root = charModel:FindFirstChild("HumanoidRootPart") or charModel.PrimaryPart
-                        if root then
-                            local CharPos = root.Position
-                            Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
-                        end
-                    end)
+                    -- Cleanup the temporary source dummy if created
+                    if CreatedDummy then
+                        SourceCharacter:Destroy()
+                    end
                 end
 
                 -- Update character when it changes
