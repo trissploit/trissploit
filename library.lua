@@ -8228,71 +8228,86 @@ function Library:CreateWindow(WindowInfo)
                 end
             end
 
-            local function LoadCharacter()
-                if CharacterModel then
-                    CharacterModel:Destroy()
+            local function safeGetDescendants(inst)
+                local ok, res = pcall(function() return inst:GetDescendants() end)
+                if ok and res then
+                    return res
                 end
 
-                local Character = Library.LocalPlayer.Character
+                local out = {}
+                local function recurse(node)
+                    for _, c in ipairs(node:GetChildren()) do
+                        table.insert(out, c)
+                        recurse(c)
+                    end
+                end
+                recurse(inst)
+                return out
+            end
+
+            local function LoadCharacter()
+                if CharacterModel then
+                    pcall(function() CharacterModel:Destroy() end)
+                    CharacterModel = nil
+                end
+
+                local Character = Library.LocalPlayer and Library.LocalPlayer.Character
                 if not Character then
                     return
                 end
 
-                CharacterModel = Character:Clone()
-
-                -- Remove scripts and other unnecessary components, prepare parts
-                if typeof(CharacterModel) == "Instance" and CharacterModel.GetDescendants then
-                    for _, Obj in pairs(CharacterModel:GetDescendants()) do
-                        if Obj:IsA("Script") or Obj:IsA("LocalScript") or Obj:IsA("ModuleScript") then
-                            Obj:Destroy()
-                        elseif Obj:IsA("Humanoid") then
-                            Obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-                        end
-                    end
+                -- Clone the character safely
+                local ok, cloned = pcall(function() return Character:Clone() end)
+                if not ok or not cloned then
+                    return
                 end
+                CharacterModel = cloned
 
-                -- Ensure we have a primary part and anchor parts so the model stays still
-                local primaryPart
-                if typeof(CharacterModel) == "Instance" and CharacterModel.GetDescendants then
-                    for _, part in ipairs(CharacterModel:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            primaryPart = primaryPart or part
-                            part.Anchored = true
-                        end
-                    end
-                end
-                if primaryPart then
-                    CharacterModel.PrimaryPart = primaryPart
-                end
-
-                -- Center the model inside the viewport at origin
-                local ok, bboxCFrame, bboxSize = pcall(function()
-                    return CharacterModel:GetBoundingBox()
-                end)
-                if ok and bboxSize then
-                    if CharacterModel.PrimaryPart then
-                        CharacterModel:SetPrimaryPartCFrame(CFrame.new(0, bboxSize.Y / 2, 0))
+                -- Remove scripts and other unnecessary components (safe)
+                for _, Obj in ipairs(safeGetDescendants(CharacterModel)) do
+                    local ok2, isA = pcall(function() return Obj:IsA("Script") end)
+                    if ok2 and isA then
+                        Obj:Destroy()
                     else
-                        for _, part in ipairs(CharacterModel:GetDescendants()) do
-                            if part:IsA("BasePart") then
-                                part.CFrame = part.CFrame - bboxCFrame.Position + Vector3.new(0, bboxSize.Y / 2, 0)
-                            end
+                        -- check other types safely
+                        local ok3, isLocal = pcall(function() return Obj:IsA("LocalScript") end)
+                        if ok3 and isLocal then Obj:Destroy() end
+                        local ok4, isModule = pcall(function() return Obj:IsA("ModuleScript") end)
+                        if ok4 and isModule then Obj:Destroy() end
+                        local ok5, isHum = pcall(function() return Obj:IsA("Humanoid") end)
+                        if ok5 and isHum then
+                            pcall(function() Obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end)
                         end
                     end
                 end
 
+                -- Ensure model has no runtime scripts and parent into viewport
+                CharacterModel.Name = "ESPPreviewCharacter"
                 CharacterModel.Parent = ViewportFrame
 
-                -- Position the camera to look at the model
-                local centerY = (bboxSize and bboxSize.Y / 2) or 1
-                Camera.CFrame = CFrame.new(Vector3.new(0, centerY, 5), Vector3.new(0, centerY, 0))
-                -- keep camera updated in case of respawn/changes
-                if UpdateConnection and UpdateConnection.Connected then
-                    UpdateConnection:Disconnect()
+                -- Position camera to frame the model. Prefer HumanoidRootPart or Head.
+                local primaryPos
+                local hrp = CharacterModel:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    primaryPos = hrp.Position
+                else
+                    local head = CharacterModel:FindFirstChild("Head")
+                    if head then
+                        primaryPos = head.Position
+                    else
+                        -- fallback to model bounding box center
+                        local okbb, cframe, size = pcall(function() return CharacterModel:GetBoundingBox() end)
+                        if okbb and cframe then
+                            primaryPos = cframe.Position
+                        end
+                    end
                 end
-                UpdateConnection = RunService.RenderStepped:Connect(function()
-                    Camera.CFrame = CFrame.new(Vector3.new(0, centerY, 5), Vector3.new(0, centerY, 0))
-                end)
+
+                if primaryPos then
+                    Camera.CFrame = CFrame.new(primaryPos + Vector3.new(0, 1.5, 5), primaryPos + Vector3.new(0, 1.5, 0))
+                end
+
+                UpdateCamera()
             end
 
             local ESPPreview = {
