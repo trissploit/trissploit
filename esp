@@ -125,6 +125,76 @@ local ESPSettings = {
     FillTransparency = 0.5,
     OutlineTransparency = 0,
 }
+--[[
+Documentation: TrisESP usage & API
+
+Settings (table: `getgenv().TrisESP.Settings`)
+- Enabled (bool): Master system toggle. When false, all ESP is removed.
+- MaxDistance (number): Max render distance (studs).
+- AnimateBoxRotation (bool): Rotate box-fill gradients when true.
+- BoxRotationSpeed (number): Rotation speed used when AnimateBoxRotation is enabled.
+- Boxes (bool): Enable box outlines.
+- BoxType (string): "Square" or "Corner".
+- BoxOutlineColor (Color3): Outline color for box frames (outline stroke forced to 1px).
+- BoxCustomColor1/2/3 (Color3): 3-stop gradient for box outlines (if OutlineGradient enabled).
+- BoxFill (bool): Enable gradient-filled boxes (independent of `Boxes`).
+- BoxFillCustomColor1/2/3 (Color3): 3-stop gradient for box fill.
+- BoxFillTransparency (number 0-1): Transparency for the box fill layer.
+
+- Tracers (bool), TracerFrom ("Top"|"Bottom"|"Center"), TracerThickness, TracerColor
+
+- HealthBarEnabled (bool): Show vertical health bar.
+- HealthBarPosition ("Left"|"Right"): Side to draw health bar.
+- HealthBarThickness (number): Pixel width of health bar.
+- HealthBarColor1/2/3 (Color3): 3-stop gradient used for the health bar.
+- HealthGradientEnabled (bool): Animate the health gradient when true. When false, the system preserves the last phase but doesn't advance it.
+- HealthGradientSpeed (number): Cycles per second used when HealthGradientEnabled is true.
+- HealthGradientBlend ("linear"|"smooth"|"ease"): Interpolation between stops.
+- ShowHealthText (bool): Show percent value next to the healthbar.
+- HealthOutlineFollow (bool): When true the outline height follows the filled height.
+
+- ShowName, NameMode ("Name"|"DisplayName"|"Both"), ShowDistance
+
+Per-player overrides
+- `getgenv().TrisESP.Settings.PlayerOverrides` is a table keyed by player UserId (string) or player.Name.
+  Each entry is a table of settings which override the global `Settings` for that player.
+
+API Helpers
+- _resolvePlayer(ref) -> player object | nil
+    Accepts: Player object, numeric UserId, or string player name.
+
+- AddPlayerOverride(playerRef, overrides) -> bool
+    `overrides` is a table of setting keys to override for the player. Example:
+      getgenv().TrisESP.AddPlayerOverride("SomePlayer", { BoxFill = true, BoxFillCustomColor1 = Color3.fromRGB(255,0,0) })
+
+- SetPlayerColor(playerRef, colorKey, color3) -> bool
+    Convenience for a single color override. Example:
+      getgenv().TrisESP.SetPlayerColor(12345678, "BoxFillCustomColor1", Color3.fromRGB(0,255,0))
+
+- GetPlayerOverride(playerRef) -> table | nil
+    Returns the override table for the player if present.
+
+- RemovePlayerOverride(playerRef) -> bool
+    Removes any overrides for the specified player.
+
+- ClearPlayerOverrides() -> bool
+    Clears all player-specific overrides.
+
+Examples
+- Set a per-player blue boxfill for a player named "Enemy":
+    getgenv().TrisESP.SetPlayerColor("Enemy", "BoxFillCustomColor1", Color3.fromRGB(0,150,255))
+
+- Toggle health gradient animation off (global):
+    getgenv().TrisESP.Settings.HealthGradientEnabled = false
+
+- Make a single player always invisible to ESP (override):
+    getgenv().TrisESP.AddPlayerOverride("Enemy", { Enabled = false })
+
+Notes
+- Many settings can also be overridden per-player using `AddPlayerOverride`.
+- The system persists per-player gradient/phase angles in `getgenv()._TrisESP_Persistent` where supported by the executor.
+- If you want help converting an external UI to call these helpers, provide the UI code and I can wire it.
+]]
 
 -- Spin integrator & constants
 local AUTOROTATE_SPEED = 60 -- degrees per second for fill gradient
@@ -512,6 +582,43 @@ local function updateESP(deltaTime)
                 end
             end
             ESPsCleared = false
+        end
+    end
+
+    -- If a UI library preview model exists, create a fake preview entry so ESP renders into the preview
+    -- without enabling ESP on the real LocalPlayer.
+    local PREVIEW_KEY = "__ESP_PREVIEW_KEY__"
+    local lib = getgenv().Library
+    if lib and lib.ESPPreviewHolder and lib.ESPPreviewHolder.Visible and lib.ESPPreviewCharacter then
+        if not ESPObjects[PREVIEW_KEY] then
+            -- create a fake player-like table referencing the preview character model
+            local previewPlayer = {
+                Name = "ESPPreview",
+                DisplayName = "ESPPreview",
+                Character = lib.ESPPreviewCharacter,
+            }
+            local espObj = createESPObject()
+            espObj.Player = previewPlayer
+            -- ensure gradient/health phase initialized
+            espObj.HealthGradientPhase = espObj.HealthGradientPhase or math.random()
+            espObj.GradientAngle = espObj.GradientAngle or 0
+            ESPObjects[PREVIEW_KEY] = espObj
+        else
+            -- keep the preview player's Character reference up to date
+            local existing = ESPObjects[PREVIEW_KEY]
+            if existing and existing.Player then
+                existing.Player.Character = lib.ESPPreviewCharacter
+            end
+        end
+    else
+        if ESPObjects[PREVIEW_KEY] then
+            -- remove preview esp
+            local esp = ESPObjects[PREVIEW_KEY]
+            if esp then
+                hideESP(esp)
+                removeESP(esp)
+            end
+            ESPObjects[PREVIEW_KEY] = nil
         end
     end
 
@@ -1086,35 +1193,45 @@ getgenv().TrisESP = {
         ESPSettings.CustomTeamObjects = {}
         return true
     end,
-    -- Apply per-player settings (merge into PlayerOverrides)
-    AddPlayerESP = function(playerRef, settings)
-        if not settings then return false end
+
+    -- Player-specific overrides helpers
+    AddPlayerOverride = function(playerRef, overrides)
         local p = getgenv().TrisESP._resolvePlayer(playerRef)
         if not p then return false end
         ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
-        local idKey = tostring(p.UserId)
-        ESPSettings.PlayerOverrides[idKey] = ESPSettings.PlayerOverrides[idKey] or {}
-        for k, v in pairs(settings) do
-            ESPSettings.PlayerOverrides[idKey][k] = v
+        local key = tostring(p.UserId) or p.Name
+        ESPSettings.PlayerOverrides[key] = ESPSettings.PlayerOverrides[key] or {}
+        for k, v in pairs(overrides or {}) do
+            ESPSettings.PlayerOverrides[key][k] = v
         end
         return true
     end,
 
-    -- Remove per-player override for a player
-    RemovePlayerESP = function(playerRef)
+    SetPlayerColor = function(playerRef, colorKey, color3)
+        -- colorKey examples: "BoxCustomColor1", "BoxFillCustomColor2", "HealthBarColor1"
+        if not colorKey or not color3 then return false end
+        return getgenv().TrisESP.AddPlayerOverride(playerRef, { [colorKey] = color3 })
+    end,
+
+    GetPlayerOverride = function(playerRef)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return nil end
+        local key = tostring(p.UserId)
+        return (ESPSettings.PlayerOverrides and (ESPSettings.PlayerOverrides[key] or ESPSettings.PlayerOverrides[p.Name])) or nil
+    end,
+
+    RemovePlayerOverride = function(playerRef)
         local p = getgenv().TrisESP._resolvePlayer(playerRef)
         if not p then return false end
+        local uid = tostring(p.UserId)
         ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
-        local idKey = tostring(p.UserId)
-        ESPSettings.PlayerOverrides[idKey] = nil
+        ESPSettings.PlayerOverrides[uid] = nil
+        ESPSettings.PlayerOverrides[p.Name] = nil
         return true
     end,
 
-    -- Clear all player overrides
     ClearPlayerOverrides = function()
         ESPSettings.PlayerOverrides = {}
         return true
     end,
 }
-
-print("TrisESP (ScreenGui) loaded successfully!")
