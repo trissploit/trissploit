@@ -8400,6 +8400,10 @@ function Library:CreateWindow(WindowInfo)
             -- Show ESP Preview if this tab has it enabled
             if Tab.ESPPreviewEnabled and Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = true
+                -- Enable ESP on LocalPlayer for preview
+                if getgenv().TrisESP and getgenv().TrisESP.Settings then
+                    getgenv().TrisESP.Settings.ShowLocalPlayer = true
+                end
                 if Library.UpdateESPPreviewCharacter then
                     Library.UpdateESPPreviewCharacter()
                 end
@@ -8431,6 +8435,10 @@ function Library:CreateWindow(WindowInfo)
             -- Hide ESP Preview if this tab has it enabled
             if Tab.ESPPreviewEnabled and Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = false
+                -- Disable ESP on LocalPlayer when preview is hidden
+                if getgenv().TrisESP and getgenv().TrisESP.Settings then
+                    getgenv().TrisESP.Settings.ShowLocalPlayer = false
+                end
             end
         end
 
@@ -8502,20 +8510,9 @@ function Library:CreateWindow(WindowInfo)
                 Library.ESPPreviewWorldModel = WorldModel
                 Library.ESPPreviewCamera = Camera
                 Library.ESPPreviewCharacter = nil
-                Library.ESPPreviewESPObject = nil
 
                 -- Function to update the character model
                 local function UpdateCharacterModel()
-                    -- Clean up previous ESP
-                    if Library.ESPPreviewESPObject and Library.ESPPreviewESPObject.Elements then
-                        for _, elem in pairs(Library.ESPPreviewESPObject.Elements) do
-                            if elem and elem.Parent then
-                                elem:Destroy()
-                            end
-                        end
-                    end
-                    Library.ESPPreviewESPObject = nil
-                    
                     if Library.ESPPreviewCharacter then
                         Library.ESPPreviewCharacter:Destroy()
                         Library.ESPPreviewCharacter = nil
@@ -8568,26 +8565,6 @@ function Library:CreateWindow(WindowInfo)
                         local CharPos = ClonedCharacter.PrimaryPart.Position
                         Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
                     end
-                    
-                    -- Create ESP visuals for the preview using TrisESP if available
-                    task.defer(function()
-                        if getgenv().TrisESP and getgenv().TrisESP.CreatePreviewESP then
-                            Library.ESPPreviewESPObject = getgenv().TrisESP.CreatePreviewESP(ClonedCharacter, Viewport)
-                            
-                            -- Set up render loop to update ESP visuals
-                            if Library.ESPPreviewRenderConnection then
-                                Library.ESPPreviewRenderConnection:Disconnect()
-                            end
-                            
-                            Library.ESPPreviewRenderConnection = RunService.RenderStepped:Connect(function()
-                                if Library.ESPPreviewHolder and Library.ESPPreviewHolder.Visible and Library.ESPPreviewESPObject then
-                                    pcall(function()
-                                        Library.ESPPreviewESPObject.Update()
-                                    end)
-                                end
-                            end)
-                        end
-                    end)
                 end
 
                 -- Update character when it changes
@@ -8604,11 +8581,19 @@ function Library:CreateWindow(WindowInfo)
             -- Show/hide based on current tab
             if Tab.ESPPreviewEnabled and Library.ActiveTab == Tab then
                 Library.ESPPreviewHolder.Visible = true
+                -- Enable ESP on LocalPlayer for preview
+                if getgenv().TrisESP and getgenv().TrisESP.Settings then
+                    getgenv().TrisESP.Settings.ShowLocalPlayer = true
+                end
                 if Library.UpdateESPPreviewCharacter then
                     Library.UpdateESPPreviewCharacter()
                 end
             elseif Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = false
+                -- Disable ESP on LocalPlayer when preview is hidden
+                if getgenv().TrisESP and getgenv().TrisESP.Settings then
+                    getgenv().TrisESP.Settings.ShowLocalPlayer = false
+                end
             end
         end
 
