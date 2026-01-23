@@ -8241,20 +8241,24 @@ function Library:CreateWindow(WindowInfo)
                 CharacterModel = Character:Clone()
 
                 -- Remove scripts and other unnecessary components, prepare parts
-                for _, Obj in pairs(CharacterModel:GetDescendants()) do
-                    if Obj:IsA("Script") or Obj:IsA("LocalScript") or Obj:IsA("ModuleScript") then
-                        Obj:Destroy()
-                    elseif Obj:IsA("Humanoid") then
-                        Obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+                if typeof(CharacterModel) == "Instance" and CharacterModel.GetDescendants then
+                    for _, Obj in pairs(CharacterModel:GetDescendants()) do
+                        if Obj:IsA("Script") or Obj:IsA("LocalScript") or Obj:IsA("ModuleScript") then
+                            Obj:Destroy()
+                        elseif Obj:IsA("Humanoid") then
+                            Obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+                        end
                     end
                 end
 
                 -- Ensure we have a primary part and anchor parts so the model stays still
                 local primaryPart
-                for _, part in ipairs(CharacterModel:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        primaryPart = primaryPart or part
-                        part.Anchored = true
+                if typeof(CharacterModel) == "Instance" and CharacterModel.GetDescendants then
+                    for _, part in ipairs(CharacterModel:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            primaryPart = primaryPart or part
+                            part.Anchored = true
+                        end
                     end
                 end
                 if primaryPart then
