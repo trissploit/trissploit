@@ -8404,67 +8404,86 @@ function Library:CreateWindow(WindowInfo)
                 Parent = SliderFrame,
             })
 
-            local SliderBG = New("Frame", {
+            -- Use existing slider visuals (bar + gradient fill + value text)
+            local Bar = New("TextButton", {
+                Active = true,
+                AnchorPoint = Vector2.new(0, 0),
                 BackgroundColor3 = "MainColor",
+                BorderColor3 = "OutlineColor",
+                BorderSizePixel = 1,
                 Position = UDim2.fromOffset(6, 26),
                 Size = UDim2.new(1, -12, 0, 20),
+                Text = "",
                 Parent = SliderFrame,
             })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 4),
-                Parent = SliderBG,
-            })
-            Library:AddOutline(SliderBG)
+            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Bar })
+            local BarStroke = New("UIStroke", { Color = "OutlineColor", Parent = Bar })
 
-            local SliderFill = New("Frame", {
-                BackgroundColor3 = "AccentColor",
-                Size = UDim2.fromScale(1, 1),
-                Parent = SliderBG,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 4),
-                Parent = SliderFill,
-            })
-
-            local SliderValue = New("TextLabel", {
+            local DisplayLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Size = UDim2.fromScale(1, 1),
                 Text = "100%",
                 TextSize = 12,
                 ZIndex = 2,
-                Parent = SliderBG,
+                Parent = Bar,
+            })
+            New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = "Dark",
+                LineJoinMode = Enum.LineJoinMode.Miter,
+                Parent = DisplayLabel,
             })
 
-            -- Slider interaction
-            local Dragging = false
-            SliderBG.InputBegan:Connect(function(Input)
-                if IsClickInput(Input) and AimbotBox.SelectedPart then
-                    Dragging = true
-                    local Scale = math.clamp((Input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X, 0, 1)
-                    local Value = math.floor(Scale * 100)
-                    AimbotBox.HitChances[AimbotBox.SelectedPart] = Value
-                    SliderFill.Size = UDim2.fromScale(Scale, 1)
-                    SliderValue.Text = Value .. "%"
-                    Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, Value, AimbotBox.HitChances)
-                end
+            local Fill = New("Frame", {
+                BackgroundColor3 = "AccentGradientStart",
+                Size = UDim2.fromScale(1, 1),
+                Parent = Bar,
+                DPIExclude = { Size = true },
+            })
+            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Fill })
+            local FillGradient = New("UIGradient", { Color = Library:GetAccentGradientSequence(), Rotation = 90, Parent = Fill })
+            Library.Registry[FillGradient] = { Color = function() return Library:GetAccentGradientSequence() end }
+
+            -- Slider interaction (reusing library slider behavior)
+            local SliderMin, SliderMax, SliderRounding = 0, 100, 0
+            local SliderValueNum = 100
+
+            Bar.MouseEnter:Connect(function()
+                TweenService:Create(BarStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
+            end)
+            Bar.MouseLeave:Connect(function()
+                TweenService:Create(BarStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
             end)
 
-            Library:GiveSignal(UserInputService.InputEnded:Connect(function(Input)
-                if IsMouseInput(Input) then
-                    Dragging = false
-                end
-            end))
+            Bar.InputBegan:Connect(function(Input)
+                if not IsClickInput(Input) or not AimbotBox.SelectedPart then return end
 
-            Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input)
-                if Dragging and IsHoverInput(Input) and AimbotBox.SelectedPart then
-                    local Scale = math.clamp((Input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X, 0, 1)
-                    local Value = math.floor(Scale * 100)
-                    AimbotBox.HitChances[AimbotBox.SelectedPart] = Value
-                    SliderFill.Size = UDim2.fromScale(Scale, 1)
-                    SliderValue.Text = Value .. "%"
-                    Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, Value, AimbotBox.HitChances)
+                for _, Side in pairs(Library.ActiveTab.Sides) do
+                    Side.ScrollingEnabled = false
                 end
-            end))
+
+                while IsDragInput(Input) do
+                    local Location = Mouse.X
+                    local Scale = math.clamp((Location - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+
+                    local OldValue = SliderValueNum
+                    SliderValueNum = Round(SliderMin + ((SliderMax - SliderMin) * Scale), SliderRounding)
+
+                    Fill.Size = UDim2.fromScale((SliderValueNum - SliderMin) / (SliderMax - SliderMin), 1)
+                    DisplayLabel.Text = tostring(SliderValueNum) .. "%"
+
+                    AimbotBox.HitChances[AimbotBox.SelectedPart] = SliderValueNum
+                    if SliderValueNum ~= OldValue then
+                        Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, SliderValueNum, AimbotBox.HitChances)
+                    end
+
+                    RunService.RenderStepped:Wait()
+                end
+
+                for _, Side in pairs(Library.ActiveTab.Sides) do
+                    Side.ScrollingEnabled = true
+                end
+            end)
 
             -- Roblox R15 proportions (blocky, with spacing, uniform limb width)
             local R15BodyParts = {
@@ -8544,8 +8563,8 @@ function Library:CreateWindow(WindowInfo)
 
                             -- Show slider on top of the clicked part
                             local chance = AimbotBox.HitChances[partInfo.Name] or 100
-                            SliderFill.Size = UDim2.fromScale(chance / 100, 1)
-                            SliderValue.Text = chance .. "%"
+                            Fill.Size = UDim2.fromScale(chance / 100, 1)
+                            DisplayLabel.Text = chance .. "%"
                             SliderLabel.Text = partInfo.Name
                             
                             -- Position slider above the part using absolute coordinates
@@ -8618,8 +8637,8 @@ function Library:CreateWindow(WindowInfo)
                 if AimbotBox.HitChances[partName] ~= nil then
                     AimbotBox.HitChances[partName] = math.clamp(value, 0, 100)
                     if AimbotBox.SelectedPart == partName then
-                        SliderFill.Size = UDim2.fromScale(value / 100, 1)
-                        SliderValue.Text = value .. "%"
+                        Fill.Size = UDim2.fromScale(value / 100, 1)
+                        DisplayLabel.Text = value .. "%"
                     end
                 end
             end
