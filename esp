@@ -55,8 +55,6 @@ local ESPSettings = {
     WhitelistedPlayers = {},
     BlacklistedPlayers = {},
     TeamCheckEnabled = false,
-    -- Show ESP on LocalPlayer (used for preview mode)
-    ShowLocalPlayer = false,
     -- Custom team filters (strings = team names, objects = Team instances)
     CustomTeams = {},
     CustomTeamObjects = {},
@@ -245,8 +243,7 @@ local function isSameTeam(player1, player2)
 end
 
 local function shouldShowPlayer(player)
-    if not player then return false end
-    if player == LocalPlayer and not ESPSettings.ShowLocalPlayer then return false end
+    if not player or player == LocalPlayer then return false end
     if ESPSettings.TeamCheckEnabled then
         -- hide teammates (standard behaviour)
         if isSameTeam(player, LocalPlayer) then
@@ -600,6 +597,196 @@ local function updateESP(deltaTime)
     -- persist spin angle across reloads
     PERSIST.SpinAngle = SpinAngle
     -- Note: gradient autorotation will be integrated per-object below using deltaTime
+
+    -- Update preview ESP if it exists
+    if PreviewESPObject and PreviewCharacter and PreviewViewport then
+        local success = pcall(function()
+            local espObj = PreviewESPObject
+            local char = PreviewCharacter
+            
+            -- Get character parts
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if not hrp or not humanoid then
+                hideESP(espObj)
+                return
+            end
+            
+            -- Calculate screen rect in viewport space
+            local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+            local camera = PreviewViewport.CurrentCamera
+            if not camera then
+                hideESP(espObj)
+                return
+            end
+            
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    local corners = {
+                        part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                        part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                        part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
+                        part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
+                        part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
+                        part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
+                        part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, part.Size.Z/2),
+                        part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, part.Size.Z/2)
+                    }
+                    for _, corner in ipairs(corners) do
+                        local screenPos, onScreen = camera:WorldToViewportPoint(corner.Position)
+                        if onScreen then
+                            minX = math.min(minX, screenPos.X)
+                            minY = math.min(minY, screenPos.Y)
+                            maxX = math.max(maxX, screenPos.X)
+                            maxY = math.max(maxY, screenPos.Y)
+                        end
+                    end
+                end
+            end
+            
+            if minX == math.huge then
+                hideESP(espObj)
+                return
+            end
+            
+            local boxW = maxX - minX
+            local boxH = maxY - minY
+            local boxX = minX
+            local boxY = minY
+            
+            -- Apply same settings as normal ESP (use global settings)
+            local settings = ESPSettings
+            
+            -- Box Fill
+            if settings.BoxFill then
+                espObj.BoxFill.Visible = true
+                espObj.BoxFill.Position = UDim2.new(0, boxX, 0, boxY)
+                espObj.BoxFill.Size = UDim2.new(0, boxW, 0, boxH)
+                espObj.BoxFill.BackgroundTransparency = settings.BoxFillTransparency or 0.5
+                local seq = createGradientSequence(
+                    settings.BoxFillCustomColor1,
+                    settings.BoxFillCustomColor2,
+                    settings.BoxFillCustomColor3
+                )
+                espObj.BoxGradient.Color = seq
+                espObj.BoxGradient.Rotation = RotationAngle
+            else
+                espObj.BoxFill.Visible = false
+            end
+            
+            -- Box Outline
+            if settings.Boxes then
+                espObj.Box.Visible = true
+                espObj.Box.Position = UDim2.new(0, boxX, 0, boxY)
+                espObj.Box.Size = UDim2.new(0, boxW, 0, boxH)
+                espObj.BoxOutline.Color = settings.BoxOutlineColor
+                espObj.BoxOutline.Thickness = 1
+                
+                local outlineSeq = createGradientSequence(
+                    settings.BoxCustomColor1,
+                    settings.BoxCustomColor2,
+                    settings.BoxCustomColor3
+                )
+                espObj.OutlineGradient.Color = outlineSeq
+                espObj.OutlineGradient.Enabled = true
+                espObj.OutlineGradient.Rotation = -90
+                
+                -- Hide corners for square mode
+                for _, corner in ipairs(espObj.Corners) do
+                    corner.Visible = false
+                end
+            else
+                espObj.Box.Visible = false
+            end
+            
+            -- Health Bar
+            if settings.HealthBarEnabled and humanoid then
+                local healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                local barThickness = settings.HealthBarThickness or 2.5
+                local barHeight = boxH * healthRatio
+                
+                local barX = boxX
+                if settings.HealthBarPosition == "Right" then
+                    barX = boxX + boxW + 2
+                elseif settings.HealthBarPosition == "Left" then
+                    barX = boxX - barThickness - 2
+                end
+                
+                espObj.HealthBarBG.Visible = true
+                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, boxY)
+                espObj.HealthBarBG.Size = UDim2.new(0, barThickness, 0, boxH)
+                
+                espObj.HealthBar.Visible = true
+                espObj.HealthBar.Position = UDim2.new(0, barX, 0, boxY + boxH - barHeight)
+                espObj.HealthBar.Size = UDim2.new(0, barThickness, 0, barHeight)
+                
+                -- Animate health gradient
+                if settings.HealthGradientEnabled then
+                    espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0) + dt * (settings.HealthGradientSpeed or 0.5)
+                    if espObj.HealthGradientPhase > 1 then
+                        espObj.HealthGradientPhase = espObj.HealthGradientPhase - 1
+                    end
+                end
+                
+                local phase = espObj.HealthGradientPhase or 0
+                local samples = 12
+                local keypoints = {}
+                for i = 0, samples do
+                    local t = i / samples
+                    local offsetT = (t + phase) % 1
+                    local c
+                    if offsetT < 0.33 then
+                        local blend = offsetT / 0.33
+                        c = lerpColor(settings.HealthBarColor1, settings.HealthBarColor2, blend)
+                    elseif offsetT < 0.66 then
+                        local blend = (offsetT - 0.33) / 0.33
+                        c = lerpColor(settings.HealthBarColor2, settings.HealthBarColor3, blend)
+                    else
+                        local blend = (offsetT - 0.66) / 0.34
+                        c = lerpColor(settings.HealthBarColor3, settings.HealthBarColor1, blend)
+                    end
+                    table.insert(keypoints, ColorSequenceKeypoint.new(t, c))
+                end
+                espObj.HealthBarGradient.Color = ColorSequence.new(keypoints)
+                
+                if settings.ShowHealthText then
+                    espObj.HealthText.Visible = true
+                    espObj.HealthText.Text = string.format("%d%%", math.floor(healthRatio * 100))
+                    espObj.HealthText.Position = UDim2.new(0, barX + barThickness + 5, 0, boxY + boxH - barHeight)
+                else
+                    espObj.HealthText.Visible = false
+                end
+            else
+                espObj.HealthBarBG.Visible = false
+                espObj.HealthBar.Visible = false
+                espObj.HealthText.Visible = false
+            end
+            
+            -- Name
+            if settings.ShowName then
+                espObj.Name.Visible = true
+                espObj.Name.Text = "Preview"
+                espObj.Name.Position = UDim2.new(0, boxX + boxW/2, 0, boxY - 20)
+            else
+                espObj.Name.Visible = false
+            end
+            
+            -- Hide other elements for preview
+            espObj.Distance.Visible = false
+            espObj.Weapon.Visible = false
+            espObj.Tracer.Visible = false
+            if espObj.Highlight then
+                espObj.Highlight.Enabled = false
+            end
+        end)
+        
+        if not success then
+            -- If update failed, hide the preview ESP
+            if PreviewESPObject then
+                hideESP(PreviewESPObject)
+            end
+        end
+    end
 
     for player, espObj in pairs(ESPObjects) do
         pcall(function()
@@ -1157,6 +1344,44 @@ getgenv().TrisESP = {
     ClearCustomTeams = function()
         ESPSettings.CustomTeams = {}
         ESPSettings.CustomTeamObjects = {}
+        return true
+    end,
+
+    -- Preview ESP functions (for viewport character models)
+    CreatePreviewESP = function(character, viewport)
+        if not character or not viewport then return false end
+        
+        -- Remove existing preview ESP if any
+        if PreviewESPObject then
+            removeESP(PreviewESPObject)
+            PreviewESPObject = nil
+        end
+        
+        -- Create new ESP object for preview
+        PreviewESPObject = createESPObject()
+        PreviewCharacter = character
+        PreviewViewport = viewport
+        PreviewESPObject.HealthGradientPhase = 0
+        PreviewESPObject.GradientAngle = 0
+        
+        -- Parent the ESP container to the viewport instead of main holder
+        if PreviewESPObject.Container then
+            PreviewESPObject.Container.Parent = viewport
+        end
+        
+        return true
+    end,
+
+    RemovePreviewESP = function()
+        if PreviewESPObject then
+            removeESP(PreviewESPObject)
+            PreviewESPObject = nil
+        end
+        PreviewCharacter = nil
+        PreviewViewport = nil
+        return true
+    end,
+        PreviewViewport = nil
         return true
     end,
 
