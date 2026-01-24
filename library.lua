@@ -8558,9 +8558,9 @@ function Library:CreateWindow(WindowInfo)
                         Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
                     end
 
-                    -- Create ESP on the preview character if TrisESP is loaded
+                    -- Create ESP on the preview character if TrisESP is loaded (pass the viewport holder)
                     if getgenv().TrisESP and getgenv().TrisESP.CreatePreviewESP then
-                        getgenv().TrisESP.CreatePreviewESP(ClonedCharacter, Viewport)
+                        getgenv().TrisESP.CreatePreviewESP(ClonedCharacter, ViewportHolder)
                     end
                 end
 
@@ -8581,9 +8581,9 @@ function Library:CreateWindow(WindowInfo)
                 if Library.UpdateESPPreviewCharacter then
                     Library.UpdateESPPreviewCharacter()
                 end
-                -- Create ESP on preview if TrisESP is loaded
-                if getgenv().TrisESP and Library.ESPPreviewCharacter and Library.ESPPreviewViewport then
-                    getgenv().TrisESP.CreatePreviewESP(Library.ESPPreviewCharacter, Library.ESPPreviewViewport)
+                -- Create ESP on preview if TrisESP is loaded (pass the preview holder)
+                if getgenv().TrisESP and Library.ESPPreviewCharacter and Library.ESPPreviewHolder then
+                    getgenv().TrisESP.CreatePreviewESP(Library.ESPPreviewCharacter, Library.ESPPreviewHolder)
                 end
             elseif Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = false
