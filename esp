@@ -25,6 +25,8 @@ local PreviewESPObject = nil
 local PreviewCharacter = nil
 local PreviewViewport = nil -- ViewportFrame inside the holder
 local PreviewViewportHolder = nil -- Frame that contains the ViewportFrame
+local PreviewScale = 1 -- multiplier to scale the computed box
+local PreviewPadding = 0 -- extra pixels to pad the computed box
 -- Persistent state across hot-reloads (if executor preserves getgenv)
 getgenv()._TrisESP_Persistent = getgenv()._TrisESP_Persistent or {}
 local PERSIST = getgenv()._TrisESP_Persistent
@@ -608,64 +610,106 @@ local function updateESP(deltaTime)
         local success = pcall(function()
             local espObj = PreviewESPObject
             local char = PreviewCharacter
-            
-            -- Get character parts
+
+            -- Get character parts / primary parts
             local hrp = char:FindFirstChild("HumanoidRootPart")
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if not hrp or not humanoid then
+            if not humanoid then
                 hideESP(espObj)
                 return
             end
-            
-            -- Calculate screen rect in viewport space
-            local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+
             local camera = PreviewViewport.CurrentCamera
             if not camera then
                 hideESP(espObj)
                 return
             end
-            
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    local corners = {
-                        part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                        part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, part.Size.Z/2)
-                    }
-                    for _, corner in ipairs(corners) do
-                        local screenPos, onScreen = camera:WorldToViewportPoint(corner.Position)
-                        if onScreen then
-                            minX = math.min(minX, screenPos.X)
-                            minY = math.min(minY, screenPos.Y)
-                            maxX = math.max(maxX, screenPos.X)
-                            maxY = math.max(maxY, screenPos.Y)
-                        end
+
+            local boxX, boxY, boxW, boxH
+
+            -- Prefer HRP + extents method to avoid stray viewmodel "box" parts
+            if hrp then
+                local ok, extents = pcall(function() return char:GetExtentsSize() end)
+                if ok and extents and extents.Y > 0 then
+                    local halfH = extents.Y / 2
+                    local topWorld = hrp.Position + Vector3.new(0, halfH, 0)
+                    local bottomWorld = hrp.Position - Vector3.new(0, halfH, 0)
+                    local spTop = camera:WorldToViewportPoint(topWorld)
+                    local spBottom = camera:WorldToViewportPoint(bottomWorld)
+                    if spTop.Z > 0 and spBottom.Z > 0 then
+                        local h = math.abs(spBottom.Y - spTop.Y)
+                        local w = h * 0.55
+                        local cx = (spTop.X + spBottom.X) / 2
+                        local x = cx - w / 2
+                        local y = spTop.Y
+                        boxX, boxY, boxW, boxH = x, y, w, h
                     end
                 end
             end
-            
-            if minX == math.huge then
-                hideESP(espObj)
-                return
+
+            -- Fallback: compute bounds from parts but filter out large stray "box" parts
+            if not boxX then
+                local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+                local ok, extents = pcall(function() return char:GetExtentsSize() end)
+                local extMag = (ok and extents) and extents.Magnitude or 0
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local nameLower = (part.Name or ""):lower()
+                        -- skip obvious viewmodel box parts or unusually large parts relative to the model
+                        if not nameLower:find("box") and not nameLower:find("view") and not (extMag > 0 and part.Size.Magnitude > extMag * 1.5) then
+                            local corners = {
+                                part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                                part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                                part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
+                                part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
+                                part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
+                                part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
+                                part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, part.Size.Z/2),
+                                part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, part.Size.Z/2)
+                            }
+                            for _, corner in ipairs(corners) do
+                                local screenPos, onScreen = camera:WorldToViewportPoint(corner.Position)
+                                if onScreen then
+                                    minX = math.min(minX, screenPos.X)
+                                    minY = math.min(minY, screenPos.Y)
+                                    maxX = math.max(maxX, screenPos.X)
+                                    maxY = math.max(maxY, screenPos.Y)
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if minX == math.huge then
+                    hideESP(espObj)
+                    return
+                end
+
+                boxW = maxX - minX
+                boxH = maxY - minY
+                boxX = minX
+                boxY = minY
             end
-            
-            local boxW = maxX - minX
-            local boxH = maxY - minY
-            local boxX = minX
-            local boxY = minY
+
+            -- Apply preview scale and padding around the computed box (in screen-space)
+            local scale = PreviewScale or 1
+            local pad = PreviewPadding or 0
+            local cx = boxX + boxW / 2
+            local cy = boxY + boxH / 2
+            local scaledW = math.max(1, math.floor(boxW * scale))
+            local scaledH = math.max(1, math.floor(boxH * scale))
+            local adjX = cx - scaledW / 2 - pad
+            local adjY = cy - scaledH / 2 - pad
+            local adjW = scaledW + pad * 2
+            local adjH = scaledH + pad * 2
 
             -- Convert screen coordinates to local coordinates relative to the viewport holder
             local holderPos = PreviewViewportHolder and PreviewViewportHolder.AbsolutePosition or Vector2.new(0, 0)
             local holderSize = PreviewViewportHolder and PreviewViewportHolder.AbsoluteSize or Vector2.new(1, 1)
-            local localX = math.floor(boxX - holderPos.X)
-            local localY = math.floor(boxY - holderPos.Y)
-            local localW = math.floor(boxW)
-            local localH = math.floor(boxH)
+            local localX = math.floor(adjX - holderPos.X)
+            local localY = math.floor(adjY - holderPos.Y)
+            local localW = math.floor(adjW)
+            local localH = math.floor(adjH)
 
             -- Clamp to holder bounds
             if localX < 0 then
@@ -791,11 +835,11 @@ local function updateESP(deltaTime)
                 espObj.HealthText.Visible = false
             end
             
-            -- Name
+            -- Name (position relative to the viewport holder for preview)
             if settings.ShowName then
                 espObj.Name.Visible = true
                 espObj.Name.Text = "Preview"
-                espObj.Name.Position = UDim2.new(0, boxX + boxW/2, 0, boxY - 20)
+                espObj.Name.Position = UDim2.new(0, localX + (localW/2), 0, localY - 20)
             else
                 espObj.Name.Visible = false
             end
@@ -1377,7 +1421,7 @@ getgenv().TrisESP = {
     end,
 
     -- Preview ESP functions (for viewport character models)
-    CreatePreviewESP = function(character, viewportHolder)
+    CreatePreviewESP = function(character, viewportHolder, opts)
         if not character or not viewportHolder then return false end
 
         -- Find the ViewportFrame inside the holder
@@ -1405,6 +1449,16 @@ getgenv().TrisESP = {
         PreviewESPObject.HealthGradientPhase = 0
         PreviewESPObject.GradientAngle = 0
 
+        -- Apply optional sizing options
+        if opts then
+            if type(opts.Scale) == "number" and opts.Scale > 0 then
+                PreviewScale = opts.Scale
+            end
+            if type(opts.Padding) == "number" and opts.Padding >= 0 then
+                PreviewPadding = math.floor(opts.Padding)
+            end
+        end
+
         -- Parent the ESP container to the viewport holder so 2D overlays render atop the viewport
         if PreviewESPObject.Container then
             PreviewESPObject.Container.Parent = viewportHolder
@@ -1421,6 +1475,19 @@ getgenv().TrisESP = {
         PreviewCharacter = nil
         PreviewViewport = nil
         PreviewViewportHolder = nil
+        return true
+    end,
+
+    -- Preview sizing helpers
+    SetPreviewScale = function(scale)
+        if type(scale) ~= "number" or scale <= 0 then return false end
+        PreviewScale = scale
+        return true
+    end,
+
+    SetPreviewPadding = function(pixels)
+        if type(pixels) ~= "number" or pixels < 0 then return false end
+        PreviewPadding = math.floor(pixels)
         return true
     end,
 
