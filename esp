@@ -20,6 +20,11 @@ local renderConn
 local ESPObjects = {}
 local ESPsCleared = false
 local RotationAngle = -90
+-- Preview ESP (separate from main ESP system)
+local PreviewESPObject = nil
+local PreviewCharacter = nil
+local PreviewViewport = nil -- ViewportFrame inside the holder
+local PreviewViewportHolder = nil -- Frame that contains the ViewportFrame
 -- Persistent state across hot-reloads (if executor preserves getgenv)
 getgenv()._TrisESP_Persistent = getgenv()._TrisESP_Persistent or {}
 local PERSIST = getgenv()._TrisESP_Persistent
@@ -653,6 +658,30 @@ local function updateESP(deltaTime)
             local boxH = maxY - minY
             local boxX = minX
             local boxY = minY
+
+            -- Convert screen coordinates to local coordinates relative to the viewport holder
+            local holderPos = PreviewViewportHolder and PreviewViewportHolder.AbsolutePosition or Vector2.new(0, 0)
+            local holderSize = PreviewViewportHolder and PreviewViewportHolder.AbsoluteSize or Vector2.new(1, 1)
+            local localX = math.floor(boxX - holderPos.X)
+            local localY = math.floor(boxY - holderPos.Y)
+            local localW = math.floor(boxW)
+            local localH = math.floor(boxH)
+
+            -- Clamp to holder bounds
+            if localX < 0 then
+                localW = math.max(0, localW + localX)
+                localX = 0
+            end
+            if localY < 0 then
+                localH = math.max(0, localH + localY)
+                localY = 0
+            end
+            if localX + localW > holderSize.X then
+                localW = math.max(0, holderSize.X - localX)
+            end
+            if localY + localH > holderSize.Y then
+                localH = math.max(0, holderSize.Y - localY)
+            end
             
             -- Apply same settings as normal ESP (use global settings)
             local settings = ESPSettings
@@ -660,8 +689,8 @@ local function updateESP(deltaTime)
             -- Box Fill
             if settings.BoxFill then
                 espObj.BoxFill.Visible = true
-                espObj.BoxFill.Position = UDim2.new(0, boxX, 0, boxY)
-                espObj.BoxFill.Size = UDim2.new(0, boxW, 0, boxH)
+                espObj.BoxFill.Position = UDim2.new(0, localX, 0, localY)
+                espObj.BoxFill.Size = UDim2.new(0, localW, 0, localH)
                 espObj.BoxFill.BackgroundTransparency = settings.BoxFillTransparency or 0.5
                 local seq = createGradientSequence(
                     settings.BoxFillCustomColor1,
@@ -677,8 +706,8 @@ local function updateESP(deltaTime)
             -- Box Outline
             if settings.Boxes then
                 espObj.Box.Visible = true
-                espObj.Box.Position = UDim2.new(0, boxX, 0, boxY)
-                espObj.Box.Size = UDim2.new(0, boxW, 0, boxH)
+                espObj.Box.Position = UDim2.new(0, localX, 0, localY)
+                espObj.Box.Size = UDim2.new(0, localW, 0, localH)
                 espObj.BoxOutline.Color = settings.BoxOutlineColor
                 espObj.BoxOutline.Thickness = 1
                 
@@ -703,21 +732,21 @@ local function updateESP(deltaTime)
             if settings.HealthBarEnabled and humanoid then
                 local healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
                 local barThickness = settings.HealthBarThickness or 2.5
-                local barHeight = boxH * healthRatio
-                
-                local barX = boxX
+                local barHeight = localH * healthRatio
+
+                local barX = localX
                 if settings.HealthBarPosition == "Right" then
-                    barX = boxX + boxW + 2
+                    barX = localX + localW + 2
                 elseif settings.HealthBarPosition == "Left" then
-                    barX = boxX - barThickness - 2
+                    barX = localX - barThickness - 2
                 end
-                
+
                 espObj.HealthBarBG.Visible = true
-                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, boxY)
-                espObj.HealthBarBG.Size = UDim2.new(0, barThickness, 0, boxH)
-                
+                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, localY)
+                espObj.HealthBarBG.Size = UDim2.new(0, barThickness, 0, localH)
+
                 espObj.HealthBar.Visible = true
-                espObj.HealthBar.Position = UDim2.new(0, barX, 0, boxY + boxH - barHeight)
+                espObj.HealthBar.Position = UDim2.new(0, barX, 0, localY + localH - barHeight)
                 espObj.HealthBar.Size = UDim2.new(0, barThickness, 0, barHeight)
                 
                 -- Animate health gradient
@@ -1348,40 +1377,50 @@ getgenv().TrisESP = {
     end,
 
     -- Preview ESP functions (for viewport character models)
-    CreatePreviewESP = function(character, viewport)
-        if not character or not viewport then return false end
-        
+    CreatePreviewESP = function(character, viewportHolder)
+        if not character or not viewportHolder then return false end
+
+        -- Find the ViewportFrame inside the holder
+        local viewportFrame = nil
+        for _, v in ipairs(viewportHolder:GetChildren()) do
+            if v:IsA("ViewportFrame") then
+                viewportFrame = v
+                break
+            end
+        end
+
+        if not viewportFrame then return false end
+
         -- Remove existing preview ESP if any
         if PreviewESPObject then
             removeESP(PreviewESPObject)
             PreviewESPObject = nil
         end
-        
+
         -- Create new ESP object for preview
         PreviewESPObject = createESPObject()
         PreviewCharacter = character
-        PreviewViewport = viewport
+        PreviewViewport = viewportFrame
+        PreviewViewportHolder = viewportHolder
         PreviewESPObject.HealthGradientPhase = 0
         PreviewESPObject.GradientAngle = 0
-        
-        -- Parent the ESP container to the viewport instead of main holder
+
+        -- Parent the ESP container to the viewport holder so 2D overlays render atop the viewport
         if PreviewESPObject.Container then
-            PreviewESPObject.Container.Parent = viewport
+            PreviewESPObject.Container.Parent = viewportHolder
         end
-        
+
         return true
     end,
 
-    RemovePreviewESP = function()
+        RemovePreviewESP = function()
         if PreviewESPObject then
             removeESP(PreviewESPObject)
             PreviewESPObject = nil
         end
         PreviewCharacter = nil
         PreviewViewport = nil
-        return true
-    end,
-        PreviewViewport = nil
+        PreviewViewportHolder = nil
         return true
     end,
 
