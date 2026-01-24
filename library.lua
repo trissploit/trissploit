@@ -8396,14 +8396,6 @@ function Library:CreateWindow(WindowInfo)
             if Library.Searching then
                 Library:UpdateSearch(Library.SearchText)
             end
-
-            -- Show ESP Preview if this tab has it enabled
-            if Tab.ESPPreviewEnabled and Library.ESPPreviewHolder then
-                Library.ESPPreviewHolder.Visible = true
-                if Library.UpdateESPPreviewCharacter then
-                    Library.UpdateESPPreviewCharacter()
-                end
-            end
         end
 
         function Tab:Hide()
@@ -8427,386 +8419,6 @@ function Library:CreateWindow(WindowInfo)
             CurrentTabInfo.Visible = false
 
             Library.ActiveTab = nil
-
-            -- Hide ESP Preview if this tab has it enabled
-            if Tab.ESPPreviewEnabled and Library.ESPPreviewHolder then
-                Library.ESPPreviewHolder.Visible = false
-            end
-        end
-
-        --// ESP Preview \\--
-        Tab.ESPPreviewEnabled = false
-
-        function Tab:SetESPPreview(Enabled)
-            Tab.ESPPreviewEnabled = Enabled == true
-
-            -- Create ESP Preview holder if it doesn't exist
-            if not Library.ESPPreviewHolder then
-                local PreviewHolder = New("Frame", {
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    BackgroundColor3 = "BackgroundColor",
-                    Position = UDim2.new(1, -6, 0.5, 0),
-                    Size = UDim2.fromOffset(180, 280),
-                    Visible = false,
-                    ZIndex = 10,
-                    Parent = ScreenGui,
-                })
-                New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius),
-                    Parent = PreviewHolder,
-                })
-                Library:AddOutline(PreviewHolder)
-                Library:MakeDraggable(PreviewHolder, PreviewHolder, true)
-
-                local PreviewTitle = New("TextLabel", {
-                    BackgroundTransparency = 1,
-                    Position = UDim2.fromOffset(0, 0),
-                    Size = UDim2.new(1, 0, 0, 30),
-                    Text = "ESP Preview",
-                    TextSize = 14,
-                    Parent = PreviewHolder,
-                })
-
-                Library:MakeLine(PreviewHolder, {
-                    Position = UDim2.fromOffset(0, 30),
-                    Size = UDim2.new(1, 0, 0, 1),
-                })
-
-                local ViewportHolder = New("Frame", {
-                    BackgroundColor3 = "MainColor",
-                    Position = UDim2.fromOffset(6, 36),
-                    Size = UDim2.new(1, -12, 1, -42),
-                    Parent = PreviewHolder,
-                })
-                New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius),
-                    Parent = ViewportHolder,
-                })
-
-                local Viewport = New("ViewportFrame", {
-                    BackgroundTransparency = 1,
-                    Size = UDim2.fromScale(1, 1),
-                    Parent = ViewportHolder,
-                })
-
-                -- ESP Overlay (sits on top of viewport)
-                local ESPOverlay = New("Frame", {
-                    BackgroundTransparency = 1,
-                    Size = UDim2.fromScale(1, 1),
-                    ZIndex = 10,
-                    Parent = ViewportHolder,
-                })
-
-                local WorldModel = Instance.new("WorldModel")
-                WorldModel.Parent = Viewport
-
-                local Camera = Instance.new("Camera")
-                Camera.FieldOfView = 50
-                Camera.Parent = Viewport
-                Viewport.CurrentCamera = Camera
-
-                Library.ESPPreviewHolder = PreviewHolder
-                Library.ESPPreviewViewport = Viewport
-                Library.ESPPreviewWorldModel = WorldModel
-                Library.ESPPreviewCamera = Camera
-                Library.ESPPreviewCharacter = nil
-                Library.ESPPreviewOverlay = ESPOverlay
-                Library.ESPPreviewElements = {}
-
-                -- Function to update the character model
-                local function UpdateCharacterModel()
-                    if Library.ESPPreviewCharacter then
-                        Library.ESPPreviewCharacter:Destroy()
-                        Library.ESPPreviewCharacter = nil
-                    end
-
-                    -- Clear old ESP elements
-                    for _, elem in pairs(Library.ESPPreviewElements) do
-                        if elem and elem.Parent then
-                            elem:Destroy()
-                        end
-                    end
-                    Library.ESPPreviewElements = {}
-
-                    local Character = LocalPlayer.Character
-                    if not Character then return end
-
-                    local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
-                    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-                    if not HumanoidRootPart or not Humanoid then return end
-
-                    -- Clone the character
-                    local ClonedCharacter = Instance.new("Model")
-                    ClonedCharacter.Name = "ESPPreviewCharacter"
-
-                    for _, Part in ipairs(Character:GetDescendants()) do
-                        if Part:IsA("BasePart") or Part:IsA("Decal") or Part:IsA("Texture") then
-                            local Clone = Part:Clone()
-                            if Clone:IsA("BasePart") then
-                                Clone.Anchored = true
-                                Clone.CanCollide = false
-                                Clone.CastShadow = false
-                            end
-                            Clone.Parent = ClonedCharacter
-                        elseif Part:IsA("Accessory") then
-                            local AccessoryClone = Part:Clone()
-                            for _, Desc in ipairs(AccessoryClone:GetDescendants()) do
-                                if Desc:IsA("BasePart") then
-                                    Desc.Anchored = true
-                                    Desc.CanCollide = false
-                                    Desc.CastShadow = false
-                                end
-                            end
-                            AccessoryClone.Parent = ClonedCharacter
-                        end
-                    end
-
-                    -- Clone Humanoid for animations display
-                    local HumanoidClone = Humanoid:Clone()
-                    HumanoidClone.Parent = ClonedCharacter
-
-                    ClonedCharacter.PrimaryPart = ClonedCharacter:FindFirstChild("HumanoidRootPart")
-                    ClonedCharacter.Parent = WorldModel
-
-                    Library.ESPPreviewCharacter = ClonedCharacter
-
-                    -- Position camera to view the character
-                    if ClonedCharacter.PrimaryPart then
-                        local CharPos = ClonedCharacter.PrimaryPart.Position
-                        Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
-                    end
-
-                    -- Create ESP elements directly
-                    local function CreateESPElements()
-                        -- Box outline frame
-                        local BoxFrame = New("Frame", {
-                            BackgroundTransparency = 1,
-                            BorderSizePixel = 0,
-                            ZIndex = 11,
-                            Parent = ESPOverlay,
-                        })
-                        local BoxStroke = New("UIStroke", {
-                            Color = Color3.fromRGB(255, 255, 255),
-                            Thickness = 2,
-                            Parent = BoxFrame,
-                        })
-                        table.insert(Library.ESPPreviewElements, BoxFrame)
-
-                        -- Box fill
-                        local BoxFill = New("Frame", {
-                            BackgroundColor3 = Color3.fromRGB(0, 170, 255),
-                            BackgroundTransparency = 0.7,
-                            BorderSizePixel = 0,
-                            ZIndex = 10,
-                            Parent = ESPOverlay,
-                        })
-                        local FillGradient = New("UIGradient", {
-                            Rotation = -90,
-                            Parent = BoxFill,
-                        })
-                        table.insert(Library.ESPPreviewElements, BoxFill)
-
-                        -- Health bar background
-                        local HealthBarBG = New("Frame", {
-                            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-                            BorderSizePixel = 0,
-                            ZIndex = 12,
-                            Parent = ESPOverlay,
-                        })
-                        table.insert(Library.ESPPreviewElements, HealthBarBG)
-
-                        -- Health bar fill
-                        local HealthBar = New("Frame", {
-                            BackgroundColor3 = Color3.fromRGB(0, 255, 0),
-                            BorderSizePixel = 0,
-                            ZIndex = 13,
-                            Parent = ESPOverlay,
-                        })
-                        local HealthGradient = New("UIGradient", {
-                            Rotation = -90,
-                            Parent = HealthBar,
-                        })
-                        table.insert(Library.ESPPreviewElements, HealthBar)
-
-                        -- Name label
-                        local NameLabel = New("TextLabel", {
-                            BackgroundTransparency = 1,
-                            Font = Enum.Font.Code,
-                            Text = "Preview",
-                            TextColor3 = Color3.fromRGB(255, 255, 255),
-                            TextSize = 13,
-                            TextStrokeTransparency = 0,
-                            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
-                            ZIndex = 14,
-                            Parent = ESPOverlay,
-                        })
-                        table.insert(Library.ESPPreviewElements, NameLabel)
-
-                        -- Health text
-                        local HealthText = New("TextLabel", {
-                            BackgroundTransparency = 1,
-                            Font = Enum.Font.Code,
-                            Text = "100%",
-                            TextColor3 = Color3.fromRGB(119, 120, 255),
-                            TextSize = 13,
-                            TextStrokeTransparency = 0,
-                            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
-                            ZIndex = 14,
-                            Parent = ESPOverlay,
-                        })
-                        table.insert(Library.ESPPreviewElements, HealthText)
-
-                        return {
-                            BoxFrame = BoxFrame,
-                            BoxStroke = BoxStroke,
-                            BoxFill = BoxFill,
-                            FillGradient = FillGradient,
-                            HealthBarBG = HealthBarBG,
-                            HealthBar = HealthBar,
-                            HealthGradient = HealthGradient,
-                            NameLabel = NameLabel,
-                            HealthText = HealthText,
-                        }
-                    end
-
-                    local ESPElements = CreateESPElements()
-
-                    -- Update loop for ESP
-                    local updateConnection
-                    updateConnection = RunService.RenderStepped:Connect(function()
-                        if not ClonedCharacter or not ClonedCharacter.Parent or not PreviewHolder.Visible then
-                            if updateConnection then
-                                updateConnection:Disconnect()
-                            end
-                            return
-                        end
-
-                        local hrp = ClonedCharacter:FindFirstChild("HumanoidRootPart")
-                        local humanoid = ClonedCharacter:FindFirstChildOfClass("Humanoid")
-                        if not hrp or not humanoid then return end
-
-                        -- Calculate bounding box in viewport space
-                        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
-                        local vpSize = Viewport.AbsoluteSize
-
-                        for _, part in ipairs(ClonedCharacter:GetDescendants()) do
-                            if part:IsA("BasePart") then
-                                local corners = {
-                                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                                    part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                                    part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                                    part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                                    part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                                    part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, part.Size.Z/2),
-                                    part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, part.Size.Z/2)
-                                }
-                                for _, corner in ipairs(corners) do
-                                    local screenPos, onScreen = Camera:WorldToViewportPoint(corner.Position)
-                                    if onScreen then
-                                        minX = math.min(minX, screenPos.X)
-                                        minY = math.min(minY, screenPos.Y)
-                                        maxX = math.max(maxX, screenPos.X)
-                                        maxY = math.max(maxY, screenPos.Y)
-                                    end
-                                end
-                            end
-                        end
-
-                        if minX == math.huge then return end
-
-                        -- Convert to viewport-relative coordinates (0-1 scale)
-                        local boxX = minX / vpSize.X
-                        local boxY = minY / vpSize.Y
-                        local boxW = (maxX - minX) / vpSize.X
-                        local boxH = (maxY - minY) / vpSize.Y
-
-                        -- Clamp to viewport bounds
-                        boxX = math.clamp(boxX, 0, 1)
-                        boxY = math.clamp(boxY, 0, 1)
-                        boxW = math.clamp(boxW, 0, 1 - boxX)
-                        boxH = math.clamp(boxH, 0, 1 - boxY)
-
-                        -- Get ESP settings (use TrisESP if available, otherwise defaults)
-                        local showBoxes = true
-                        local showBoxFill = true
-                        local showHealthBar = true
-                        local boxColor = Color3.fromRGB(0, 170, 255)
-                        local fillColor = Color3.fromRGB(0, 170, 255)
-                        local fillTransparency = 0.5
-
-                        if getgenv().TrisESP and getgenv().TrisESP.Settings then
-                            local settings = getgenv().TrisESP.Settings
-                            showBoxes = settings.Boxes or false
-                            showBoxFill = settings.BoxFill or false
-                            showHealthBar = settings.HealthBarEnabled or false
-                            boxColor = settings.BoxColor or boxColor
-                            fillColor = settings.BoxFillColor or fillColor
-                            fillTransparency = settings.BoxFillTransparency or fillTransparency
-                        end
-
-                        -- Update box outline
-                        ESPElements.BoxFrame.Visible = showBoxes
-                        ESPElements.BoxFrame.Position = UDim2.fromScale(boxX, boxY)
-                        ESPElements.BoxFrame.Size = UDim2.fromScale(boxW, boxH)
-                        ESPElements.BoxStroke.Color = boxColor
-
-                        -- Update box fill
-                        ESPElements.BoxFill.Visible = showBoxFill
-                        ESPElements.BoxFill.Position = UDim2.fromScale(boxX, boxY)
-                        ESPElements.BoxFill.Size = UDim2.fromScale(boxW, boxH)
-                        ESPElements.BoxFill.BackgroundColor3 = fillColor
-                        ESPElements.BoxFill.BackgroundTransparency = fillTransparency
-
-                        -- Update health bar
-                        local healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-                        local barThickness = 4 / vpSize.X
-                        local barHeight = boxH * healthRatio
-
-                        ESPElements.HealthBarBG.Visible = showHealthBar
-                        ESPElements.HealthBarBG.Position = UDim2.fromScale(boxX - barThickness - 0.01, boxY)
-                        ESPElements.HealthBarBG.Size = UDim2.fromScale(barThickness, boxH)
-
-                        ESPElements.HealthBar.Visible = showHealthBar
-                        ESPElements.HealthBar.Position = UDim2.fromScale(boxX - barThickness - 0.01, boxY + boxH - barHeight)
-                        ESPElements.HealthBar.Size = UDim2.fromScale(barThickness, barHeight)
-
-                        -- Update name label
-                        ESPElements.NameLabel.Position = UDim2.fromScale(boxX + boxW/2, boxY - 0.05)
-                        ESPElements.NameLabel.Size = UDim2.fromScale(0, 0)
-                        ESPElements.NameLabel.AnchorPoint = Vector2.new(0.5, 1)
-
-                        -- Update health text
-                        ESPElements.HealthText.Text = string.format("%d%%", math.floor(healthRatio * 100))
-                        ESPElements.HealthText.Position = UDim2.fromScale(boxX - barThickness - 0.015, boxY + boxH - barHeight)
-                        ESPElements.HealthText.Size = UDim2.fromScale(0, 0)
-                        ESPElements.HealthText.AnchorPoint = Vector2.new(1, 0)
-                        ESPElements.HealthText.Visible = showHealthBar
-                    end)
-
-                    Library:GiveSignal(updateConnection)
-                end
-
-                -- Update character when it changes
-                Library:GiveSignal(LocalPlayer.CharacterAdded:Connect(function()
-                    task.wait(0.5)
-                    if Library.ESPPreviewHolder and Library.ESPPreviewHolder.Visible then
-                        UpdateCharacterModel()
-                    end
-                end))
-
-                Library.UpdateESPPreviewCharacter = UpdateCharacterModel
-            end
-
-            -- Show/hide based on current tab
-            if Tab.ESPPreviewEnabled and Library.ActiveTab == Tab then
-                Library.ESPPreviewHolder.Visible = true
-                if Library.UpdateESPPreviewCharacter then
-                    Library.UpdateESPPreviewCharacter()
-                end
-            elseif Library.ESPPreviewHolder then
-                Library.ESPPreviewHolder.Visible = false
-            end
         end
 
         --// Execution \\--
@@ -9262,4 +8874,135 @@ Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 getgenv().Library = Library
+-- Convenience: add an ESP preview tab to a window using external TrisESP API
+function Library:AddESPPreviewTab(Window, TabName)
+    if not Window or type(Window) ~= "table" then
+        return nil
+    end
+
+    local Name = TabName or "ESP Preview"
+    local Tab = Window:AddTab(Name)
+    if not Tab then
+        return nil
+    end
+
+    -- Create a simple holder frame inside the tab container
+    local Holder = New("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 0),
+        Parent = Tab.Container,
+    })
+    New("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), Parent = Holder })
+
+    -- Add a viewport via the groupbox helper so camera focus/interaction work
+    -- We use Options index 0 (unused) since AddViewport will register it in Options by Idx
+    local success, viewport = pcall(function()
+        return (setmetatable({}, { __index = function() end }))
+    end)
+
+    -- Try to use the Groupbox/View API if available, otherwise create the ViewportFrame manually
+    local ViewportObj = nil
+    local ViewportHolder = nil
+
+    -- Attempt: create a viewport using the provided BaseGroupbox AddViewport if available
+    local didCreate = false
+    if Tab and type(Tab.AddGroupbox) == "function" then
+        local Group = Tab:AddGroupbox({ Side = 1 })
+        if Group and type(Group.AddViewport) == "function" then
+            ViewportObj = Group:AddViewport(0, { Object = (Players.LocalPlayer and Players.LocalPlayer.Character) or nil, Clone = true, Height = 240, Interactive = false, AutoFocus = true })
+            if ViewportObj then
+                ViewportHolder = ViewportObj.Holder
+                didCreate = true
+            end
+        end
+    end
+
+    if not didCreate then
+        -- Fallback: create ViewportFrame manually
+        local Box = New("Frame", { AnchorPoint = Vector2.new(0, 1), BackgroundColor3 = "MainColor", BorderColor3 = "OutlineColor", BorderSizePixel = 1, Position = UDim2.fromScale(0, 1), Size = UDim2.fromScale(1, 1), Parent = Holder })
+        ViewportHolder = New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 0), Parent = Holder })
+        local Camera = Instance.new("Camera")
+        local ViewportFrame = New("ViewportFrame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Parent = Box, CurrentCamera = Camera, Active = false })
+        ViewportHolder = Box
+        -- If local character exists, clone into the viewport
+        if Players.LocalPlayer and Players.LocalPlayer.Character then
+            local ok, cloned = pcall(function() return Players.LocalPlayer.Character:Clone() end)
+            if ok and cloned then
+                cloned.Parent = ViewportFrame
+                Camera.CFrame = cloned:GetPivot() * CFrame.new(0, 2, math.max(5, (cloned:GetExtentsSize().Y)))
+                ViewportFrame.CurrentCamera = Camera
+            end
+        end
+    end
+
+    local previewCreated = false
+    local function CreatePreview()
+        if previewCreated then return end
+        local Tris = getgenv().TrisESP
+        if not Tris or type(Tris.CreatePreviewESP) ~= "function" then
+            return
+        end
+
+        -- If we created via Group:AddViewport, use its cloned object as the character
+        if ViewportObj and ViewportObj.Object then
+            pcall(function()
+                Tris.CreatePreviewESP(ViewportObj.Object, ViewportHolder)
+                previewCreated = true
+            end)
+            return
+        end
+
+        -- Otherwise attempt to find a ViewportFrame inside the holder and use a cloned character
+        local viewportFrame = ViewportHolder:FindFirstChildOfClass("ViewportFrame")
+        if not viewportFrame and ViewportHolder.Parent then
+            viewportFrame = ViewportHolder.Parent:FindFirstChildOfClass("ViewportFrame")
+        end
+        if not viewportFrame then
+            return
+        end
+
+        if Players.LocalPlayer and Players.LocalPlayer.Character then
+            local ok, cloned = pcall(function()
+                local c = Players.LocalPlayer.Character:Clone()
+                c.Parent = viewportFrame
+                return c
+            end)
+            if ok and cloned then
+                pcall(function()
+                    Tris.CreatePreviewESP(cloned, ViewportHolder)
+                    previewCreated = true
+                end)
+            end
+        end
+    end
+
+    local function RemovePreview()
+        local Tris = getgenv().TrisESP
+        if Tris and type(Tris.RemovePreviewESP) == "function" then
+            pcall(Tris.RemovePreviewESP)
+        end
+        previewCreated = false
+    end
+
+    -- Hook tab show/hide
+    if Tab then
+        local origShow = Tab.Show
+        local origHide = Tab.Hide
+        function Tab:Show()
+            origShow(self)
+            CreatePreview()
+        end
+        function Tab:Hide()
+            origHide(self)
+            RemovePreview()
+        end
+    end
+
+    -- Ensure cleanup on library unload
+    Library:OnUnload(function()
+        RemovePreview()
+    end)
+
+    return Tab
+end
 return Library
