@@ -659,29 +659,12 @@ local function updateESP(deltaTime)
             local boxX = minX
             local boxY = minY
 
-            -- Convert screen coordinates to local coordinates relative to the viewport holder
-            local holderPos = PreviewViewportHolder and PreviewViewportHolder.AbsolutePosition or Vector2.new(0, 0)
-            local holderSize = PreviewViewportHolder and PreviewViewportHolder.AbsoluteSize or Vector2.new(1, 1)
-            local localX = math.floor(boxX - holderPos.X)
-            local localY = math.floor(boxY - holderPos.Y)
+            -- Viewport camera WorldToViewportPoint already returns viewport-local coordinates
+            -- So we use them directly without conversion
+            local localX = math.floor(boxX)
+            local localY = math.floor(boxY)
             local localW = math.floor(boxW)
             local localH = math.floor(boxH)
-
-            -- Clamp to holder bounds
-            if localX < 0 then
-                localW = math.max(0, localW + localX)
-                localX = 0
-            end
-            if localY < 0 then
-                localH = math.max(0, localH + localY)
-                localY = 0
-            end
-            if localX + localW > holderSize.X then
-                localW = math.max(0, holderSize.X - localX)
-            end
-            if localY + localH > holderSize.Y then
-                localH = math.max(0, holderSize.Y - localY)
-            end
             
             -- Apply same settings as normal ESP (use global settings)
             local settings = ESPSettings
@@ -1405,23 +1388,9 @@ getgenv().TrisESP = {
         PreviewESPObject.HealthGradientPhase = 0
         PreviewESPObject.GradientAngle = 0
 
-        -- Parent the ESP container to the main ESP holder so it renders above the ViewportFrame,
-        -- and align it to cover the viewport holder area.
+        -- Parent the ESP container to the ViewportFrame so coordinates match the viewport space
         if PreviewESPObject.Container then
-            PreviewESPObject.Container.Parent = ESPHolder
-            -- position/size to match the viewport holder on screen
-            local pos = viewportHolder.AbsolutePosition
-            local size = viewportHolder.AbsoluteSize
-            PreviewESPObject.Container.Position = UDim2.fromOffset(pos.X, pos.Y)
-            PreviewESPObject.Container.Size = UDim2.fromOffset(size.X, size.Y)
-            -- ensure container is drawn on top
-            PreviewESPObject.Container.ZIndex = 100
-            -- increase child ZIndex where applicable
-            for _, child in ipairs(PreviewESPObject.Container:GetDescendants()) do
-                if child:IsA("GuiObject") then
-                    child.ZIndex = (child.ZIndex or 0) + 100
-                end
-            end
+            PreviewESPObject.Container.Parent = viewportFrame
         end
 
         return true
