@@ -8489,6 +8489,14 @@ function Library:CreateWindow(WindowInfo)
                     Parent = ViewportHolder,
                 })
 
+                -- ESP Overlay (sits on top of viewport)
+                local ESPOverlay = New("Frame", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.fromScale(1, 1),
+                    ZIndex = 10,
+                    Parent = ViewportHolder,
+                })
+
                 local WorldModel = Instance.new("WorldModel")
                 WorldModel.Parent = Viewport
 
@@ -8502,6 +8510,8 @@ function Library:CreateWindow(WindowInfo)
                 Library.ESPPreviewWorldModel = WorldModel
                 Library.ESPPreviewCamera = Camera
                 Library.ESPPreviewCharacter = nil
+                Library.ESPPreviewOverlay = ESPOverlay
+                Library.ESPPreviewElements = {}
 
                 -- Function to update the character model
                 local function UpdateCharacterModel()
@@ -8509,6 +8519,14 @@ function Library:CreateWindow(WindowInfo)
                         Library.ESPPreviewCharacter:Destroy()
                         Library.ESPPreviewCharacter = nil
                     end
+
+                    -- Clear old ESP elements
+                    for _, elem in pairs(Library.ESPPreviewElements) do
+                        if elem and elem.Parent then
+                            elem:Destroy()
+                        end
+                    end
+                    Library.ESPPreviewElements = {}
 
                     local Character = LocalPlayer.Character
                     if not Character then return end
@@ -8558,16 +8576,215 @@ function Library:CreateWindow(WindowInfo)
                         Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
                     end
 
-                    -- Try to create ESP on the preview character (retry in case TrisESP isn't loaded yet)
-                    task.spawn(function()
-                        for i = 1, 20 do
-                            if getgenv().TrisESP and getgenv().TrisESP.CreatePreviewESP then
-                                pcall(getgenv().TrisESP.CreatePreviewESP, ClonedCharacter, ViewportHolder)
-                                break
+                    -- Create ESP elements directly
+                    local function CreateESPElements()
+                        -- Box outline frame
+                        local BoxFrame = New("Frame", {
+                            BackgroundTransparency = 1,
+                            BorderSizePixel = 0,
+                            ZIndex = 11,
+                            Parent = ESPOverlay,
+                        })
+                        local BoxStroke = New("UIStroke", {
+                            Color = Color3.fromRGB(255, 255, 255),
+                            Thickness = 2,
+                            Parent = BoxFrame,
+                        })
+                        table.insert(Library.ESPPreviewElements, BoxFrame)
+
+                        -- Box fill
+                        local BoxFill = New("Frame", {
+                            BackgroundColor3 = Color3.fromRGB(0, 170, 255),
+                            BackgroundTransparency = 0.7,
+                            BorderSizePixel = 0,
+                            ZIndex = 10,
+                            Parent = ESPOverlay,
+                        })
+                        local FillGradient = New("UIGradient", {
+                            Rotation = -90,
+                            Parent = BoxFill,
+                        })
+                        table.insert(Library.ESPPreviewElements, BoxFill)
+
+                        -- Health bar background
+                        local HealthBarBG = New("Frame", {
+                            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+                            BorderSizePixel = 0,
+                            ZIndex = 12,
+                            Parent = ESPOverlay,
+                        })
+                        table.insert(Library.ESPPreviewElements, HealthBarBG)
+
+                        -- Health bar fill
+                        local HealthBar = New("Frame", {
+                            BackgroundColor3 = Color3.fromRGB(0, 255, 0),
+                            BorderSizePixel = 0,
+                            ZIndex = 13,
+                            Parent = ESPOverlay,
+                        })
+                        local HealthGradient = New("UIGradient", {
+                            Rotation = -90,
+                            Parent = HealthBar,
+                        })
+                        table.insert(Library.ESPPreviewElements, HealthBar)
+
+                        -- Name label
+                        local NameLabel = New("TextLabel", {
+                            BackgroundTransparency = 1,
+                            Font = Enum.Font.Code,
+                            Text = "Preview",
+                            TextColor3 = Color3.fromRGB(255, 255, 255),
+                            TextSize = 13,
+                            TextStrokeTransparency = 0,
+                            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                            ZIndex = 14,
+                            Parent = ESPOverlay,
+                        })
+                        table.insert(Library.ESPPreviewElements, NameLabel)
+
+                        -- Health text
+                        local HealthText = New("TextLabel", {
+                            BackgroundTransparency = 1,
+                            Font = Enum.Font.Code,
+                            Text = "100%",
+                            TextColor3 = Color3.fromRGB(119, 120, 255),
+                            TextSize = 13,
+                            TextStrokeTransparency = 0,
+                            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+                            ZIndex = 14,
+                            Parent = ESPOverlay,
+                        })
+                        table.insert(Library.ESPPreviewElements, HealthText)
+
+                        return {
+                            BoxFrame = BoxFrame,
+                            BoxStroke = BoxStroke,
+                            BoxFill = BoxFill,
+                            FillGradient = FillGradient,
+                            HealthBarBG = HealthBarBG,
+                            HealthBar = HealthBar,
+                            HealthGradient = HealthGradient,
+                            NameLabel = NameLabel,
+                            HealthText = HealthText,
+                        }
+                    end
+
+                    local ESPElements = CreateESPElements()
+
+                    -- Update loop for ESP
+                    local updateConnection
+                    updateConnection = RunService.RenderStepped:Connect(function()
+                        if not ClonedCharacter or not ClonedCharacter.Parent or not PreviewHolder.Visible then
+                            if updateConnection then
+                                updateConnection:Disconnect()
                             end
-                            task.wait(0.1)
+                            return
                         end
+
+                        local hrp = ClonedCharacter:FindFirstChild("HumanoidRootPart")
+                        local humanoid = ClonedCharacter:FindFirstChildOfClass("Humanoid")
+                        if not hrp or not humanoid then return end
+
+                        -- Calculate bounding box in viewport space
+                        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+                        local vpSize = Viewport.AbsoluteSize
+
+                        for _, part in ipairs(ClonedCharacter:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                local corners = {
+                                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                                    part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                                    part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
+                                    part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
+                                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
+                                    part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
+                                    part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, part.Size.Z/2),
+                                    part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, part.Size.Z/2)
+                                }
+                                for _, corner in ipairs(corners) do
+                                    local screenPos, onScreen = Camera:WorldToViewportPoint(corner.Position)
+                                    if onScreen then
+                                        minX = math.min(minX, screenPos.X)
+                                        minY = math.min(minY, screenPos.Y)
+                                        maxX = math.max(maxX, screenPos.X)
+                                        maxY = math.max(maxY, screenPos.Y)
+                                    end
+                                end
+                            end
+                        end
+
+                        if minX == math.huge then return end
+
+                        -- Convert to viewport-relative coordinates (0-1 scale)
+                        local boxX = minX / vpSize.X
+                        local boxY = minY / vpSize.Y
+                        local boxW = (maxX - minX) / vpSize.X
+                        local boxH = (maxY - minY) / vpSize.Y
+
+                        -- Clamp to viewport bounds
+                        boxX = math.clamp(boxX, 0, 1)
+                        boxY = math.clamp(boxY, 0, 1)
+                        boxW = math.clamp(boxW, 0, 1 - boxX)
+                        boxH = math.clamp(boxH, 0, 1 - boxY)
+
+                        -- Get ESP settings (use TrisESP if available, otherwise defaults)
+                        local showBoxes = true
+                        local showBoxFill = true
+                        local showHealthBar = true
+                        local boxColor = Color3.fromRGB(0, 170, 255)
+                        local fillColor = Color3.fromRGB(0, 170, 255)
+                        local fillTransparency = 0.5
+
+                        if getgenv().TrisESP and getgenv().TrisESP.Settings then
+                            local settings = getgenv().TrisESP.Settings
+                            showBoxes = settings.Boxes or false
+                            showBoxFill = settings.BoxFill or false
+                            showHealthBar = settings.HealthBarEnabled or false
+                            boxColor = settings.BoxColor or boxColor
+                            fillColor = settings.BoxFillColor or fillColor
+                            fillTransparency = settings.BoxFillTransparency or fillTransparency
+                        end
+
+                        -- Update box outline
+                        ESPElements.BoxFrame.Visible = showBoxes
+                        ESPElements.BoxFrame.Position = UDim2.fromScale(boxX, boxY)
+                        ESPElements.BoxFrame.Size = UDim2.fromScale(boxW, boxH)
+                        ESPElements.BoxStroke.Color = boxColor
+
+                        -- Update box fill
+                        ESPElements.BoxFill.Visible = showBoxFill
+                        ESPElements.BoxFill.Position = UDim2.fromScale(boxX, boxY)
+                        ESPElements.BoxFill.Size = UDim2.fromScale(boxW, boxH)
+                        ESPElements.BoxFill.BackgroundColor3 = fillColor
+                        ESPElements.BoxFill.BackgroundTransparency = fillTransparency
+
+                        -- Update health bar
+                        local healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                        local barThickness = 4 / vpSize.X
+                        local barHeight = boxH * healthRatio
+
+                        ESPElements.HealthBarBG.Visible = showHealthBar
+                        ESPElements.HealthBarBG.Position = UDim2.fromScale(boxX - barThickness - 0.01, boxY)
+                        ESPElements.HealthBarBG.Size = UDim2.fromScale(barThickness, boxH)
+
+                        ESPElements.HealthBar.Visible = showHealthBar
+                        ESPElements.HealthBar.Position = UDim2.fromScale(boxX - barThickness - 0.01, boxY + boxH - barHeight)
+                        ESPElements.HealthBar.Size = UDim2.fromScale(barThickness, barHeight)
+
+                        -- Update name label
+                        ESPElements.NameLabel.Position = UDim2.fromScale(boxX + boxW/2, boxY - 0.05)
+                        ESPElements.NameLabel.Size = UDim2.fromScale(0, 0)
+                        ESPElements.NameLabel.AnchorPoint = Vector2.new(0.5, 1)
+
+                        -- Update health text
+                        ESPElements.HealthText.Text = string.format("%d%%", math.floor(healthRatio * 100))
+                        ESPElements.HealthText.Position = UDim2.fromScale(boxX - barThickness - 0.015, boxY + boxH - barHeight)
+                        ESPElements.HealthText.Size = UDim2.fromScale(0, 0)
+                        ESPElements.HealthText.AnchorPoint = Vector2.new(1, 0)
+                        ESPElements.HealthText.Visible = showHealthBar
                     end)
+
+                    Library:GiveSignal(updateConnection)
                 end
 
                 -- Update character when it changes
@@ -8587,22 +8804,8 @@ function Library:CreateWindow(WindowInfo)
                 if Library.UpdateESPPreviewCharacter then
                     Library.UpdateESPPreviewCharacter()
                 end
-                -- Create ESP on preview (retry in case TrisESP isn't loaded yet)
-                task.spawn(function()
-                    for i = 1, 20 do
-                        if getgenv().TrisESP and Library.ESPPreviewCharacter and Library.ESPPreviewHolder and getgenv().TrisESP.CreatePreviewESP then
-                            pcall(getgenv().TrisESP.CreatePreviewESP, Library.ESPPreviewCharacter, Library.ESPPreviewHolder)
-                            break
-                        end
-                        task.wait(0.1)
-                    end
-                end)
             elseif Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = false
-                -- Remove preview ESP when hiding
-                if getgenv().TrisESP and getgenv().TrisESP.RemovePreviewESP then
-                    getgenv().TrisESP.RemovePreviewESP()
-                end
             end
         end
 
