@@ -8389,7 +8389,7 @@ function Library:CreateWindow(WindowInfo)
                 Parent = BodyCanvas,
             })
             New("UICorner", {
-                CornerRadius = UDim.new(0, 6),
+                CornerRadius = UDim.new(0, Library.CornerRadius),
                 Parent = SliderFrame,
             })
             Library:AddOutline(SliderFrame)
