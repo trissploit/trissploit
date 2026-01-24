@@ -8393,6 +8393,8 @@ function Library:CreateWindow(WindowInfo)
                 Parent = SliderFrame,
             })
             Library:AddOutline(SliderFrame)
+            Library.Registry[SliderFrame] = Library.Registry[SliderFrame] or {}
+            Library.Registry[SliderFrame].BackgroundColor3 = "BackgroundColor"
 
             local SliderLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
@@ -8401,10 +8403,10 @@ function Library:CreateWindow(WindowInfo)
                 Text = "Hit Chance",
                 TextSize = 12,
                 TextXAlignment = Enum.TextXAlignment.Center,
-                TextYAlignment = Enum.TextYAlignment.Center,
                 Parent = SliderFrame,
             })
-            Library.Registry[SliderLabel] = { TextColor3 = "FontColor" }
+            Library.Registry[SliderLabel] = Library.Registry[SliderLabel] or {}
+            Library.Registry[SliderLabel].TextColor3 = "FontColor"
 
             -- Use existing slider visuals (bar + gradient fill + value text)
             local Bar = New("TextButton", {
@@ -8427,10 +8429,11 @@ function Library:CreateWindow(WindowInfo)
                 Text = "100%",
                 TextSize = 12,
                 TextXAlignment = Enum.TextXAlignment.Center,
-                TextYAlignment = Enum.TextYAlignment.Center,
                 ZIndex = 2,
                 Parent = Bar,
             })
+            Library.Registry[DisplayLabel] = Library.Registry[DisplayLabel] or {}
+            Library.Registry[DisplayLabel].TextColor3 = "FontColor"
             New("UIStroke", {
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
                 Color = "Dark",
@@ -8447,12 +8450,6 @@ function Library:CreateWindow(WindowInfo)
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Fill })
             local FillGradient = New("UIGradient", { Color = Library:GetAccentGradientSequence(), Rotation = 90, Parent = Fill })
             Library.Registry[FillGradient] = { Color = function() return Library:GetAccentGradientSequence() end }
-            Library.Registry[Fill] = { BackgroundColor3 = "AccentGradientStart" }
-
-            Library.Registry[Bar] = { BackgroundColor3 = "MainColor" }
-            Library.Registry[BarStroke] = { Color = "OutlineColor" }
-            Library.Registry[DisplayLabel] = { TextColor3 = "FontColor" }
-            Library.Registry[SliderFrame] = { BackgroundColor3 = "BackgroundColor" }
 
             -- Slider interaction (reusing library slider behavior)
             local SliderMin, SliderMax, SliderRounding = 0, 100, 0
