@@ -1,8 +1,18 @@
 local cloneref = (cloneref or clonereference or function(instance: any)
     return instance
 end)
-local CoreGui: CoreGui = cloneref(game:GetService("CoreGui"))
-local Players: Players = cloneref(game:GetService("Players"))
+
+        -- Aimbot Box Holder (top-level slot that can push other groupboxes down)
+        local AimbotBoxHolder = New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(0, 6),
+            Size = UDim2.fromScale(1, 0),
+            Visible = false,
+            Parent = TabContainer,
+        })
+
+        --// Tab Table \--
 local RunService: RunService = cloneref(game:GetService("RunService"))
 local SoundService: SoundService = cloneref(game:GetService("SoundService"))
 local UserInputService: UserInputService = cloneref(game:GetService("UserInputService"))
@@ -8112,16 +8122,18 @@ function Library:CreateWindow(WindowInfo)
 		end
 
         function Tab:RefreshSides()
-			local Offset = WarningBoxHolder.Visible and WarningBox.AbsoluteSize.Y + 6 or 0
-			for _, Side in pairs(Tab.Sides) do
-				Side.Position = UDim2.new(Side.Position.X.Scale, 0, 0, Offset)
-				Side.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -Offset)
-				Library:UpdateDPI(Side, {
-					Position = Side.Position,
-					Size = Side.Size,
-				})
-			end
-		end
+            local offsetWarning = WarningBoxHolder.Visible and WarningBox.AbsoluteSize.Y + 6 or 0
+            local offsetAimbot = AimbotBoxHolder and AimbotBoxHolder.Visible and AimbotBoxHolder.AbsoluteSize.Y + 6 or 0
+            local Offset = offsetWarning + offsetAimbot
+            for _, Side in pairs(Tab.Sides) do
+                Side.Position = UDim2.new(Side.Position.X.Scale, 0, 0, Offset)
+                Side.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -Offset)
+                Library:UpdateDPI(Side, {
+                    Position = Side.Position,
+                    Size = Side.Size,
+                })
+            end
+        end
 
         -- Connect to TabContainer size changes to refresh sides automatically
         TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
@@ -8278,13 +8290,17 @@ function Library:CreateWindow(WindowInfo)
 
         function Tab:AddAimbotGroupbox(Info)
             Info = Info or {}
-            
-            -- Create holder that spans BOTH left and right columns
+
+            -- Ensure the top-level holder is visible so the tab sides get pushed down
+            AimbotBoxHolder.Visible = true
+
+            -- Create holder that spans BOTH left and right columns (parented to AimbotBoxHolder)
             local AimbotHolder = New("Frame", {
                 BackgroundColor3 = "BackgroundColor",
-                Size = UDim2.new(1, -12, 0, 420),
-                Position = UDim2.fromOffset(6, 6),
-                Parent = TabContainer,
+                Size = UDim2.new(1, 0, 0, 420),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                Position = UDim2.fromOffset(0, 0),
+                Parent = AimbotBoxHolder,
                 ZIndex = 5,
             })
             New("UICorner", {
@@ -8358,200 +8374,177 @@ function Library:CreateWindow(WindowInfo)
             local SkinColor = Color3.fromRGB(180, 150, 130)
             local SelectedColor = Library.Scheme.AccentColor
 
-            -- Roblox R15 proportions (scaled to fit canvas)
-            -- Canvas is roughly 200x320 usable area
-            local BodyParts = {
-                -- Head (round)
-                {
-                    Name = "Head",
-                    Position = UDim2.new(0.5, -20, 0, 15),
-                    Size = UDim2.fromOffset(40, 40),
-                    CornerRadius = UDim.new(0.3, 0),
-                },
-                -- Neck connector
-                {
-                    Name = "Neck",
-                    Position = UDim2.new(0.5, -6, 0, 55),
-                    Size = UDim2.fromOffset(12, 10),
-                    CornerRadius = UDim.new(0, 2),
-                    NoSelect = true,
-                },
-                -- Upper Torso
-                {
-                    Name = "UpperTorso",
-                    Position = UDim2.new(0.5, -35, 0, 65),
-                    Size = UDim2.fromOffset(70, 50),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Lower Torso
-                {
-                    Name = "LowerTorso",
-                    Position = UDim2.new(0.5, -30, 0, 115),
-                    Size = UDim2.fromOffset(60, 40),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Left Upper Arm
-                {
-                    Name = "LeftUpperArm",
-                    Position = UDim2.new(0.5, -55, 0, 65),
-                    Size = UDim2.fromOffset(18, 45),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Left Lower Arm
-                {
-                    Name = "LeftLowerArm",
-                    Position = UDim2.new(0.5, -55, 0, 110),
-                    Size = UDim2.fromOffset(16, 40),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Left Hand
-                {
-                    Name = "LeftHand",
-                    Position = UDim2.new(0.5, -54, 0, 150),
-                    Size = UDim2.fromOffset(14, 18),
-                    CornerRadius = UDim.new(0, 3),
-                },
-                -- Right Upper Arm
-                {
-                    Name = "RightUpperArm",
-                    Position = UDim2.new(0.5, 37, 0, 65),
-                    Size = UDim2.fromOffset(18, 45),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Right Lower Arm
-                {
-                    Name = "RightLowerArm",
-                    Position = UDim2.new(0.5, 39, 0, 110),
-                    Size = UDim2.fromOffset(16, 40),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Right Hand
-                {
-                    Name = "RightHand",
-                    Position = UDim2.new(0.5, 40, 0, 150),
-                    Size = UDim2.fromOffset(14, 18),
-                    CornerRadius = UDim.new(0, 3),
-                },
-                -- Left Upper Leg
-                {
-                    Name = "LeftUpperLeg",
-                    Position = UDim2.new(0.5, -28, 0, 158),
-                    Size = UDim2.fromOffset(22, 55),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Left Lower Leg
-                {
-                    Name = "LeftLowerLeg",
-                    Position = UDim2.new(0.5, -27, 0, 213),
-                    Size = UDim2.fromOffset(20, 50),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Left Foot
-                {
-                    Name = "LeftFoot",
-                    Position = UDim2.new(0.5, -30, 0, 263),
-                    Size = UDim2.fromOffset(26, 14),
-                    CornerRadius = UDim.new(0, 3),
-                },
-                -- Right Upper Leg
-                {
-                    Name = "RightUpperLeg",
-                    Position = UDim2.new(0.5, 6, 0, 158),
-                    Size = UDim2.fromOffset(22, 55),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Right Lower Leg
-                {
-                    Name = "RightLowerLeg",
-                    Position = UDim2.new(0.5, 7, 0, 213),
-                    Size = UDim2.fromOffset(20, 50),
-                    CornerRadius = UDim.new(0, 4),
-                },
-                -- Right Foot
-                {
-                    Name = "RightFoot",
-                    Position = UDim2.new(0.5, 4, 0, 263),
-                    Size = UDim2.fromOffset(26, 14),
-                    CornerRadius = UDim.new(0, 3),
-                },
-                -- HumanoidRootPart (invisible center marker)
-                {
-                    Name = "HumanoidRootPart",
-                    Position = UDim2.new(0.5, -4, 0, 130),
-                    Size = UDim2.fromOffset(8, 8),
-                    CornerRadius = UDim.new(1, 0),
-                    Special = true,
-                },
-            }
+            -- Track current skeleton mode (R15 by default)
+            local SkeletonMode = Info.DefaultMode or "R15"
 
-            for _, partInfo in ipairs(BodyParts) do
-                AimbotBox.HitChances[partInfo.Name] = Info.DefaultChances and Info.DefaultChances[partInfo.Name] or 100
+            local function BuildBodyParts(mode)
+                mode = mode or "R15"
 
-                local btn = New("TextButton", {
-                    BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor,
-                    Position = partInfo.Position,
-                    Size = partInfo.Size,
-                    Text = "",
-                    AutoButtonColor = false,
-                    Parent = BodyCanvas,
-                })
-                New("UICorner", {
-                    CornerRadius = partInfo.CornerRadius or UDim.new(0, 4),
-                    Parent = btn,
-                })
+                -- clear existing buttons
+                for _, v in pairs(BodyPartButtons) do
+                    pcall(function() if v.Button and v.Button.Destroy then v.Button:Destroy() end end)
+                end
+                BodyPartButtons = {}
 
-                if not partInfo.NoSelect then
-                    Library:AddOutline(btn)
+                local BodyParts = {}
+
+                if mode == "R6" then
+                    -- Blocky R6 layout
+                    BodyParts = {
+                        { Name = "Head", Position = UDim2.new(0.5, -24, 0, 12), Size = UDim2.fromOffset(48, 48) },
+                        { Name = "Torso", Position = UDim2.new(0.5, -36, 0, 72), Size = UDim2.fromOffset(72, 64) },
+                        { Name = "LeftArm", Position = UDim2.new(0.5, -64, 0, 72), Size = UDim2.fromOffset(24, 64) },
+                        { Name = "RightArm", Position = UDim2.new(0.5, 40, 0, 72), Size = UDim2.fromOffset(24, 64) },
+                        { Name = "LeftLeg", Position = UDim2.new(0.5, -24, 0, 148), Size = UDim2.fromOffset(28, 72) },
+                        { Name = "RightLeg", Position = UDim2.new(0.5, 4, 0, 148), Size = UDim2.fromOffset(28, 72) },
+                        { Name = "HumanoidRootPart", Position = UDim2.new(0.5, -4, 0, 120), Size = UDim2.fromOffset(8, 8), Special = true },
+                    }
+                else
+                    -- Blocky R15 layout (no neck)
+                    BodyParts = {
+                        { Name = "Head", Position = UDim2.new(0.5, -24, 0, 12), Size = UDim2.fromOffset(48, 48) },
+                        { Name = "UpperTorso", Position = UDim2.new(0.5, -36, 0, 72), Size = UDim2.fromOffset(72, 56) },
+                        { Name = "LowerTorso", Position = UDim2.new(0.5, -30, 0, 132), Size = UDim2.fromOffset(60, 40) },
+                        { Name = "LeftUpperArm", Position = UDim2.new(0.5, -64, 0, 72), Size = UDim2.fromOffset(24, 56) },
+                        { Name = "LeftLowerArm", Position = UDim2.new(0.5, -64, 0, 128), Size = UDim2.fromOffset(20, 44) },
+                        { Name = "LeftHand", Position = UDim2.new(0.5, -64, 0, 172), Size = UDim2.fromOffset(20, 20) },
+                        { Name = "RightUpperArm", Position = UDim2.new(0.5, 40, 0, 72), Size = UDim2.fromOffset(24, 56) },
+                        { Name = "RightLowerArm", Position = UDim2.new(0.5, 40, 0, 128), Size = UDim2.fromOffset(20, 44) },
+                        { Name = "RightHand", Position = UDim2.new(0.5, 40, 0, 172), Size = UDim2.fromOffset(20, 20) },
+                        { Name = "LeftUpperLeg", Position = UDim2.new(0.5, -28, 0, 180), Size = UDim2.fromOffset(26, 72) },
+                        { Name = "LeftLowerLeg", Position = UDim2.new(0.5, -28, 0, 248), Size = UDim2.fromOffset(24, 64) },
+                        { Name = "LeftFoot", Position = UDim2.new(0.5, -30, 0, 312), Size = UDim2.fromOffset(30, 14) },
+                        { Name = "RightUpperLeg", Position = UDim2.new(0.5, 6, 0, 180), Size = UDim2.fromOffset(26, 72) },
+                        { Name = "RightLowerLeg", Position = UDim2.new(0.5, 6, 0, 248), Size = UDim2.fromOffset(24, 64) },
+                        { Name = "RightFoot", Position = UDim2.new(0.5, 6, 0, 312), Size = UDim2.fromOffset(30, 14) },
+                        { Name = "HumanoidRootPart", Position = UDim2.new(0.5, -4, 0, 140), Size = UDim2.fromOffset(8, 8), Special = true },
+                    }
                 end
 
-                BodyPartButtons[partInfo.Name] = {
-                    Button = btn,
-                    Info = partInfo,
-                }
+                for _, partInfo in ipairs(BodyParts) do
+                    AimbotBox.HitChances[partInfo.Name] = AimbotBox.HitChances[partInfo.Name] or Info.DefaultChances and Info.DefaultChances[partInfo.Name] or 100
 
-                if not partInfo.NoSelect then
-                    btn.MouseEnter:Connect(function()
-                        if AimbotBox.SelectedPart ~= partInfo.Name then
+                    local btn = New("TextButton", {
+                        BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor,
+                        Position = partInfo.Position,
+                        Size = partInfo.Size,
+                        Text = "",
+                        AutoButtonColor = false,
+                        Parent = BodyCanvas,
+                    })
+
+                    -- Blocky look: minimal corner radius
+                    New("UICorner", {
+                        CornerRadius = UDim.new(0, 0),
+                        Parent = btn,
+                    })
+
+                    if not partInfo.NoSelect then
+                        Library:AddOutline(btn)
+                    end
+
+                    BodyPartButtons[partInfo.Name] = {
+                        Button = btn,
+                        Info = partInfo,
+                    }
+
+                    if not partInfo.NoSelect then
+                        btn.MouseEnter:Connect(function()
+                            if AimbotBox.SelectedPart ~= partInfo.Name then
+                                TweenService:Create(btn, Library.TweenInfo, {
+                                    BackgroundColor3 = Library:GetBetterColor(SkinColor, 20)
+                                }):Play()
+                            end
+                        end)
+
+                        btn.MouseLeave:Connect(function()
+                            if AimbotBox.SelectedPart ~= partInfo.Name then
+                                TweenService:Create(btn, Library.TweenInfo, {
+                                    BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor
+                                }):Play()
+                            end
+                        end)
+
+                        btn.MouseButton1Click:Connect(function()
+                            -- Deselect old
+                            if AimbotBox.SelectedPart and BodyPartButtons[AimbotBox.SelectedPart] then
+                                local oldBtn = BodyPartButtons[AimbotBox.SelectedPart].Button
+                                local oldInfo = BodyPartButtons[AimbotBox.SelectedPart].Info
+                                TweenService:Create(oldBtn, Library.TweenInfo, {
+                                    BackgroundColor3 = oldInfo.Special and Library.Scheme.AccentColor or SkinColor
+                                }):Play()
+                            end
+
+                            -- Select new
+                            AimbotBox.SelectedPart = partInfo.Name
                             TweenService:Create(btn, Library.TweenInfo, {
-                                BackgroundColor3 = Library:GetBetterColor(SkinColor, 20)
+                                BackgroundColor3 = SelectedColor
                             }):Play()
-                        end
-                    end)
 
-                    btn.MouseLeave:Connect(function()
-                        if AimbotBox.SelectedPart ~= partInfo.Name then
-                            TweenService:Create(btn, Library.TweenInfo, {
-                                BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor
-                            }):Play()
-                        end
-                    end)
-
-                    btn.MouseButton1Click:Connect(function()
-                        -- Deselect old
-                        if AimbotBox.SelectedPart and BodyPartButtons[AimbotBox.SelectedPart] then
-                            local oldBtn = BodyPartButtons[AimbotBox.SelectedPart].Button
-                            local oldInfo = BodyPartButtons[AimbotBox.SelectedPart].Info
-                            TweenService:Create(oldBtn, Library.TweenInfo, {
-                                BackgroundColor3 = oldInfo.Special and Library.Scheme.AccentColor or SkinColor
-                            }):Play()
-                        end
-
-                        -- Select new
-                        AimbotBox.SelectedPart = partInfo.Name
-                        TweenService:Create(btn, Library.TweenInfo, {
-                            BackgroundColor3 = SelectedColor
-                        }):Play()
-
-                        AimbotBox:UpdateSettingsPanel()
-                    end)
+                            AimbotBox:UpdateSettingsPanel()
+                        end)
+                    end
                 end
             end
 
+            -- initialize body parts
+            BuildBodyParts(SkeletonMode)
+
             -- Settings panel content
-            local SelectedLabel = New("TextLabel", {
+            local ModeLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Position = UDim2.fromOffset(12, 12),
+                Size = UDim2.new(1, -24, 0, 18),
+                Text = "Skeleton: " .. (SkeletonMode or "R15"),
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = SettingsPanel,
+            })
+
+            local ModeButtons = New("Frame", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 32),
                 Size = UDim2.new(1, -24, 0, 24),
+                Parent = SettingsPanel,
+            })
+            New("UIListLayout", { Padding = UDim.new(0, 6), FillDirection = Enum.FillDirection.Horizontal, Parent = ModeButtons })
+
+            local R15Btn = New("TextButton", {
+                BackgroundColor3 = "MainColor",
+                Size = UDim2.new(0, 120, 1, 0),
+                Text = "R15",
+                TextSize = 13,
+                Parent = ModeButtons,
+            })
+            local R6Btn = New("TextButton", {
+                BackgroundColor3 = "MainColor",
+                Size = UDim2.new(0, 120, 1, 0),
+                Text = "R6",
+                TextSize = 13,
+                Parent = ModeButtons,
+            })
+            Library:AddOutline(R15Btn)
+            Library:AddOutline(R6Btn)
+
+            R15Btn.MouseButton1Click:Connect(function()
+                SkeletonMode = "R15"
+                ModeLabel.Text = "Skeleton: R15"
+                BuildBodyParts(SkeletonMode)
+                AimbotBox:UpdateSettingsPanel()
+                Tab:Resize()
+            end)
+            R6Btn.MouseButton1Click:Connect(function()
+                SkeletonMode = "R6"
+                ModeLabel.Text = "Skeleton: R6"
+                BuildBodyParts(SkeletonMode)
+                AimbotBox:UpdateSettingsPanel()
+                Tab:Resize()
+            end)
+
+            local SelectedLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 64),
+                Size = UDim2.new(1, -24, 0, 20),
                 Text = "Select a body part",
                 TextSize = 16,
                 TextXAlignment = Enum.TextXAlignment.Left,
@@ -8560,7 +8553,7 @@ function Library:CreateWindow(WindowInfo)
 
             local ChanceLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(12, 44),
+                Position = UDim2.fromOffset(12, 92),
                 Size = UDim2.new(1, -24, 0, 20),
                 Text = "Hit Chance: --",
                 TextSize = 14,
@@ -8571,7 +8564,7 @@ function Library:CreateWindow(WindowInfo)
 
             local SliderBG = New("Frame", {
                 BackgroundColor3 = "BackgroundColor",
-                Position = UDim2.fromOffset(12, 76),
+                Position = UDim2.fromOffset(12, 124),
                 Size = UDim2.new(1, -24, 0, 24),
                 Visible = false,
                 Parent = SettingsPanel,
@@ -8741,6 +8734,9 @@ function Library:CreateWindow(WindowInfo)
 
             function AimbotBox:SetVisible(visible)
                 AimbotHolder.Visible = visible
+                -- ensure top-level holder visibility mirrors contained aimbot holders
+                AimbotBoxHolder.Visible = visible
+                Tab:Resize()
             end
 
             AimbotBox:UpdateSettingsPanel()
