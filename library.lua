@@ -8558,10 +8558,16 @@ function Library:CreateWindow(WindowInfo)
                         Camera.CFrame = CFrame.new(CharPos + Vector3.new(0, 1, 8), CharPos + Vector3.new(0, 1, 0))
                     end
 
-                    -- Create ESP on the preview character if TrisESP is loaded (pass the viewport holder)
-                    if getgenv().TrisESP and getgenv().TrisESP.CreatePreviewESP then
-                        getgenv().TrisESP.CreatePreviewESP(ClonedCharacter, ViewportHolder)
-                    end
+                    -- Try to create ESP on the preview character (retry in case TrisESP isn't loaded yet)
+                    task.spawn(function()
+                        for i = 1, 20 do
+                            if getgenv().TrisESP and getgenv().TrisESP.CreatePreviewESP then
+                                pcall(getgenv().TrisESP.CreatePreviewESP, ClonedCharacter, ViewportHolder)
+                                break
+                            end
+                            task.wait(0.1)
+                        end
+                    end)
                 end
 
                 -- Update character when it changes
@@ -8581,10 +8587,16 @@ function Library:CreateWindow(WindowInfo)
                 if Library.UpdateESPPreviewCharacter then
                     Library.UpdateESPPreviewCharacter()
                 end
-                -- Create ESP on preview if TrisESP is loaded (pass the preview holder)
-                if getgenv().TrisESP and Library.ESPPreviewCharacter and Library.ESPPreviewHolder then
-                    getgenv().TrisESP.CreatePreviewESP(Library.ESPPreviewCharacter, Library.ESPPreviewHolder)
-                end
+                -- Create ESP on preview (retry in case TrisESP isn't loaded yet)
+                task.spawn(function()
+                    for i = 1, 20 do
+                        if getgenv().TrisESP and Library.ESPPreviewCharacter and Library.ESPPreviewHolder and getgenv().TrisESP.CreatePreviewESP then
+                            pcall(getgenv().TrisESP.CreatePreviewESP, Library.ESPPreviewCharacter, Library.ESPPreviewHolder)
+                            break
+                        end
+                        task.wait(0.1)
+                    end
+                end)
             elseif Library.ESPPreviewHolder then
                 Library.ESPPreviewHolder.Visible = false
                 -- Remove preview ESP when hiding
