@@ -9,34 +9,139 @@ local UserInputService: UserInputService = cloneref(game:GetService("UserInputSe
 local TextService: TextService = cloneref(game:GetService("TextService"))
 local Teams: Teams = cloneref(game:GetService("Teams"))
 local TweenService: TweenService = cloneref(game:GetService("TweenService"))
+local getgenv = getgenv
 
-local getgenv = getgenv or function()
-    return shared
+if RunService:IsStudio() then
+    if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
+        Library.IsMobile = true
+        Library.OriginalMinSize = Vector2.new(480, 240)
+    else
+        Library.IsMobile = false
+        Library.OriginalMinSize = Vector2.new(480, 360)
+    end
+else
+    pcall(function()
+        Library.DevicePlatform = UserInputService:GetPlatform()
+    end)
+    Library.IsMobile = (Library.DevicePlatform == Enum.Platform.Android or Library.DevicePlatform == Enum.Platform.IOS)
+    Library.OriginalMinSize = Library.IsMobile and Vector2.new(480, 240) or Vector2.new(480, 360)
 end
-local setclipboard = setclipboard or nil
-local protectgui = protectgui or (syn and syn.protect_gui) or function() end
-local gethui = gethui or function()
-    return CoreGui
-end
 
-local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
-local Mouse = cloneref(LocalPlayer:GetMouse())
+local Templates = {
+    --// UI \\-
+    Frame = {
+        BorderSizePixel = 0,
+    },
+    ImageLabel = {
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    },
+    ImageButton = {
+        AutoButtonColor = false,
+        BorderSizePixel = 0,
+    },
+    ScrollingFrame = {
+        BorderSizePixel = 0,
+    },
+    TextLabel = {
+        BorderSizePixel = 0,
+        FontFace = "Font",
+        RichText = true,
+        TextColor3 = "FontColor",
+    },
+    TextButton = {
+        AutoButtonColor = false,
+        BorderSizePixel = 0,
+        FontFace = "Font",
+        RichText = true,
+        TextColor3 = "FontColor",
+    },
+    TextBox = {
+        BorderSizePixel = 0,
+        FontFace = "Font",
+        PlaceholderColor3 = function()
+            local H, S, V = Library.Scheme.FontColor:ToHSV()
+            return Color3.fromHSV(H, S, V / 2)
+        end,
+        Text = "",
+        TextColor3 = "FontColor",
+    },
+    UIListLayout = {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    },
+    UIStroke = {
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    },
 
-local Labels = {}
-local Buttons = {}
-local Toggles = {}
-local Options = {}
-local Tooltips = {}
+    --// Library \\--
+    Window = {
+        Title = "No Title",
+        Footer = "No Footer",
+        Position = UDim2.fromOffset(6, 6),
+        Size = UDim2.fromOffset(720, 600),
+        IconSize = UDim2.fromOffset(30, 30),
+        AutoShow = true,
+        Center = true,
+        Resizable = true,
+        SearchbarSize = UDim2.fromScale(1, 1),
+        GlobalSearch = false,
+        CornerRadius = 4,
+        NotifySide = "Right",
+        ShowCustomCursor = true,
+        Font = Enum.Font.Code,
+        ToggleKeybind = Enum.KeyCode.RightControl,
+        MobileButtonsSide = "Left",
+        UnlockMouseWhileOpen = true,
+        Compact = false,
+        EnableSidebarResize = false,
+        SidebarMinWidth = 180,
+        SidebarCompactWidth = 54,
+        SidebarCollapseThreshold = 0.5,
+        SidebarHighlightCallback = nil,
+    },
+    Toggle = {
+        Text = "Toggle",
+        Default = false,
 
-local BaseURL = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
-local CustomImageManager = {}
-local CustomImageManagerAssets = {
-    TransparencyTexture = {
-        RobloxId = 139785960036434,
-        Path = "Obsidian/assets/TransparencyTexture.png",
-        URL = BaseURL .. "assets/TransparencyTexture.png",
+        Callback = function() end,
+        Changed = function() end,
 
-        Id = nil,
+        Risky = false,
+        Disabled = false,
+        Visible = true,
+    },
+    Input = {
+        Text = "Input",
+        Default = "",
+        Finished = false,
+        Numeric = false,
+        ClearTextOnFocus = true,
+        Placeholder = "",
+        AllowEmpty = true,
+        EmptyReset = "---",
+
+        Callback = function() end,
+        Changed = function() end,
+
+        Disabled = false,
+        Visible = true,
+    },
+    Slider = {
+        Text = "Slider",
+        Default = 0,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+
+        Prefix = "",
+        Suffix = "",
+
+        Callback = function() end,
+        Changed = function() end,
+
+        Disabled = false,
+        Visible = true,
+    },
     Dropdown = {
         Values = {},
         DisabledValues = {},
@@ -7907,260 +8012,87 @@ function Library:CreateWindow(WindowInfo)
 
         function Tab:AddAimbotGroupbox(Info)
             Info = Info or {}
-            
-            -- Get style from parameter (default to r15)
-            local style = Info.AimbotGroupboxStyle or "r15"
-            style = string.lower(style)
-            
-            -- Create holder that spans BOTH left and right columns
-            -- We need to push TabLeft and TabRight down to avoid overlap
-            local AimbotHolder = New("Frame", {
-                BackgroundColor3 = "BackgroundColor",
-                Size = UDim2.new(1, -12, 0, 400),
-                Position = UDim2.fromOffset(6, 6),
-                Parent = TabContainer,
-                ZIndex = 5,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = AimbotHolder,
-            })
-            Library:AddOutline(AimbotHolder)
 
-            -- Push TabLeft and TabRight down below the aimbot groupbox
-            if TabLeft then
-                TabLeft.Position = UDim2.new(0, 0, 0, 410)
-                TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -410)
+            local leftName = Info.Text or "Aimbot Body Configuration"
+            local rightName = ""
+
+            local LeftGroup = Tab:AddLeftGroupbox(leftName, Info.IconName)
+            local RightGroup = Tab:AddRightGroupbox(rightName, Info.IconName)
+
+            -- hide the right group's label so it appears as a single combined unit
+            local function HideRightLabel()
+                local rightLabel = RightGroup.Holder:FindFirstChildOfClass("TextLabel")
+                if rightLabel then rightLabel.Visible = false end
             end
-            if TabRight then
-                TabRight.Position = UDim2.new(1, 0, 0, 410)
-                TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -410)
-            end
-
-            -- Title bar
-            local TitleBar = New("Frame", {
-                BackgroundColor3 = "MainColor",
-                Size = UDim2.new(1, 0, 0, 32),
-                Parent = AimbotHolder,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = TitleBar,
-            })
-            Library:MakeCover(TitleBar, "Bottom")
-
-            local TitleLabel = New("TextLabel", {
-                BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(12, 0),
-                Size = UDim2.new(1, -24, 1, 0),
-                Text = Info.Text or "Aimbot Body Configuration",
-                TextSize = 15,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = TitleBar,
-            })
-
-            Library:MakeLine(AimbotHolder, {
-                Position = UDim2.fromOffset(0, 32),
-                Size = UDim2.new(1, 0, 0, 1),
-            })
-
+            HideRightLabel()
+            
+            -- create the body canvas (left) and settings panel (right) inside the group's containers
             local AimbotBox = {
-                Holder = AimbotHolder,
+                Left = LeftGroup,
+                Right = RightGroup,
                 HitChances = {},
                 SelectedPart = nil,
                 Callback = Info.Callback or function() end,
             }
 
-            -- Body canvas (left side - visual body)
             local BodyCanvas = New("Frame", {
                 BackgroundColor3 = "MainColor",
-                Position = UDim2.fromOffset(12, 44),
-                Size = UDim2.new(0.5, -18, 0, 320),
-                Parent = AimbotHolder,
+                Size = UDim2.new(1, 0, 0, 320),
+                Position = UDim2.fromOffset(0, 0),
+                Parent = LeftGroup.Container,
             })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = BodyCanvas,
-            })
+            New("UICorner", { CornerRadius = UDim.new(0, WindowInfo.CornerRadius), Parent = BodyCanvas })
             Library:AddOutline(BodyCanvas)
 
-            -- Settings panel (right side - slider + info)
             local SettingsPanel = New("Frame", {
                 BackgroundColor3 = "MainColor",
-                Position = UDim2.new(0.5, 6, 0, 44),
-                Size = UDim2.new(0.5, -18, 0, 320),
-                Parent = AimbotHolder,
+                Size = UDim2.new(1, 0, 0, 320),
+                Position = UDim2.fromOffset(0, 0),
+                Parent = RightGroup.Container,
             })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = SettingsPanel,
-            })
+            New("UICorner", { CornerRadius = UDim.new(0, WindowInfo.CornerRadius), Parent = SettingsPanel })
             Library:AddOutline(SettingsPanel)
-
-            -- Body part buttons - proportioned like a Roblox character
-            local BodyPartButtons = {}
             local SkinColor = Color3.fromRGB(180, 150, 130)
             local SelectedColor = Library.Scheme.AccentColor
+            local BodyPartButtons = {}
 
-            -- Spacing constant
+            -- Spacing and limb width
             local SPACING = 3
-            -- Standard width for limbs
             local LIMB_WIDTH = 20
 
-            -- Roblox R15 proportions (blocky, with spacing, uniform limb width)
+            -- R15 / R6 definitions
             local R15BodyParts = {
-                -- Head
-                {
-                    Name = "Head",
-                    Position = UDim2.new(0.5, -25, 0, 15),
-                    Size = UDim2.fromOffset(50, 50),
-                },
-                -- Upper Torso
-                {
-                    Name = "UpperTorso",
-                    Position = UDim2.new(0.5, -35, 0, 68 + SPACING),
-                    Size = UDim2.fromOffset(70, 45),
-                },
-                -- Lower Torso
-                {
-                    Name = "LowerTorso",
-                    Position = UDim2.new(0.5, -30, 0, 116 + SPACING * 2),
-                    Size = UDim2.fromOffset(60, 38),
-                },
-                -- Left Upper Arm
-                {
-                    Name = "LeftUpperArm",
-                    Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 68 + SPACING),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 42),
-                },
-                -- Left Lower Arm
-                {
-                    Name = "LeftLowerArm",
-                    Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 113 + SPACING * 2),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 38),
-                },
-                -- Left Hand
-                {
-                    Name = "LeftHand",
-                    Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 154 + SPACING * 3),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 16),
-                },
-                -- Right Upper Arm
-                {
-                    Name = "RightUpperArm",
-                    Position = UDim2.new(0.5, 45 + SPACING, 0, 68 + SPACING),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 42),
-                },
-                -- Right Lower Arm
-                {
-                    Name = "RightLowerArm",
-                    Position = UDim2.new(0.5, 45 + SPACING, 0, 113 + SPACING * 2),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 38),
-                },
-                -- Right Hand
-                {
-                    Name = "RightHand",
-                    Position = UDim2.new(0.5, 45 + SPACING, 0, 154 + SPACING * 3),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 16),
-                },
-                -- Left Upper Leg
-                {
-                    Name = "LeftUpperLeg",
-                    Position = UDim2.new(0.5, -30, 0, 157 + SPACING * 3),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 50),
-                },
-                -- Left Lower Leg
-                {
-                    Name = "LeftLowerLeg",
-                    Position = UDim2.new(0.5, -30, 0, 210 + SPACING * 4),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 45),
-                },
-                -- Left Foot
-                {
-                    Name = "LeftFoot",
-                    Position = UDim2.new(0.5, -30, 0, 258 + SPACING * 5),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 12),
-                },
-                -- Right Upper Leg
-                {
-                    Name = "RightUpperLeg",
-                    Position = UDim2.new(0.5, 10, 0, 157 + SPACING * 3),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 50),
-                },
-                -- Right Lower Leg
-                {
-                    Name = "RightLowerLeg",
-                    Position = UDim2.new(0.5, 10, 0, 210 + SPACING * 4),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 45),
-                },
-                -- Right Foot
-                {
-                    Name = "RightFoot",
-                    Position = UDim2.new(0.5, 10, 0, 258 + SPACING * 5),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 12),
-                },
-                -- HumanoidRootPart (center marker)
-                {
-                    Name = "HumanoidRootPart",
-                    Position = UDim2.new(0.5, -15, 0, 135 + SPACING * 2),
-                    Size = UDim2.fromOffset(30, 30),
-                    Special = true,
-                },
+                { Name = "Head", Position = UDim2.new(0.5, -25, 0, 8), Size = UDim2.fromOffset(50, 50) },
+                { Name = "UpperTorso", Position = UDim2.new(0.5, -35, 0, 66 + SPACING), Size = UDim2.fromOffset(70, 44) },
+                { Name = "LowerTorso", Position = UDim2.new(0.5, -30, 0, 114 + SPACING), Size = UDim2.fromOffset(60, 36) },
+                { Name = "LeftUpperArm", Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 66 + SPACING), Size = UDim2.fromOffset(LIMB_WIDTH, 42) },
+                { Name = "LeftLowerArm", Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 109 + SPACING * 2), Size = UDim2.fromOffset(LIMB_WIDTH, 38) },
+                { Name = "LeftHand", Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 150 + SPACING * 3), Size = UDim2.fromOffset(LIMB_WIDTH, 16) },
+                { Name = "RightUpperArm", Position = UDim2.new(0.5, 45 + SPACING, 0, 66 + SPACING), Size = UDim2.fromOffset(LIMB_WIDTH, 42) },
+                { Name = "RightLowerArm", Position = UDim2.new(0.5, 45 + SPACING, 0, 109 + SPACING * 2), Size = UDim2.fromOffset(LIMB_WIDTH, 38) },
+                { Name = "RightHand", Position = UDim2.new(0.5, 45 + SPACING, 0, 150 + SPACING * 3), Size = UDim2.fromOffset(LIMB_WIDTH, 16) },
+                { Name = "LeftUpperLeg", Position = UDim2.new(0.5, -30, 0, 156 + SPACING * 3), Size = UDim2.fromOffset(LIMB_WIDTH, 48) },
+                { Name = "LeftLowerLeg", Position = UDim2.new(0.5, -30, 0, 204 + SPACING * 4), Size = UDim2.fromOffset(LIMB_WIDTH, 44) },
+                { Name = "LeftFoot", Position = UDim2.new(0.5, -30, 0, 248 + SPACING * 5), Size = UDim2.fromOffset(LIMB_WIDTH, 12) },
+                { Name = "RightUpperLeg", Position = UDim2.new(0.5, 10, 0, 156 + SPACING * 3), Size = UDim2.fromOffset(LIMB_WIDTH, 48) },
+                { Name = "RightLowerLeg", Position = UDim2.new(0.5, 10, 0, 204 + SPACING * 4), Size = UDim2.fromOffset(LIMB_WIDTH, 44) },
+                { Name = "RightFoot", Position = UDim2.new(0.5, 10, 0, 248 + SPACING * 5), Size = UDim2.fromOffset(LIMB_WIDTH, 12) },
+                { Name = "HumanoidRootPart", Position = UDim2.new(0.5, -15, 0, 130 + SPACING * 2), Size = UDim2.fromOffset(30, 30), Special = true },
             }
 
-            -- Roblox R6 proportions (blocky, with spacing, uniform limb width)
             local R6BodyParts = {
-                -- Head
-                {
-                    Name = "Head",
-                    Position = UDim2.new(0.5, -32, 0, 20),
-                    Size = UDim2.fromOffset(64, 64),
-                },
-                -- Torso
-                {
-                    Name = "Torso",
-                    Position = UDim2.new(0.5, -40, 0, 87 + SPACING),
-                    Size = UDim2.fromOffset(80, 64),
-                },
-                -- Left Arm
-                {
-                    Name = "Left Arm",
-                    Position = UDim2.new(0.5, -50 - LIMB_WIDTH - SPACING, 0, 87 + SPACING),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
-                },
-                -- Right Arm
-                {
-                    Name = "Right Arm",
-                    Position = UDim2.new(0.5, 50 + SPACING, 0, 87 + SPACING),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
-                },
-                -- Left Leg
-                {
-                    Name = "Left Leg",
-                    Position = UDim2.new(0.5, -30, 0, 154 + SPACING * 2),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
-                },
-                -- Right Leg
-                {
-                    Name = "Right Leg",
-                    Position = UDim2.new(0.5, 10, 0, 154 + SPACING * 2),
-                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
-                },
-                -- HumanoidRootPart (center marker)
-                {
-                    Name = "HumanoidRootPart",
-                    Position = UDim2.new(0.5, -20, 0, 107 + SPACING),
-                    Size = UDim2.fromOffset(40, 40),
-                    Special = true,
-                },
+                { Name = "Head", Position = UDim2.new(0.5, -32, 0, 12), Size = UDim2.fromOffset(64, 64) },
+                { Name = "Torso", Position = UDim2.new(0.5, -40, 0, 84 + SPACING), Size = UDim2.fromOffset(80, 64) },
+                { Name = "Left Arm", Position = UDim2.new(0.5, -50 - LIMB_WIDTH - SPACING, 0, 84 + SPACING), Size = UDim2.fromOffset(LIMB_WIDTH, 64) },
+                { Name = "Right Arm", Position = UDim2.new(0.5, 50 + SPACING, 0, 84 + SPACING), Size = UDim2.fromOffset(LIMB_WIDTH, 64) },
+                { Name = "Left Leg", Position = UDim2.new(0.5, -30, 0, 150 + SPACING * 2), Size = UDim2.fromOffset(LIMB_WIDTH, 64) },
+                { Name = "Right Leg", Position = UDim2.new(0.5, 10, 0, 150 + SPACING * 2), Size = UDim2.fromOffset(LIMB_WIDTH, 64) },
+                { Name = "HumanoidRootPart", Position = UDim2.new(0.5, -20, 0, 100 + SPACING), Size = UDim2.fromOffset(40, 40), Special = true },
             }
 
             local function CreateBodyParts(partsList)
-                -- Clear existing parts
                 for name, data in pairs(BodyPartButtons) do
-                    if data.Button then
-                        data.Button:Destroy()
-                    end
+                    if data.Button then data.Button:Destroy() end
                 end
                 BodyPartButtons = {}
                 AimbotBox.HitChances = {}
@@ -8177,55 +8109,36 @@ function Library:CreateWindow(WindowInfo)
                         BorderSizePixel = 0,
                         Parent = BodyCanvas,
                     })
-                    -- No corner radius for blocky look
-                    -- No outline added
 
-                    BodyPartButtons[partInfo.Name] = {
-                        Button = btn,
-                        Info = partInfo,
-                    }
+                    BodyPartButtons[partInfo.Name] = { Button = btn, Info = partInfo }
 
-                    if not partInfo.NoSelect then
-                        btn.MouseEnter:Connect(function()
-                            if AimbotBox.SelectedPart ~= partInfo.Name then
-                                TweenService:Create(btn, Library.TweenInfo, {
-                                    BackgroundColor3 = Library:GetBetterColor(SkinColor, 20)
-                                }):Play()
-                            end
-                        end)
+                    btn.MouseEnter:Connect(function()
+                        if AimbotBox.SelectedPart ~= partInfo.Name then
+                            TweenService:Create(btn, Library.TweenInfo, { BackgroundColor3 = Library:GetBetterColor(SkinColor, 20) }):Play()
+                        end
+                    end)
 
-                        btn.MouseLeave:Connect(function()
-                            if AimbotBox.SelectedPart ~= partInfo.Name then
-                                TweenService:Create(btn, Library.TweenInfo, {
-                                    BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor
-                                }):Play()
-                            end
-                        end)
+                    btn.MouseLeave:Connect(function()
+                        if AimbotBox.SelectedPart ~= partInfo.Name then
+                            TweenService:Create(btn, Library.TweenInfo, { BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor }):Play()
+                        end
+                    end)
 
-                        btn.MouseButton1Click:Connect(function()
-                            -- Deselect old
-                            if AimbotBox.SelectedPart and BodyPartButtons[AimbotBox.SelectedPart] then
-                                local oldBtn = BodyPartButtons[AimbotBox.SelectedPart].Button
-                                local oldInfo = BodyPartButtons[AimbotBox.SelectedPart].Info
-                                TweenService:Create(oldBtn, Library.TweenInfo, {
-                                    BackgroundColor3 = oldInfo.Special and Library.Scheme.AccentColor or SkinColor
-                                }):Play()
-                            end
-
-                            -- Select new
-                            AimbotBox.SelectedPart = partInfo.Name
-                            TweenService:Create(btn, Library.TweenInfo, {
-                                BackgroundColor3 = SelectedColor
-                            }):Play()
-
-                            AimbotBox:UpdateSettingsPanel()
-                        end)
-                    end
+                    btn.MouseButton1Click:Connect(function()
+                        if AimbotBox.SelectedPart and BodyPartButtons[AimbotBox.SelectedPart] then
+                            local oldBtn = BodyPartButtons[AimbotBox.SelectedPart].Button
+                            local oldInfo = BodyPartButtons[AimbotBox.SelectedPart].Info
+                            TweenService:Create(oldBtn, Library.TweenInfo, { BackgroundColor3 = oldInfo.Special and Library.Scheme.AccentColor or SkinColor }):Play()
+                        end
+                        AimbotBox.SelectedPart = partInfo.Name
+                        TweenService:Create(btn, Library.TweenInfo, { BackgroundColor3 = SelectedColor }):Play()
+                        AimbotBox:UpdateSettingsPanel()
+                    end)
                 end
             end
 
-            -- Initialize with the specified style
-            CreateBodyParts(style == "r6" and R6BodyParts or R15BodyParts)
+            -- initialize based on style
+            CreateBodyParts((Info.AimbotGroupboxStyle or "r15"):lower() == "r6" and R6BodyParts or R15BodyParts)
 
             -- Settings panel content
             local SelectedLabel = New("TextLabel", {
@@ -8256,30 +8169,13 @@ function Library:CreateWindow(WindowInfo)
                 Visible = false,
                 Parent = SettingsPanel,
             })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 6),
-                Parent = SliderBG,
-            })
+            New("UICorner", { CornerRadius = UDim.new(0, 6), Parent = SliderBG })
             Library:AddOutline(SliderBG)
 
-            local SliderFill = New("Frame", {
-                BackgroundColor3 = "AccentColor",
-                Size = UDim2.fromScale(1, 1),
-                Parent = SliderBG,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 6),
-                Parent = SliderFill,
-            })
+            local SliderFill = New("Frame", { BackgroundColor3 = "AccentColor", Size = UDim2.fromScale(1, 1), Parent = SliderBG })
+            New("UICorner", { CornerRadius = UDim.new(0, 6), Parent = SliderFill })
 
-            local SliderValue = New("TextLabel", {
-                BackgroundTransparency = 1,
-                Size = UDim2.fromScale(1, 1),
-                Text = "100%",
-                TextSize = 14,
-                ZIndex = 2,
-                Parent = SliderBG,
-            })
+            local SliderValue = New("TextLabel", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "100%", TextSize = 14, ZIndex = 2, Parent = SliderBG })
 
             -- Slider interaction
             local Dragging = false
@@ -8314,72 +8210,36 @@ function Library:CreateWindow(WindowInfo)
                 end
             end))
 
-            -- Quick preset buttons
-            local PresetHolder = New("Frame", {
-                BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(12, 120),
-                Size = UDim2.new(1, -24, 0, 80),
-                Parent = SettingsPanel,
-            })
-            New("UIListLayout", {
-                Padding = UDim.new(0, 6),
-                Parent = PresetHolder,
-            })
+            local PresetHolder = New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 120), Size = UDim2.new(1, -24, 0, 80), Parent = SettingsPanel })
+            New("UIListLayout", { Padding = UDim.new(0, 6), Parent = PresetHolder })
 
             local function CreatePresetButton(text, callback)
-                local btn = New("TextButton", {
-                    BackgroundColor3 = "MainColor",
-                    Size = UDim2.new(1, 0, 0, 28),
-                    Text = text,
-                    TextSize = 13,
-                    Parent = PresetHolder,
-                })
-                New("UICorner", {
-                    CornerRadius = UDim.new(0, 4),
-                    Parent = btn,
-                })
+                local btn = New("TextButton", { BackgroundColor3 = "MainColor", Size = UDim2.new(1, 0, 0, 28), Text = text, TextSize = 13, Parent = PresetHolder })
+                New("UICorner", { CornerRadius = UDim.new(0, 4), Parent = btn })
                 Library:AddOutline(btn)
                 btn.MouseButton1Click:Connect(callback)
                 return btn
             end
 
             CreatePresetButton("Set All to 100%", function()
-                for name, _ in pairs(AimbotBox.HitChances) do
-                    AimbotBox.HitChances[name] = 100
-                end
+                for name, _ in pairs(AimbotBox.HitChances) do AimbotBox.HitChances[name] = 100 end
                 AimbotBox:UpdateSettingsPanel()
                 Library:SafeCallback(AimbotBox.Callback, nil, nil, AimbotBox.HitChances)
             end)
 
             CreatePresetButton("Set All to 50%", function()
-                for name, _ in pairs(AimbotBox.HitChances) do
-                    AimbotBox.HitChances[name] = 50
-                end
+                for name, _ in pairs(AimbotBox.HitChances) do AimbotBox.HitChances[name] = 50 end
                 AimbotBox:UpdateSettingsPanel()
                 Library:SafeCallback(AimbotBox.Callback, nil, nil, AimbotBox.HitChances)
             end)
 
             CreatePresetButton("Head Only (100%)", function()
-                for name, _ in pairs(AimbotBox.HitChances) do
-                    AimbotBox.HitChances[name] = name == "Head" and 100 or 0
-                end
+                for name, _ in pairs(AimbotBox.HitChances) do AimbotBox.HitChances[name] = name == "Head" and 100 or 0 end
                 AimbotBox:UpdateSettingsPanel()
                 Library:SafeCallback(AimbotBox.Callback, nil, nil, AimbotBox.HitChances)
             end)
 
-            -- Hit chance display for all parts
-            local AllChancesLabel = New("TextLabel", {
-                BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(12, 220),
-                Size = UDim2.new(1, -24, 0, 90),
-                Text = "",
-                TextSize = 11,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                TextYAlignment = Enum.TextYAlignment.Top,
-                TextTransparency = 0.4,
-                TextWrapped = true,
-                Parent = SettingsPanel,
-            })
+            local AllChancesLabel = New("TextLabel", { BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 220), Size = UDim2.new(1, -24, 0, 90), Text = "", TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextTransparency = 0.4, TextWrapped = true, Parent = SettingsPanel })
 
             function AimbotBox:UpdateSettingsPanel()
                 if AimbotBox.SelectedPart then
@@ -8395,13 +8255,10 @@ function Library:CreateWindow(WindowInfo)
                     SliderBG.Visible = false
                 end
 
-                -- Update all chances display
                 local lines = {}
                 local importantParts = {"Head", "UpperTorso", "LowerTorso", "HumanoidRootPart"}
                 for _, name in ipairs(importantParts) do
-                    if AimbotBox.HitChances[name] then
-                        table.insert(lines, name .. ": " .. AimbotBox.HitChances[name] .. "%")
-                    end
+                    if AimbotBox.HitChances[name] then table.insert(lines, name .. ": " .. AimbotBox.HitChances[name] .. "%") end
                 end
                 AllChancesLabel.Text = table.concat(lines, "\n")
             end
@@ -8413,14 +8270,13 @@ function Library:CreateWindow(WindowInfo)
             function AimbotBox:SetHitChance(partName, value)
                 if AimbotBox.HitChances[partName] ~= nil then
                     AimbotBox.HitChances[partName] = math.clamp(value, 0, 100)
-                    if AimbotBox.SelectedPart == partName then
-                        AimbotBox:UpdateSettingsPanel()
-                    end
+                    if AimbotBox.SelectedPart == partName then AimbotBox:UpdateSettingsPanel() end
                 end
             end
 
             function AimbotBox:SetVisible(visible)
-                AimbotHolder.Visible = visible
+                LeftGroup.Holder.Visible = visible
+                RightGroup.Holder.Visible = visible
             end
 
             AimbotBox:UpdateSettingsPanel()
