@@ -6590,263 +6590,6 @@ do
         return Depbox
     end
 
-    function Funcs:AddAimbotGroupbox(Info)
-        Info = Info or {}
-        local Groupbox = self
-        local Container = Groupbox.Container
-
-        local AimbotBox = {
-            Container = Container,
-            BodyParts = {},
-            HitChances = {},
-            SelectedPart = nil,
-            Callback = Info.Callback or function() end,
-        }
-
-        local Holder = New("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 400),
-            Parent = Container,
-        })
-
-        local Title = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 24),
-            Text = Info.Text or "Aimbot Configuration",
-            TextSize = 15,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = Holder,
-        })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 6),
-            Parent = Title,
-        })
-
-        local CanvasFrame = New("Frame", {
-            BackgroundColor3 = "MainColor",
-            Position = UDim2.fromOffset(0, 30),
-            Size = UDim2.new(1, 0, 0, 300),
-            Parent = Holder,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = CanvasFrame,
-        })
-        Library:AddOutline(CanvasFrame)
-
-        local BodyPartButtons = {}
-        local Parts = {
-            {Name = "Head", Pos = UDim2.new(0.5, -30, 0.15, 0), Size = UDim2.fromOffset(60, 40)},
-            {Name = "Torso", Pos = UDim2.new(0.5, -40, 0.35, 0), Size = UDim2.fromOffset(80, 80)},
-            {Name = "LeftArm", Pos = UDim2.new(0.5, -70, 0.4, 0), Size = UDim2.fromOffset(25, 70)},
-            {Name = "RightArm", Pos = UDim2.new(0.5, 45, 0.4, 0), Size = UDim2.fromOffset(25, 70)},
-            {Name = "LeftLeg", Pos = UDim2.new(0.5, -35, 0.65, 0), Size = UDim2.fromOffset(30, 80)},
-            {Name = "RightLeg", Pos = UDim2.new(0.5, 5, 0.65, 0), Size = UDim2.fromOffset(30, 80)},
-        }
-
-        for _, part in ipairs(Parts) do
-            local btn = New("TextButton", {
-                BackgroundColor3 = "BackgroundColor",
-                Position = part.Pos,
-                Size = part.Size,
-                Text = "",
-                Parent = CanvasFrame,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, Library.CornerRadius),
-                Parent = btn,
-            })
-            Library:AddOutline(btn)
-
-            local lbl = New("TextLabel", {
-                BackgroundTransparency = 1,
-                Size = UDim2.fromScale(1, 1),
-                Text = part.Name,
-                TextSize = 12,
-                Parent = btn,
-            })
-
-            AimbotBox.HitChances[part.Name] = 100
-            BodyPartButtons[part.Name] = btn
-
-            btn.MouseButton1Click:Connect(function()
-                AimbotBox.SelectedPart = part.Name
-                for name, b in pairs(BodyPartButtons) do
-                    if name == part.Name then
-                        b.BackgroundColor3 = Library.Scheme.AccentColor
-                        Library.Registry[b].BackgroundColor3 = "AccentColor"
-                    else
-                        b.BackgroundColor3 = Library.Scheme.BackgroundColor
-                        Library.Registry[b].BackgroundColor3 = "BackgroundColor"
-                    end
-                end
-                AimbotBox:ShowSlider()
-            end)
-        end
-
-        local SliderHolder = New("Frame", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, 340),
-            Size = UDim2.new(1, 0, 0, 50),
-            Visible = false,
-            Parent = Holder,
-        })
-
-        local SliderLabel = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, -70, 0, 20),
-            Text = "Hit Chance: 100%",
-            TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = SliderHolder,
-        })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 6),
-            Parent = SliderLabel,
-        })
-
-        local ValueLabel = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(1, -64, 0, 0),
-            Size = UDim2.fromOffset(64, 20),
-            Text = "100",
-            TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Right,
-            Parent = SliderHolder,
-        })
-
-        local SliderBar = New("Frame", {
-            BackgroundColor3 = "MainColor",
-            Position = UDim2.fromOffset(0, 26),
-            Size = UDim2.new(1, 0, 0, 12),
-            Parent = SliderHolder,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = SliderBar,
-        })
-        Library:AddOutline(SliderBar)
-
-        local SliderFill = New("Frame", {
-            BackgroundColor3 = "AccentColor",
-            Size = UDim2.fromScale(1, 1),
-            Parent = SliderBar,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = SliderFill,
-        })
-
-        local Dragging = false
-        SliderBar.InputBegan:Connect(function(Input)
-            if IsClickInput(Input) then
-                Dragging = true
-            end
-        end)
-
-        Library:GiveSignal(UserInputService.InputEnded:Connect(function(Input)
-            if IsMouseInput(Input) then
-                Dragging = false
-            end
-        end))
-
-        local SliderOrientation = "Horizontal" -- or "Vertical"
-        Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input)
-            if Dragging and IsHoverInput(Input) and AimbotBox.SelectedPart then
-                local Scale, Value
-                if SliderOrientation == "Horizontal" then
-                    local Location = Input.Position.X
-                    Scale = math.clamp((Location - SliderBar.AbsolutePosition.X) / math.max(1, SliderBar.AbsoluteSize.X), 0, 1)
-                else
-                    local LocationY = Input.Position.Y
-                    -- vertical fill: 0 at bottom, 1 at top
-                    local top = SliderBar.AbsolutePosition.Y
-                    local h = math.max(1, SliderBar.AbsoluteSize.Y)
-                    Scale = 1 - math.clamp((LocationY - top) / h, 0, 1)
-                end
-                Value = math.floor(Scale * 100)
-
-                AimbotBox.HitChances[AimbotBox.SelectedPart] = Value
-                if SliderOrientation == "Horizontal" then
-                    SliderFill.Size = UDim2.fromScale(Scale, 1)
-                else
-                    SliderFill.Size = UDim2.new(1, 0, Scale, 0)
-                    SliderFill.Position = UDim2.new(0, 0, 1 - Scale, 0)
-                end
-
-                ValueLabel.Text = tostring(Value)
-                SliderLabel.Text = AimbotBox.SelectedPart .. " Hit Chance: " .. Value .. "%"
-
-                Library:SafeCallback(AimbotBox.Callback, AimbotBox.HitChances)
-            end
-        end))
-
-        function AimbotBox:ShowSlider()
-            if not AimbotBox.SelectedPart then
-                SliderHolder.Visible = false
-                return
-            end
-
-            local value = AimbotBox.HitChances[AimbotBox.SelectedPart] or 100
-
-            -- Position and style the slider to visually match the selected body part
-            local btn = BodyPartButtons[AimbotBox.SelectedPart]
-            if btn and btn.Parent then
-                -- compute relative position to Holder
-                local ok, bx, by, bw, bh = pcall(function()
-                    local abs = btn.AbsolutePosition
-                    local asz = btn.AbsoluteSize
-                    local habs = Holder.AbsolutePosition
-                    return true, abs.X - habs.X, abs.Y - habs.Y, asz.X, asz.Y
-                end)
-
-                if ok then
-                    -- choose orientation: vertical for tall parts (arms/legs), horizontal otherwise
-                    if bw < bh then
-                        SliderOrientation = "Vertical"
-                        SliderBar.Size = UDim2.fromOffset(12, bh)
-                        SliderBar.Position = UDim2.fromOffset(bx + bw + 8, by)
-                        SliderFill.Size = UDim2.new(1, 0, value / 100, 0)
-                        SliderFill.Position = UDim2.new(0, 0, 1 - (value / 100), 0)
-                        -- label left of slider
-                        SliderLabel.Size = UDim2.fromOffset( math.max(80, bw), 20)
-                        SliderLabel.Position = UDim2.fromOffset(bx - 6 - SliderLabel.AbsoluteSize.X, by)
-                        ValueLabel.Position = UDim2.fromOffset(bx + bw + 8, by - 20)
-                    else
-                        SliderOrientation = "Horizontal"
-                        SliderBar.Size = UDim2.fromOffset(bw, 12)
-                        SliderBar.Position = UDim2.fromOffset(bx, by + bh + 6)
-                        SliderFill.Size = UDim2.fromScale(value / 100, 1)
-                        SliderFill.Position = UDim2.fromOffset(0,0)
-                        SliderLabel.Size = UDim2.fromOffset(bw, 20)
-                        SliderLabel.Position = UDim2.fromOffset(bx, by + bh + 6 - 20)
-                        ValueLabel.Position = UDim2.fromOffset(bx + bw - 64, by + bh + 6 - 20)
-                    end
-                end
-            end
-
-            ValueLabel.Text = tostring(value)
-            SliderLabel.Text = AimbotBox.SelectedPart .. " Hit Chance: " .. value .. "%"
-            SliderHolder.Visible = true
-        end
-
-        function AimbotBox:GetHitChances()
-            return AimbotBox.HitChances
-        end
-
-        function AimbotBox:SetHitChance(partName, value)
-            if AimbotBox.HitChances[partName] then
-                AimbotBox.HitChances[partName] = math.clamp(value, 0, 100)
-                if AimbotBox.SelectedPart == partName then
-                    AimbotBox:ShowSlider()
-                end
-            end
-        end
-
-        Groupbox:Resize()
-        return AimbotBox
-    end
-
     function Funcs:AddDependencyGroupbox()
         local Groupbox = self
         local Tab = Groupbox.Tab
@@ -8531,6 +8274,478 @@ function Library:CreateWindow(WindowInfo)
 
         function Tab:AddRightGroupbox(Name, IconName)
             return Tab:AddGroupbox({ Side = 2, Name = Name, IconName = IconName })
+        end
+
+        function Tab:AddAimbotGroupbox(Info)
+            Info = Info or {}
+            
+            -- Create holder that spans BOTH left and right columns
+            local AimbotHolder = New("Frame", {
+                BackgroundColor3 = "BackgroundColor",
+                Size = UDim2.new(1, -12, 0, 420),
+                Position = UDim2.fromOffset(6, 6),
+                Parent = TabContainer,
+                ZIndex = 5,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = AimbotHolder,
+            })
+            Library:AddOutline(AimbotHolder)
+
+            -- Title bar
+            local TitleBar = New("Frame", {
+                BackgroundColor3 = "MainColor",
+                Size = UDim2.new(1, 0, 0, 32),
+                Parent = AimbotHolder,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = TitleBar,
+            })
+            Library:MakeCover(TitleBar, "Bottom")
+
+            local TitleLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 0),
+                Size = UDim2.new(1, -24, 1, 0),
+                Text = Info.Text or "Aimbot Body Configuration",
+                TextSize = 15,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = TitleBar,
+            })
+
+            Library:MakeLine(AimbotHolder, {
+                Position = UDim2.fromOffset(0, 32),
+                Size = UDim2.new(1, 0, 0, 1),
+            })
+
+            local AimbotBox = {
+                Holder = AimbotHolder,
+                HitChances = {},
+                SelectedPart = nil,
+                Callback = Info.Callback or function() end,
+            }
+
+            -- Body canvas (left side - visual body)
+            local BodyCanvas = New("Frame", {
+                BackgroundColor3 = "MainColor",
+                Position = UDim2.fromOffset(12, 44),
+                Size = UDim2.new(0.5, -18, 0, 320),
+                Parent = AimbotHolder,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = BodyCanvas,
+            })
+            Library:AddOutline(BodyCanvas)
+
+            -- Settings panel (right side - slider + info)
+            local SettingsPanel = New("Frame", {
+                BackgroundColor3 = "MainColor",
+                Position = UDim2.new(0.5, 6, 0, 44),
+                Size = UDim2.new(0.5, -18, 0, 320),
+                Parent = AimbotHolder,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = SettingsPanel,
+            })
+            Library:AddOutline(SettingsPanel)
+
+            -- Body part buttons - proportioned like a Roblox character
+            local BodyPartButtons = {}
+            local SkinColor = Color3.fromRGB(180, 150, 130)
+            local SelectedColor = Library.Scheme.AccentColor
+
+            -- Roblox R15 proportions (scaled to fit canvas)
+            -- Canvas is roughly 200x320 usable area
+            local BodyParts = {
+                -- Head (round)
+                {
+                    Name = "Head",
+                    Position = UDim2.new(0.5, -20, 0, 15),
+                    Size = UDim2.fromOffset(40, 40),
+                    CornerRadius = UDim.new(0.3, 0),
+                },
+                -- Neck connector
+                {
+                    Name = "Neck",
+                    Position = UDim2.new(0.5, -6, 0, 55),
+                    Size = UDim2.fromOffset(12, 10),
+                    CornerRadius = UDim.new(0, 2),
+                    NoSelect = true,
+                },
+                -- Upper Torso
+                {
+                    Name = "UpperTorso",
+                    Position = UDim2.new(0.5, -35, 0, 65),
+                    Size = UDim2.fromOffset(70, 50),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Lower Torso
+                {
+                    Name = "LowerTorso",
+                    Position = UDim2.new(0.5, -30, 0, 115),
+                    Size = UDim2.fromOffset(60, 40),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Left Upper Arm
+                {
+                    Name = "LeftUpperArm",
+                    Position = UDim2.new(0.5, -55, 0, 65),
+                    Size = UDim2.fromOffset(18, 45),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Left Lower Arm
+                {
+                    Name = "LeftLowerArm",
+                    Position = UDim2.new(0.5, -55, 0, 110),
+                    Size = UDim2.fromOffset(16, 40),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Left Hand
+                {
+                    Name = "LeftHand",
+                    Position = UDim2.new(0.5, -54, 0, 150),
+                    Size = UDim2.fromOffset(14, 18),
+                    CornerRadius = UDim.new(0, 3),
+                },
+                -- Right Upper Arm
+                {
+                    Name = "RightUpperArm",
+                    Position = UDim2.new(0.5, 37, 0, 65),
+                    Size = UDim2.fromOffset(18, 45),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Right Lower Arm
+                {
+                    Name = "RightLowerArm",
+                    Position = UDim2.new(0.5, 39, 0, 110),
+                    Size = UDim2.fromOffset(16, 40),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Right Hand
+                {
+                    Name = "RightHand",
+                    Position = UDim2.new(0.5, 40, 0, 150),
+                    Size = UDim2.fromOffset(14, 18),
+                    CornerRadius = UDim.new(0, 3),
+                },
+                -- Left Upper Leg
+                {
+                    Name = "LeftUpperLeg",
+                    Position = UDim2.new(0.5, -28, 0, 158),
+                    Size = UDim2.fromOffset(22, 55),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Left Lower Leg
+                {
+                    Name = "LeftLowerLeg",
+                    Position = UDim2.new(0.5, -27, 0, 213),
+                    Size = UDim2.fromOffset(20, 50),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Left Foot
+                {
+                    Name = "LeftFoot",
+                    Position = UDim2.new(0.5, -30, 0, 263),
+                    Size = UDim2.fromOffset(26, 14),
+                    CornerRadius = UDim.new(0, 3),
+                },
+                -- Right Upper Leg
+                {
+                    Name = "RightUpperLeg",
+                    Position = UDim2.new(0.5, 6, 0, 158),
+                    Size = UDim2.fromOffset(22, 55),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Right Lower Leg
+                {
+                    Name = "RightLowerLeg",
+                    Position = UDim2.new(0.5, 7, 0, 213),
+                    Size = UDim2.fromOffset(20, 50),
+                    CornerRadius = UDim.new(0, 4),
+                },
+                -- Right Foot
+                {
+                    Name = "RightFoot",
+                    Position = UDim2.new(0.5, 4, 0, 263),
+                    Size = UDim2.fromOffset(26, 14),
+                    CornerRadius = UDim.new(0, 3),
+                },
+                -- HumanoidRootPart (invisible center marker)
+                {
+                    Name = "HumanoidRootPart",
+                    Position = UDim2.new(0.5, -4, 0, 130),
+                    Size = UDim2.fromOffset(8, 8),
+                    CornerRadius = UDim.new(1, 0),
+                    Special = true,
+                },
+            }
+
+            for _, partInfo in ipairs(BodyParts) do
+                AimbotBox.HitChances[partInfo.Name] = Info.DefaultChances and Info.DefaultChances[partInfo.Name] or 100
+
+                local btn = New("TextButton", {
+                    BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor,
+                    Position = partInfo.Position,
+                    Size = partInfo.Size,
+                    Text = "",
+                    AutoButtonColor = false,
+                    Parent = BodyCanvas,
+                })
+                New("UICorner", {
+                    CornerRadius = partInfo.CornerRadius or UDim.new(0, 4),
+                    Parent = btn,
+                })
+
+                if not partInfo.NoSelect then
+                    Library:AddOutline(btn)
+                end
+
+                BodyPartButtons[partInfo.Name] = {
+                    Button = btn,
+                    Info = partInfo,
+                }
+
+                if not partInfo.NoSelect then
+                    btn.MouseEnter:Connect(function()
+                        if AimbotBox.SelectedPart ~= partInfo.Name then
+                            TweenService:Create(btn, Library.TweenInfo, {
+                                BackgroundColor3 = Library:GetBetterColor(SkinColor, 20)
+                            }):Play()
+                        end
+                    end)
+
+                    btn.MouseLeave:Connect(function()
+                        if AimbotBox.SelectedPart ~= partInfo.Name then
+                            TweenService:Create(btn, Library.TweenInfo, {
+                                BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor
+                            }):Play()
+                        end
+                    end)
+
+                    btn.MouseButton1Click:Connect(function()
+                        -- Deselect old
+                        if AimbotBox.SelectedPart and BodyPartButtons[AimbotBox.SelectedPart] then
+                            local oldBtn = BodyPartButtons[AimbotBox.SelectedPart].Button
+                            local oldInfo = BodyPartButtons[AimbotBox.SelectedPart].Info
+                            TweenService:Create(oldBtn, Library.TweenInfo, {
+                                BackgroundColor3 = oldInfo.Special and Library.Scheme.AccentColor or SkinColor
+                            }):Play()
+                        end
+
+                        -- Select new
+                        AimbotBox.SelectedPart = partInfo.Name
+                        TweenService:Create(btn, Library.TweenInfo, {
+                            BackgroundColor3 = SelectedColor
+                        }):Play()
+
+                        AimbotBox:UpdateSettingsPanel()
+                    end)
+                end
+            end
+
+            -- Settings panel content
+            local SelectedLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 12),
+                Size = UDim2.new(1, -24, 0, 24),
+                Text = "Select a body part",
+                TextSize = 16,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = SettingsPanel,
+            })
+
+            local ChanceLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 44),
+                Size = UDim2.new(1, -24, 0, 20),
+                Text = "Hit Chance: --",
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTransparency = 0.3,
+                Parent = SettingsPanel,
+            })
+
+            local SliderBG = New("Frame", {
+                BackgroundColor3 = "BackgroundColor",
+                Position = UDim2.fromOffset(12, 76),
+                Size = UDim2.new(1, -24, 0, 24),
+                Visible = false,
+                Parent = SettingsPanel,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, 6),
+                Parent = SliderBG,
+            })
+            Library:AddOutline(SliderBG)
+
+            local SliderFill = New("Frame", {
+                BackgroundColor3 = "AccentColor",
+                Size = UDim2.fromScale(1, 1),
+                Parent = SliderBG,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, 6),
+                Parent = SliderFill,
+            })
+
+            local SliderValue = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "100%",
+                TextSize = 14,
+                ZIndex = 2,
+                Parent = SliderBG,
+            })
+
+            -- Slider interaction
+            local Dragging = false
+            SliderBG.InputBegan:Connect(function(Input)
+                if IsClickInput(Input) and AimbotBox.SelectedPart then
+                    Dragging = true
+                    local Scale = math.clamp((Input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X, 0, 1)
+                    local Value = math.floor(Scale * 100)
+                    AimbotBox.HitChances[AimbotBox.SelectedPart] = Value
+                    SliderFill.Size = UDim2.fromScale(Scale, 1)
+                    SliderValue.Text = Value .. "%"
+                    ChanceLabel.Text = "Hit Chance: " .. Value .. "%"
+                    Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, Value, AimbotBox.HitChances)
+                end
+            end)
+
+            Library:GiveSignal(UserInputService.InputEnded:Connect(function(Input)
+                if IsMouseInput(Input) then
+                    Dragging = false
+                end
+            end))
+
+            Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input)
+                if Dragging and IsHoverInput(Input) and AimbotBox.SelectedPart then
+                    local Scale = math.clamp((Input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X, 0, 1)
+                    local Value = math.floor(Scale * 100)
+                    AimbotBox.HitChances[AimbotBox.SelectedPart] = Value
+                    SliderFill.Size = UDim2.fromScale(Scale, 1)
+                    SliderValue.Text = Value .. "%"
+                    ChanceLabel.Text = "Hit Chance: " .. Value .. "%"
+                    Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, Value, AimbotBox.HitChances)
+                end
+            end))
+
+            -- Quick preset buttons
+            local PresetHolder = New("Frame", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 120),
+                Size = UDim2.new(1, -24, 0, 80),
+                Parent = SettingsPanel,
+            })
+            New("UIListLayout", {
+                Padding = UDim.new(0, 6),
+                Parent = PresetHolder,
+            })
+
+            local function CreatePresetButton(text, callback)
+                local btn = New("TextButton", {
+                    BackgroundColor3 = "MainColor",
+                    Size = UDim2.new(1, 0, 0, 28),
+                    Text = text,
+                    TextSize = 13,
+                    Parent = PresetHolder,
+                })
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, 4),
+                    Parent = btn,
+                })
+                Library:AddOutline(btn)
+                btn.MouseButton1Click:Connect(callback)
+                return btn
+            end
+
+            CreatePresetButton("Set All to 100%", function()
+                for name, _ in pairs(AimbotBox.HitChances) do
+                    AimbotBox.HitChances[name] = 100
+                end
+                AimbotBox:UpdateSettingsPanel()
+                Library:SafeCallback(AimbotBox.Callback, nil, nil, AimbotBox.HitChances)
+            end)
+
+            CreatePresetButton("Set All to 50%", function()
+                for name, _ in pairs(AimbotBox.HitChances) do
+                    AimbotBox.HitChances[name] = 50
+                end
+                AimbotBox:UpdateSettingsPanel()
+                Library:SafeCallback(AimbotBox.Callback, nil, nil, AimbotBox.HitChances)
+            end)
+
+            CreatePresetButton("Head Only (100%)", function()
+                for name, _ in pairs(AimbotBox.HitChances) do
+                    AimbotBox.HitChances[name] = name == "Head" and 100 or 0
+                end
+                AimbotBox:UpdateSettingsPanel()
+                Library:SafeCallback(AimbotBox.Callback, nil, nil, AimbotBox.HitChances)
+            end)
+
+            -- Hit chance display for all parts
+            local AllChancesLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(12, 220),
+                Size = UDim2.new(1, -24, 0, 90),
+                Text = "",
+                TextSize = 11,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                TextTransparency = 0.4,
+                TextWrapped = true,
+                Parent = SettingsPanel,
+            })
+
+            function AimbotBox:UpdateSettingsPanel()
+                if AimbotBox.SelectedPart then
+                    local chance = AimbotBox.HitChances[AimbotBox.SelectedPart] or 100
+                    SelectedLabel.Text = AimbotBox.SelectedPart
+                    ChanceLabel.Text = "Hit Chance: " .. chance .. "%"
+                    SliderFill.Size = UDim2.fromScale(chance / 100, 1)
+                    SliderValue.Text = chance .. "%"
+                    SliderBG.Visible = true
+                else
+                    SelectedLabel.Text = "Select a body part"
+                    ChanceLabel.Text = "Hit Chance: --"
+                    SliderBG.Visible = false
+                end
+
+                -- Update all chances display
+                local lines = {}
+                local importantParts = {"Head", "UpperTorso", "LowerTorso", "HumanoidRootPart"}
+                for _, name in ipairs(importantParts) do
+                    if AimbotBox.HitChances[name] then
+                        table.insert(lines, name .. ": " .. AimbotBox.HitChances[name] .. "%")
+                    end
+                end
+                AllChancesLabel.Text = table.concat(lines, "\n")
+            end
+
+            function AimbotBox:GetHitChances()
+                return AimbotBox.HitChances
+            end
+
+            function AimbotBox:SetHitChance(partName, value)
+                if AimbotBox.HitChances[partName] ~= nil then
+                    AimbotBox.HitChances[partName] = math.clamp(value, 0, 100)
+                    if AimbotBox.SelectedPart == partName then
+                        AimbotBox:UpdateSettingsPanel()
+                    end
+                end
+            end
+
+            function AimbotBox:SetVisible(visible)
+                AimbotHolder.Visible = visible
+            end
+
+            AimbotBox:UpdateSettingsPanel()
+
+            return AimbotBox
         end
 
         function Tab:AddTabbox(Info)
