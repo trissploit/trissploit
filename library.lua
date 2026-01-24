@@ -8371,8 +8371,8 @@ function Library:CreateWindow(WindowInfo)
 
             -- Body part buttons
             local BodyPartButtons = {}
-            local SkinColor = Color3.fromRGB(180, 150, 130)
-            local SelectedColor = Library.Scheme.AccentColor
+            local SkinColor = Color3.fromRGB(255, 255, 255)
+            local SelectedColor = SkinColor
 
             -- Spacing constant
             local SPACING = 3
@@ -8483,7 +8483,6 @@ function Library:CreateWindow(WindowInfo)
                 {Name = "RightUpperLeg", Position = UDim2.new(0.5, 10, 0, 157 + SPACING * 3), Size = UDim2.fromOffset(LIMB_WIDTH, 50)},
                 {Name = "RightLowerLeg", Position = UDim2.new(0.5, 10, 0, 210 + SPACING * 4), Size = UDim2.fromOffset(LIMB_WIDTH, 45)},
                 {Name = "RightFoot", Position = UDim2.new(0.5, 10, 0, 258 + SPACING * 5), Size = UDim2.fromOffset(LIMB_WIDTH, 12)},
-                {Name = "HumanoidRootPart", Position = UDim2.new(0.5, -15, 0, 135 + SPACING * 2), Size = UDim2.fromOffset(30, 30), Special = true},
             }
 
             local R6BodyParts = {
@@ -8493,7 +8492,6 @@ function Library:CreateWindow(WindowInfo)
                 {Name = "Right Arm", Position = UDim2.new(0.5, 50 + SPACING, 0, 87 + SPACING), Size = UDim2.fromOffset(LIMB_WIDTH, 64)},
                 {Name = "Left Leg", Position = UDim2.new(0.5, -30, 0, 154 + SPACING * 2), Size = UDim2.fromOffset(LIMB_WIDTH, 64)},
                 {Name = "Right Leg", Position = UDim2.new(0.5, 10, 0, 154 + SPACING * 2), Size = UDim2.fromOffset(LIMB_WIDTH, 64)},
-                {Name = "HumanoidRootPart", Position = UDim2.new(0.5, -20, 0, 107 + SPACING), Size = UDim2.fromOffset(40, 40), Special = true},
             }
 
             local function CreateBodyParts(partsList)
@@ -8510,7 +8508,7 @@ function Library:CreateWindow(WindowInfo)
                     AimbotBox.HitChances[partInfo.Name] = Info.DefaultChances and Info.DefaultChances[partInfo.Name] or 100
 
                     local btn = New("TextButton", {
-                        BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor,
+                        BackgroundColor3 = SkinColor,
                         Position = partInfo.Position,
                         Size = partInfo.Size,
                         Text = "",
@@ -8525,29 +8523,16 @@ function Library:CreateWindow(WindowInfo)
                     }
 
                     if not partInfo.NoSelect then
-                        btn.MouseEnter:Connect(function()
-                            if AimbotBox.SelectedPart ~= partInfo.Name then
-                                TweenService:Create(btn, Library.TweenInfo, {
-                                    BackgroundColor3 = Library:GetBetterColor(SkinColor, 20)
-                                }):Play()
-                            end
-                        end)
+                        btn.MouseEnter:Connect(function() end)
 
-                        btn.MouseLeave:Connect(function()
-                            if AimbotBox.SelectedPart ~= partInfo.Name then
-                                TweenService:Create(btn, Library.TweenInfo, {
-                                    BackgroundColor3 = partInfo.Special and Library.Scheme.AccentColor or SkinColor
-                                }):Play()
-                            end
-                        end)
+                        btn.MouseLeave:Connect(function() end)
 
                         btn.MouseButton1Click:Connect(function()
                             -- Deselect old
                             if AimbotBox.SelectedPart and BodyPartButtons[AimbotBox.SelectedPart] then
                                 local oldBtn = BodyPartButtons[AimbotBox.SelectedPart].Button
-                                local oldInfo = BodyPartButtons[AimbotBox.SelectedPart].Info
                                 TweenService:Create(oldBtn, Library.TweenInfo, {
-                                    BackgroundColor3 = oldInfo.Special and Library.Scheme.AccentColor or SkinColor
+                                    BackgroundColor3 = SkinColor
                                 }):Play()
                             end
 
@@ -8612,9 +8597,8 @@ function Library:CreateWindow(WindowInfo)
                         -- Deselect
                         if BodyPartButtons[AimbotBox.SelectedPart] then
                             local oldBtn = BodyPartButtons[AimbotBox.SelectedPart].Button
-                            local oldInfo = BodyPartButtons[AimbotBox.SelectedPart].Info
                             TweenService:Create(oldBtn, Library.TweenInfo, {
-                                BackgroundColor3 = oldInfo.Special and Library.Scheme.AccentColor or SkinColor
+                                BackgroundColor3 = SkinColor
                             }):Play()
                         end
                         AimbotBox.SelectedPart = nil
