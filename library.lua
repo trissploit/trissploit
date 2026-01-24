@@ -6750,14 +6750,30 @@ do
             end
         end))
 
+        local SliderOrientation = "Horizontal" -- or "Vertical"
         Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input)
             if Dragging and IsHoverInput(Input) and AimbotBox.SelectedPart then
-                local Location = Input.Position.X
-                local Scale = math.clamp((Location - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
-                local Value = math.floor(Scale * 100)
+                local Scale, Value
+                if SliderOrientation == "Horizontal" then
+                    local Location = Input.Position.X
+                    Scale = math.clamp((Location - SliderBar.AbsolutePosition.X) / math.max(1, SliderBar.AbsoluteSize.X), 0, 1)
+                else
+                    local LocationY = Input.Position.Y
+                    -- vertical fill: 0 at bottom, 1 at top
+                    local top = SliderBar.AbsolutePosition.Y
+                    local h = math.max(1, SliderBar.AbsoluteSize.Y)
+                    Scale = 1 - math.clamp((LocationY - top) / h, 0, 1)
+                end
+                Value = math.floor(Scale * 100)
 
                 AimbotBox.HitChances[AimbotBox.SelectedPart] = Value
-                SliderFill.Size = UDim2.fromScale(Scale, 1)
+                if SliderOrientation == "Horizontal" then
+                    SliderFill.Size = UDim2.fromScale(Scale, 1)
+                else
+                    SliderFill.Size = UDim2.new(1, 0, Scale, 0)
+                    SliderFill.Position = UDim2.new(0, 0, 1 - Scale, 0)
+                end
+
                 ValueLabel.Text = tostring(Value)
                 SliderLabel.Text = AimbotBox.SelectedPart .. " Hit Chance: " .. Value .. "%"
 
@@ -6772,7 +6788,43 @@ do
             end
 
             local value = AimbotBox.HitChances[AimbotBox.SelectedPart] or 100
-            SliderFill.Size = UDim2.fromScale(value / 100, 1)
+
+            -- Position and style the slider to visually match the selected body part
+            local btn = BodyPartButtons[AimbotBox.SelectedPart]
+            if btn and btn.Parent then
+                -- compute relative position to Holder
+                local ok, bx, by, bw, bh = pcall(function()
+                    local abs = btn.AbsolutePosition
+                    local asz = btn.AbsoluteSize
+                    local habs = Holder.AbsolutePosition
+                    return true, abs.X - habs.X, abs.Y - habs.Y, asz.X, asz.Y
+                end)
+
+                if ok then
+                    -- choose orientation: vertical for tall parts (arms/legs), horizontal otherwise
+                    if bw < bh then
+                        SliderOrientation = "Vertical"
+                        SliderBar.Size = UDim2.fromOffset(12, bh)
+                        SliderBar.Position = UDim2.fromOffset(bx + bw + 8, by)
+                        SliderFill.Size = UDim2.new(1, 0, value / 100, 0)
+                        SliderFill.Position = UDim2.new(0, 0, 1 - (value / 100), 0)
+                        -- label left of slider
+                        SliderLabel.Size = UDim2.fromOffset( math.max(80, bw), 20)
+                        SliderLabel.Position = UDim2.fromOffset(bx - 6 - SliderLabel.AbsoluteSize.X, by)
+                        ValueLabel.Position = UDim2.fromOffset(bx + bw + 8, by - 20)
+                    else
+                        SliderOrientation = "Horizontal"
+                        SliderBar.Size = UDim2.fromOffset(bw, 12)
+                        SliderBar.Position = UDim2.fromOffset(bx, by + bh + 6)
+                        SliderFill.Size = UDim2.fromScale(value / 100, 1)
+                        SliderFill.Position = UDim2.fromOffset(0,0)
+                        SliderLabel.Size = UDim2.fromOffset(bw, 20)
+                        SliderLabel.Position = UDim2.fromOffset(bx, by + bh + 6 - 20)
+                        ValueLabel.Position = UDim2.fromOffset(bx + bw - 64, by + bh + 6 - 20)
+                    end
+                end
+            end
+
             ValueLabel.Text = tostring(value)
             SliderLabel.Text = AimbotBox.SelectedPart .. " Hit Chance: " .. value .. "%"
             SliderHolder.Visible = true
