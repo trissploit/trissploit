@@ -8365,41 +8365,13 @@ function Library:CreateWindow(WindowInfo)
             })
             Library:AddOutline(SettingsPanel)
 
-            -- R15/R6 Mode selector
-            local ModeHolder = New("Frame", {
-                BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(12, 44),
-                Size = UDim2.new(1, -24, 0, 28),
-                Parent = AimbotHolder,
-            })
+            -- Aimbot style: use Info.Style ("R15" or "R6") or fallback to Library.AimbotGroupboxStyle
+            local style = (Info.Style and tostring(Info.Style) or "R15"):upper()
+            if Library and Library.AimbotGroupboxStyle then
+                style = tostring(Library.AimbotGroupboxStyle):upper()
+            end
 
-            local R15Button = New("TextButton", {
-                BackgroundColor3 = "AccentColor",
-                Position = UDim2.fromOffset(0, 0),
-                Size = UDim2.new(0.5, -2, 1, 0),
-                Text = "R15",
-                TextSize = 14,
-                Parent = ModeHolder,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 4),
-                Parent = R15Button,
-            })
-            Library:AddOutline(R15Button)
-
-            local R6Button = New("TextButton", {
-                BackgroundColor3 = "MainColor",
-                Position = UDim2.new(0.5, 2, 0, 0),
-                Size = UDim2.new(0.5, -2, 1, 0),
-                Text = "R6",
-                TextSize = 14,
-                Parent = ModeHolder,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 4),
-                Parent = R6Button,
-            })
-            Library:AddOutline(R6Button)
+            local AimbotStyle = (style == "R6") and "R6" or "R15"
 
             -- Body part buttons - proportioned like a Roblox character
             local BodyPartButtons = {}
@@ -8409,19 +8381,25 @@ function Library:CreateWindow(WindowInfo)
             -- Spacing constant
             local SPACING = 3
 
+            -- Width constants: make most parts the same width (SMALL), keep HEAD/TORSO larger
+            local SMALL_W = 18
+            local SMALL_H = 45
+            local HAND_W = 14
+            local LEG_W = 22
+
             -- Roblox R15 proportions (blocky, with spacing)
             local R15BodyParts = {
                 -- Head
                 {
                     Name = "Head",
-                    Position = UDim2.new(0.5, -20, 0, 15),
-                    Size = UDim2.fromOffset(40, 40),
+                    Position = UDim2.new(0.5, -22, 0, 15),
+                    Size = UDim2.fromOffset(44, 44),
                 },
                 -- Upper Torso
                 {
                     Name = "UpperTorso",
-                    Position = UDim2.new(0.5, -35, 0, 58 + SPACING),
-                    Size = UDim2.fromOffset(70, 50),
+                    Position = UDim2.new(0.5, -36, 0, 58 + SPACING),
+                    Size = UDim2.fromOffset(72, 52),
                 },
                 -- Lower Torso
                 {
@@ -8433,49 +8411,49 @@ function Library:CreateWindow(WindowInfo)
                 {
                     Name = "LeftUpperArm",
                     Position = UDim2.new(0.5, -58 - SPACING, 0, 58 + SPACING),
-                    Size = UDim2.fromOffset(18, 45),
+                    Size = UDim2.fromOffset(SMALL_W, SMALL_H),
                 },
                 -- Left Lower Arm
                 {
                     Name = "LeftLowerArm",
                     Position = UDim2.new(0.5, -58 - SPACING, 0, 106 + SPACING * 2),
-                    Size = UDim2.fromOffset(16, 40),
+                    Size = UDim2.fromOffset(SMALL_W, 40),
                 },
                 -- Left Hand
                 {
                     Name = "LeftHand",
                     Position = UDim2.new(0.5, -57 - SPACING, 0, 149 + SPACING * 3),
-                    Size = UDim2.fromOffset(14, 18),
+                    Size = UDim2.fromOffset(HAND_W, 18),
                 },
                 -- Right Upper Arm
                 {
                     Name = "RightUpperArm",
                     Position = UDim2.new(0.5, 40 + SPACING, 0, 58 + SPACING),
-                    Size = UDim2.fromOffset(18, 45),
+                    Size = UDim2.fromOffset(SMALL_W, SMALL_H),
                 },
                 -- Right Lower Arm
                 {
                     Name = "RightLowerArm",
                     Position = UDim2.new(0.5, 42 + SPACING, 0, 106 + SPACING * 2),
-                    Size = UDim2.fromOffset(16, 40),
+                    Size = UDim2.fromOffset(SMALL_W, 40),
                 },
                 -- Right Hand
                 {
                     Name = "RightHand",
                     Position = UDim2.new(0.5, 43 + SPACING, 0, 149 + SPACING * 3),
-                    Size = UDim2.fromOffset(14, 18),
+                    Size = UDim2.fromOffset(HAND_W, 18),
                 },
                 -- Left Upper Leg
                 {
                     Name = "LeftUpperLeg",
                     Position = UDim2.new(0.5, -28, 0, 154 + SPACING * 2),
-                    Size = UDim2.fromOffset(22, 55),
+                    Size = UDim2.fromOffset(LEG_W, 55),
                 },
                 -- Left Lower Leg
                 {
                     Name = "LeftLowerLeg",
                     Position = UDim2.new(0.5, -27, 0, 212 + SPACING * 3),
-                    Size = UDim2.fromOffset(20, 50),
+                    Size = UDim2.fromOffset(LEG_W, 50),
                 },
                 -- Left Foot
                 {
@@ -8487,13 +8465,13 @@ function Library:CreateWindow(WindowInfo)
                 {
                     Name = "RightUpperLeg",
                     Position = UDim2.new(0.5, 6, 0, 154 + SPACING * 2),
-                    Size = UDim2.fromOffset(22, 55),
+                    Size = UDim2.fromOffset(LEG_W, 55),
                 },
                 -- Right Lower Leg
                 {
                     Name = "RightLowerLeg",
                     Position = UDim2.new(0.5, 7, 0, 212 + SPACING * 3),
-                    Size = UDim2.fromOffset(20, 50),
+                    Size = UDim2.fromOffset(LEG_W, 50),
                 },
                 -- Right Foot
                 {
@@ -8528,13 +8506,13 @@ function Library:CreateWindow(WindowInfo)
                 {
                     Name = "Left Arm",
                     Position = UDim2.new(0.5, -60 - SPACING, 0, 73 + SPACING),
-                    Size = UDim2.fromOffset(18, 80),
+                    Size = UDim2.fromOffset(SMALL_W, 80),
                 },
                 -- Right Arm
                 {
                     Name = "Right Arm",
                     Position = UDim2.new(0.5, 42 + SPACING, 0, 73 + SPACING),
-                    Size = UDim2.fromOffset(18, 80),
+                    Size = UDim2.fromOffset(SMALL_W, 80),
                 },
                 -- Left Leg
                 {
