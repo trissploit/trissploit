@@ -159,6 +159,10 @@ local Library = {
     KeybindContainer = nil,
     KeybindToggles = {},
 
+    MobileButtonFrame = nil,
+    MobileButtonContainer = nil,
+    MobileButtons = {},
+
     Notifications = {},
 
     ToggleKeybind = Enum.KeyCode.RightControl,
@@ -681,6 +685,77 @@ function Library:UpdateKeybindFrame()
     end
 
     Library.KeybindFrame.Size = UDim2.fromOffset((XSize + 18) * Library.DPIScale, 0)
+end
+
+function Library:CreateMobileButton(Toggle)
+    if not Library.IsMobile or not Toggle then
+        return
+    end
+
+    if not Library.MobileButtonFrame then
+        Library.MobileButtonFrame, Library.MobileButtonContainer = Library:AddDraggableMenu("Mobile Toggles")
+        Library.MobileButtonFrame.AnchorPoint = Vector2.new(1, 0.5)
+        Library.MobileButtonFrame.Position = UDim2.new(1, -6, 0.5, 0)
+        Library.MobileButtonFrame.Visible = true
+    end
+
+    local Button = New("TextButton", {
+        BackgroundColor3 = "MainColor",
+        Size = UDim2.new(1, 0, 0, 32),
+        Text = "",
+        Parent = Library.MobileButtonContainer,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(0, Library.CornerRadius),
+        Parent = Button,
+    })
+    Library:AddOutline(Button)
+
+    local Label = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -44, 1, 0),
+        Text = Toggle.Text or "Toggle",
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Button,
+    })
+
+    local Indicator = New("Frame", {
+        BackgroundColor3 = "AccentColor",
+        Position = UDim2.new(1, -28, 0.5, -8),
+        Size = UDim2.fromOffset(16, 16),
+        Parent = Button,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = Indicator,
+    })
+
+    Button.MouseButton1Click:Connect(function()
+        Toggle:SetValue(not Toggle.Value)
+    end)
+
+    local MobileBtn = {
+        Button = Button,
+        Label = Label,
+        Indicator = Indicator,
+        Toggle = Toggle,
+    }
+
+    function MobileBtn:Update()
+        Indicator.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
+        Library.Registry[Indicator].BackgroundColor3 = Toggle.Value and "AccentColor" or "OutlineColor"
+    end
+
+    function MobileBtn:Remove()
+        Button:Destroy()
+        Library.MobileButtons[Toggle] = nil
+    end
+
+    MobileBtn:Update()
+    Library.MobileButtons[Toggle] = MobileBtn
+    return MobileBtn
 end
 function Library:UpdateDependencyBoxes()
     for _, Depbox in pairs(Library.DependencyBoxes) do
@@ -4369,6 +4444,10 @@ do
                 end
             end
 
+            if Toggle.MobileButton then
+                Toggle.MobileButton:Update()
+            end
+
             Library:SafeCallback(Toggle.Callback, Toggle.Value)
             Library:SafeCallback(Toggle.Changed, Toggle.Value)
             Library:UpdateDependencyBoxes()
@@ -4434,6 +4513,10 @@ do
         Toggle.Default = Toggle.Value
 
         Toggles[Idx] = Toggle
+
+        if Library.IsMobile then
+            Toggle.MobileButton = Library:CreateMobileButton(Toggle)
+        end
 
         return Toggle
     end
@@ -4591,6 +4674,10 @@ do
                 end
             end
 
+            if Toggle.MobileButton then
+                Toggle.MobileButton:Update()
+            end
+
             Library:SafeCallback(Toggle.Callback, Toggle.Value)
             Library:SafeCallback(Toggle.Changed, Toggle.Value)
             Library:UpdateDependencyBoxes()
@@ -4656,6 +4743,10 @@ do
         Toggle.Default = Toggle.Value
 
         Toggles[Idx] = Toggle
+
+        if Library.IsMobile then
+            Toggle.MobileButton = Library:CreateMobileButton(Toggle)
+        end
 
         return Toggle
     end
@@ -6497,6 +6588,211 @@ do
         table.insert(Library.DependencyBoxes, Depbox)
 
         return Depbox
+    end
+
+    function Funcs:AddAimbotGroupbox(Info)
+        Info = Info or {}
+        local Groupbox = self
+        local Container = Groupbox.Container
+
+        local AimbotBox = {
+            Container = Container,
+            BodyParts = {},
+            HitChances = {},
+            SelectedPart = nil,
+            Callback = Info.Callback or function() end,
+        }
+
+        local Holder = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 400),
+            Parent = Container,
+        })
+
+        local Title = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 24),
+            Text = Info.Text or "Aimbot Configuration",
+            TextSize = 15,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Holder,
+        })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 6),
+            Parent = Title,
+        })
+
+        local CanvasFrame = New("Frame", {
+            BackgroundColor3 = "MainColor",
+            Position = UDim2.fromOffset(0, 30),
+            Size = UDim2.new(1, 0, 0, 300),
+            Parent = Holder,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = CanvasFrame,
+        })
+        Library:AddOutline(CanvasFrame)
+
+        local BodyPartButtons = {}
+        local Parts = {
+            {Name = "Head", Pos = UDim2.new(0.5, -30, 0.15, 0), Size = UDim2.fromOffset(60, 40)},
+            {Name = "Torso", Pos = UDim2.new(0.5, -40, 0.35, 0), Size = UDim2.fromOffset(80, 80)},
+            {Name = "LeftArm", Pos = UDim2.new(0.5, -70, 0.4, 0), Size = UDim2.fromOffset(25, 70)},
+            {Name = "RightArm", Pos = UDim2.new(0.5, 45, 0.4, 0), Size = UDim2.fromOffset(25, 70)},
+            {Name = "LeftLeg", Pos = UDim2.new(0.5, -35, 0.65, 0), Size = UDim2.fromOffset(30, 80)},
+            {Name = "RightLeg", Pos = UDim2.new(0.5, 5, 0.65, 0), Size = UDim2.fromOffset(30, 80)},
+        }
+
+        for _, part in ipairs(Parts) do
+            local btn = New("TextButton", {
+                BackgroundColor3 = "BackgroundColor",
+                Position = part.Pos,
+                Size = part.Size,
+                Text = "",
+                Parent = CanvasFrame,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius),
+                Parent = btn,
+            })
+            Library:AddOutline(btn)
+
+            local lbl = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = part.Name,
+                TextSize = 12,
+                Parent = btn,
+            })
+
+            AimbotBox.HitChances[part.Name] = 100
+            BodyPartButtons[part.Name] = btn
+
+            btn.MouseButton1Click:Connect(function()
+                AimbotBox.SelectedPart = part.Name
+                for name, b in pairs(BodyPartButtons) do
+                    if name == part.Name then
+                        b.BackgroundColor3 = Library.Scheme.AccentColor
+                        Library.Registry[b].BackgroundColor3 = "AccentColor"
+                    else
+                        b.BackgroundColor3 = Library.Scheme.BackgroundColor
+                        Library.Registry[b].BackgroundColor3 = "BackgroundColor"
+                    end
+                end
+                AimbotBox:ShowSlider()
+            end)
+        end
+
+        local SliderHolder = New("Frame", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(0, 340),
+            Size = UDim2.new(1, 0, 0, 50),
+            Visible = false,
+            Parent = Holder,
+        })
+
+        local SliderLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -70, 0, 20),
+            Text = "Hit Chance: 100%",
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = SliderHolder,
+        })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 6),
+            Parent = SliderLabel,
+        })
+
+        local ValueLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(1, -64, 0, 0),
+            Size = UDim2.fromOffset(64, 20),
+            Text = "100",
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            Parent = SliderHolder,
+        })
+
+        local SliderBar = New("Frame", {
+            BackgroundColor3 = "MainColor",
+            Position = UDim2.fromOffset(0, 26),
+            Size = UDim2.new(1, 0, 0, 12),
+            Parent = SliderHolder,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = SliderBar,
+        })
+        Library:AddOutline(SliderBar)
+
+        local SliderFill = New("Frame", {
+            BackgroundColor3 = "AccentColor",
+            Size = UDim2.fromScale(1, 1),
+            Parent = SliderBar,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = SliderFill,
+        })
+
+        local Dragging = false
+        SliderBar.InputBegan:Connect(function(Input)
+            if IsClickInput(Input) then
+                Dragging = true
+            end
+        end)
+
+        Library:GiveSignal(UserInputService.InputEnded:Connect(function(Input)
+            if IsMouseInput(Input) then
+                Dragging = false
+            end
+        end))
+
+        Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input)
+            if Dragging and IsHoverInput(Input) and AimbotBox.SelectedPart then
+                local Location = Input.Position.X
+                local Scale = math.clamp((Location - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+                local Value = math.floor(Scale * 100)
+
+                AimbotBox.HitChances[AimbotBox.SelectedPart] = Value
+                SliderFill.Size = UDim2.fromScale(Scale, 1)
+                ValueLabel.Text = tostring(Value)
+                SliderLabel.Text = AimbotBox.SelectedPart .. " Hit Chance: " .. Value .. "%"
+
+                Library:SafeCallback(AimbotBox.Callback, AimbotBox.HitChances)
+            end
+        end))
+
+        function AimbotBox:ShowSlider()
+            if not AimbotBox.SelectedPart then
+                SliderHolder.Visible = false
+                return
+            end
+
+            local value = AimbotBox.HitChances[AimbotBox.SelectedPart] or 100
+            SliderFill.Size = UDim2.fromScale(value / 100, 1)
+            ValueLabel.Text = tostring(value)
+            SliderLabel.Text = AimbotBox.SelectedPart .. " Hit Chance: " .. value .. "%"
+            SliderHolder.Visible = true
+        end
+
+        function AimbotBox:GetHitChances()
+            return AimbotBox.HitChances
+        end
+
+        function AimbotBox:SetHitChance(partName, value)
+            if AimbotBox.HitChances[partName] then
+                AimbotBox.HitChances[partName] = math.clamp(value, 0, 100)
+                if AimbotBox.SelectedPart == partName then
+                    AimbotBox:ShowSlider()
+                end
+            end
+        end
+
+        Groupbox:Resize()
+        return AimbotBox
     end
 
     function Funcs:AddDependencyGroupbox()
@@ -8874,135 +9170,4 @@ Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 getgenv().Library = Library
--- Convenience: add an ESP preview tab to a window using external TrisESP API
-function Library:AddESPPreviewTab(Window, TabName)
-    if not Window or type(Window) ~= "table" then
-        return nil
-    end
-
-    local Name = TabName or "ESP Preview"
-    local Tab = Window:AddTab(Name)
-    if not Tab then
-        return nil
-    end
-
-    -- Create a simple holder frame inside the tab container
-    local Holder = New("Frame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.fromScale(1, 0),
-        Parent = Tab.Container,
-    })
-    New("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), Parent = Holder })
-
-    -- Add a viewport via the groupbox helper so camera focus/interaction work
-    -- We use Options index 0 (unused) since AddViewport will register it in Options by Idx
-    local success, viewport = pcall(function()
-        return (setmetatable({}, { __index = function() end }))
-    end)
-
-    -- Try to use the Groupbox/View API if available, otherwise create the ViewportFrame manually
-    local ViewportObj = nil
-    local ViewportHolder = nil
-
-    -- Attempt: create a viewport using the provided BaseGroupbox AddViewport if available
-    local didCreate = false
-    if Tab and type(Tab.AddGroupbox) == "function" then
-        local Group = Tab:AddGroupbox({ Side = 1 })
-        if Group and type(Group.AddViewport) == "function" then
-            ViewportObj = Group:AddViewport(0, { Object = (Players.LocalPlayer and Players.LocalPlayer.Character) or nil, Clone = true, Height = 240, Interactive = false, AutoFocus = true })
-            if ViewportObj then
-                ViewportHolder = ViewportObj.Holder
-                didCreate = true
-            end
-        end
-    end
-
-    if not didCreate then
-        -- Fallback: create ViewportFrame manually
-        local Box = New("Frame", { AnchorPoint = Vector2.new(0, 1), BackgroundColor3 = "MainColor", BorderColor3 = "OutlineColor", BorderSizePixel = 1, Position = UDim2.fromScale(0, 1), Size = UDim2.fromScale(1, 1), Parent = Holder })
-        ViewportHolder = New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 0), Parent = Holder })
-        local Camera = Instance.new("Camera")
-        local ViewportFrame = New("ViewportFrame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Parent = Box, CurrentCamera = Camera, Active = false })
-        ViewportHolder = Box
-        -- If local character exists, clone into the viewport
-        if Players.LocalPlayer and Players.LocalPlayer.Character then
-            local ok, cloned = pcall(function() return Players.LocalPlayer.Character:Clone() end)
-            if ok and cloned then
-                cloned.Parent = ViewportFrame
-                Camera.CFrame = cloned:GetPivot() * CFrame.new(0, 2, math.max(5, (cloned:GetExtentsSize().Y)))
-                ViewportFrame.CurrentCamera = Camera
-            end
-        end
-    end
-
-    local previewCreated = false
-    local function CreatePreview()
-        if previewCreated then return end
-        local Tris = getgenv().TrisESP
-        if not Tris or type(Tris.CreatePreviewESP) ~= "function" then
-            return
-        end
-
-        -- If we created via Group:AddViewport, use its cloned object as the character
-        if ViewportObj and ViewportObj.Object then
-            pcall(function()
-                Tris.CreatePreviewESP(ViewportObj.Object, ViewportHolder)
-                previewCreated = true
-            end)
-            return
-        end
-
-        -- Otherwise attempt to find a ViewportFrame inside the holder and use a cloned character
-        local viewportFrame = ViewportHolder:FindFirstChildOfClass("ViewportFrame")
-        if not viewportFrame and ViewportHolder.Parent then
-            viewportFrame = ViewportHolder.Parent:FindFirstChildOfClass("ViewportFrame")
-        end
-        if not viewportFrame then
-            return
-        end
-
-        if Players.LocalPlayer and Players.LocalPlayer.Character then
-            local ok, cloned = pcall(function()
-                local c = Players.LocalPlayer.Character:Clone()
-                c.Parent = viewportFrame
-                return c
-            end)
-            if ok and cloned then
-                pcall(function()
-                    Tris.CreatePreviewESP(cloned, ViewportHolder)
-                    previewCreated = true
-                end)
-            end
-        end
-    end
-
-    local function RemovePreview()
-        local Tris = getgenv().TrisESP
-        if Tris and type(Tris.RemovePreviewESP) == "function" then
-            pcall(Tris.RemovePreviewESP)
-        end
-        previewCreated = false
-    end
-
-    -- Hook tab show/hide
-    if Tab then
-        local origShow = Tab.Show
-        local origHide = Tab.Hide
-        function Tab:Show()
-            origShow(self)
-            CreatePreview()
-        end
-        function Tab:Hide()
-            origHide(self)
-            RemovePreview()
-        end
-    end
-
-    -- Ensure cleanup on library unload
-    Library:OnUnload(function()
-        RemovePreview()
-    end)
-
-    return Tab
-end
 return Library
