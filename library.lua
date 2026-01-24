@@ -8298,15 +8298,28 @@ function Library:CreateWindow(WindowInfo)
             })
             Library:AddOutline(AimbotHolder)
 
-            -- Push TabLeft and TabRight down below the aimbot groupbox
-            if TabLeft then
-                TabLeft.Position = UDim2.new(0, 0, 0, 410)
-                TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -410)
+            -- Dynamically push TabLeft and TabRight below the aimbot holder
+            local function updateTabSides()
+                if not AimbotHolder or not TabContainer then return end
+                local offsetY = (AimbotHolder.AbsoluteSize and AimbotHolder.AbsoluteSize.Y or 0) + 10
+
+                if TabLeft then
+                    TabLeft.Position = UDim2.new(0, 0, 0, offsetY)
+                    TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -offsetY)
+                end
+
+                if TabRight then
+                    TabRight.Position = UDim2.new(1, 0, 0, offsetY)
+                    TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -offsetY)
+                end
             end
-            if TabRight then
-                TabRight.Position = UDim2.new(1, 0, 0, 410)
-                TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -410)
-            end
+
+            -- Initial update (may be 0 until rendered)
+            updateTabSides()
+
+            -- Keep tabs updated if sizes change
+            Library:GiveSignal(AimbotHolder:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateTabSides))
+            Library:GiveSignal(TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateTabSides))
 
             -- Title bar
             local TitleBar = New("Frame", {
