@@ -8279,11 +8279,15 @@ function Library:CreateWindow(WindowInfo)
         function Tab:AddAimbotGroupbox(Info)
             Info = Info or {}
             
+            -- Get style from parameter (default to r15)
+            local style = Info.AimbotGroupboxStyle or "r15"
+            style = string.lower(style)
+            
             -- Create holder that spans BOTH left and right columns
             -- We need to push TabLeft and TabRight down to avoid overlap
             local AimbotHolder = New("Frame", {
                 BackgroundColor3 = "BackgroundColor",
-                Size = UDim2.new(1, -12, 0, 490),
+                Size = UDim2.new(1, -12, 0, 400),
                 Position = UDim2.fromOffset(6, 6),
                 Parent = TabContainer,
                 ZIndex = 5,
@@ -8296,12 +8300,12 @@ function Library:CreateWindow(WindowInfo)
 
             -- Push TabLeft and TabRight down below the aimbot groupbox
             if TabLeft then
-                TabLeft.Position = UDim2.new(0, 0, 0, 500)
-                TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -500)
+                TabLeft.Position = UDim2.new(0, 0, 0, 410)
+                TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -410)
             end
             if TabRight then
-                TabRight.Position = UDim2.new(1, 0, 0, 500)
-                TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -500)
+                TabRight.Position = UDim2.new(1, 0, 0, 410)
+                TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, -410)
             end
 
             -- Title bar
@@ -8336,14 +8340,13 @@ function Library:CreateWindow(WindowInfo)
                 HitChances = {},
                 SelectedPart = nil,
                 Callback = Info.Callback or function() end,
-                CurrentMode = "R15",
             }
 
             -- Body canvas (left side - visual body)
             local BodyCanvas = New("Frame", {
                 BackgroundColor3 = "MainColor",
-                Position = UDim2.fromOffset(12, 80),
-                Size = UDim2.new(0.5, -18, 0, 360),
+                Position = UDim2.fromOffset(12, 44),
+                Size = UDim2.new(0.5, -18, 0, 320),
                 Parent = AimbotHolder,
             })
             New("UICorner", {
@@ -8355,8 +8358,8 @@ function Library:CreateWindow(WindowInfo)
             -- Settings panel (right side - slider + info)
             local SettingsPanel = New("Frame", {
                 BackgroundColor3 = "MainColor",
-                Position = UDim2.new(0.5, 6, 0, 80),
-                Size = UDim2.new(0.5, -18, 0, 360),
+                Position = UDim2.new(0.5, 6, 0, 44),
+                Size = UDim2.new(0.5, -18, 0, 320),
                 Parent = AimbotHolder,
             })
             New("UICorner", {
@@ -8365,14 +8368,6 @@ function Library:CreateWindow(WindowInfo)
             })
             Library:AddOutline(SettingsPanel)
 
-            -- Aimbot style: use Info.Style ("R15" or "R6") or fallback to Library.AimbotGroupboxStyle
-            local style = (Info.Style and tostring(Info.Style) or "R15"):upper()
-            if Library and Library.AimbotGroupboxStyle then
-                style = tostring(Library.AimbotGroupboxStyle):upper()
-            end
-
-            local AimbotStyle = (style == "R6") and "R6" or "R15"
-
             -- Body part buttons - proportioned like a Roblox character
             local BodyPartButtons = {}
             local SkinColor = Color3.fromRGB(180, 150, 130)
@@ -8380,156 +8375,152 @@ function Library:CreateWindow(WindowInfo)
 
             -- Spacing constant
             local SPACING = 3
+            -- Standard width for limbs
+            local LIMB_WIDTH = 20
 
-            -- Width constants: make most parts the same width (SMALL), keep HEAD/TORSO larger
-            local SMALL_W = 18
-            local SMALL_H = 45
-            local HAND_W = 14
-            local LEG_W = 22
-
-            -- Roblox R15 proportions (blocky, with spacing)
+            -- Roblox R15 proportions (blocky, with spacing, uniform limb width)
             local R15BodyParts = {
                 -- Head
                 {
                     Name = "Head",
-                    Position = UDim2.new(0.5, -22, 0, 15),
-                    Size = UDim2.fromOffset(44, 44),
+                    Position = UDim2.new(0.5, -25, 0, 15),
+                    Size = UDim2.fromOffset(50, 50),
                 },
                 -- Upper Torso
                 {
                     Name = "UpperTorso",
-                    Position = UDim2.new(0.5, -36, 0, 58 + SPACING),
-                    Size = UDim2.fromOffset(72, 52),
+                    Position = UDim2.new(0.5, -35, 0, 68 + SPACING),
+                    Size = UDim2.fromOffset(70, 45),
                 },
                 -- Lower Torso
                 {
                     Name = "LowerTorso",
-                    Position = UDim2.new(0.5, -30, 0, 111 + SPACING),
-                    Size = UDim2.fromOffset(60, 40),
+                    Position = UDim2.new(0.5, -30, 0, 116 + SPACING * 2),
+                    Size = UDim2.fromOffset(60, 38),
                 },
                 -- Left Upper Arm
                 {
                     Name = "LeftUpperArm",
-                    Position = UDim2.new(0.5, -58 - SPACING, 0, 58 + SPACING),
-                    Size = UDim2.fromOffset(SMALL_W, SMALL_H),
+                    Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 68 + SPACING),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 42),
                 },
                 -- Left Lower Arm
                 {
                     Name = "LeftLowerArm",
-                    Position = UDim2.new(0.5, -58 - SPACING, 0, 106 + SPACING * 2),
-                    Size = UDim2.fromOffset(SMALL_W, 40),
+                    Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 113 + SPACING * 2),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 38),
                 },
                 -- Left Hand
                 {
                     Name = "LeftHand",
-                    Position = UDim2.new(0.5, -57 - SPACING, 0, 149 + SPACING * 3),
-                    Size = UDim2.fromOffset(HAND_W, 18),
+                    Position = UDim2.new(0.5, -45 - LIMB_WIDTH - SPACING, 0, 154 + SPACING * 3),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 16),
                 },
                 -- Right Upper Arm
                 {
                     Name = "RightUpperArm",
-                    Position = UDim2.new(0.5, 40 + SPACING, 0, 58 + SPACING),
-                    Size = UDim2.fromOffset(SMALL_W, SMALL_H),
+                    Position = UDim2.new(0.5, 45 + SPACING, 0, 68 + SPACING),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 42),
                 },
                 -- Right Lower Arm
                 {
                     Name = "RightLowerArm",
-                    Position = UDim2.new(0.5, 42 + SPACING, 0, 106 + SPACING * 2),
-                    Size = UDim2.fromOffset(SMALL_W, 40),
+                    Position = UDim2.new(0.5, 45 + SPACING, 0, 113 + SPACING * 2),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 38),
                 },
                 -- Right Hand
                 {
                     Name = "RightHand",
-                    Position = UDim2.new(0.5, 43 + SPACING, 0, 149 + SPACING * 3),
-                    Size = UDim2.fromOffset(HAND_W, 18),
+                    Position = UDim2.new(0.5, 45 + SPACING, 0, 154 + SPACING * 3),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 16),
                 },
                 -- Left Upper Leg
                 {
                     Name = "LeftUpperLeg",
-                    Position = UDim2.new(0.5, -28, 0, 154 + SPACING * 2),
-                    Size = UDim2.fromOffset(LEG_W, 55),
+                    Position = UDim2.new(0.5, -30, 0, 157 + SPACING * 3),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 50),
                 },
                 -- Left Lower Leg
                 {
                     Name = "LeftLowerLeg",
-                    Position = UDim2.new(0.5, -27, 0, 212 + SPACING * 3),
-                    Size = UDim2.fromOffset(LEG_W, 50),
+                    Position = UDim2.new(0.5, -30, 0, 210 + SPACING * 4),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 45),
                 },
                 -- Left Foot
                 {
                     Name = "LeftFoot",
-                    Position = UDim2.new(0.5, -30, 0, 265 + SPACING * 4),
-                    Size = UDim2.fromOffset(26, 14),
+                    Position = UDim2.new(0.5, -30, 0, 258 + SPACING * 5),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 12),
                 },
                 -- Right Upper Leg
                 {
                     Name = "RightUpperLeg",
-                    Position = UDim2.new(0.5, 6, 0, 154 + SPACING * 2),
-                    Size = UDim2.fromOffset(LEG_W, 55),
+                    Position = UDim2.new(0.5, 10, 0, 157 + SPACING * 3),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 50),
                 },
                 -- Right Lower Leg
                 {
                     Name = "RightLowerLeg",
-                    Position = UDim2.new(0.5, 7, 0, 212 + SPACING * 3),
-                    Size = UDim2.fromOffset(LEG_W, 50),
+                    Position = UDim2.new(0.5, 10, 0, 210 + SPACING * 4),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 45),
                 },
                 -- Right Foot
                 {
                     Name = "RightFoot",
-                    Position = UDim2.new(0.5, 4, 0, 265 + SPACING * 4),
-                    Size = UDim2.fromOffset(26, 14),
+                    Position = UDim2.new(0.5, 10, 0, 258 + SPACING * 5),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 12),
                 },
                 -- HumanoidRootPart (center marker)
                 {
                     Name = "HumanoidRootPart",
-                    Position = UDim2.new(0.5, -15, 0, 128 + SPACING),
+                    Position = UDim2.new(0.5, -15, 0, 135 + SPACING * 2),
                     Size = UDim2.fromOffset(30, 30),
                     Special = true,
                 },
             }
 
-            -- Roblox R6 proportions (blocky, with spacing)
+            -- Roblox R6 proportions (blocky, with spacing, uniform limb width)
             local R6BodyParts = {
                 -- Head
                 {
                     Name = "Head",
-                    Position = UDim2.new(0.5, -25, 0, 20),
-                    Size = UDim2.fromOffset(50, 50),
+                    Position = UDim2.new(0.5, -32, 0, 20),
+                    Size = UDim2.fromOffset(64, 64),
                 },
                 -- Torso
                 {
                     Name = "Torso",
-                    Position = UDim2.new(0.5, -40, 0, 73 + SPACING),
-                    Size = UDim2.fromOffset(80, 80),
+                    Position = UDim2.new(0.5, -40, 0, 87 + SPACING),
+                    Size = UDim2.fromOffset(80, 64),
                 },
                 -- Left Arm
                 {
                     Name = "Left Arm",
-                    Position = UDim2.new(0.5, -60 - SPACING, 0, 73 + SPACING),
-                    Size = UDim2.fromOffset(SMALL_W, 80),
+                    Position = UDim2.new(0.5, -50 - LIMB_WIDTH - SPACING, 0, 87 + SPACING),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
                 },
                 -- Right Arm
                 {
                     Name = "Right Arm",
-                    Position = UDim2.new(0.5, 42 + SPACING, 0, 73 + SPACING),
-                    Size = UDim2.fromOffset(SMALL_W, 80),
+                    Position = UDim2.new(0.5, 50 + SPACING, 0, 87 + SPACING),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
                 },
                 -- Left Leg
                 {
                     Name = "Left Leg",
-                    Position = UDim2.new(0.5, -32, 0, 156 + SPACING * 2),
-                    Size = UDim2.fromOffset(28, 80),
+                    Position = UDim2.new(0.5, -30, 0, 154 + SPACING * 2),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
                 },
                 -- Right Leg
                 {
                     Name = "Right Leg",
-                    Position = UDim2.new(0.5, 4, 0, 156 + SPACING * 2),
-                    Size = UDim2.fromOffset(28, 80),
+                    Position = UDim2.new(0.5, 10, 0, 154 + SPACING * 2),
+                    Size = UDim2.fromOffset(LIMB_WIDTH, 64),
                 },
                 -- HumanoidRootPart (center marker)
                 {
                     Name = "HumanoidRootPart",
-                    Position = UDim2.new(0.5, -20, 0, 93 + SPACING),
+                    Position = UDim2.new(0.5, -20, 0, 107 + SPACING),
                     Size = UDim2.fromOffset(40, 40),
                     Special = true,
                 },
@@ -8604,31 +8595,8 @@ function Library:CreateWindow(WindowInfo)
                 end
             end
 
-            -- Mode switching
-            R15Button.MouseButton1Click:Connect(function()
-                if AimbotBox.CurrentMode ~= "R15" then
-                    AimbotBox.CurrentMode = "R15"
-                    CreateBodyParts(R15BodyParts)
-                    R15Button.BackgroundColor3 = Library.Scheme.AccentColor
-                    R6Button.BackgroundColor3 = Library.Scheme.MainColor
-                    AimbotBox.SelectedPart = nil
-                    AimbotBox:UpdateSettingsPanel()
-                end
-            end)
-
-            R6Button.MouseButton1Click:Connect(function()
-                if AimbotBox.CurrentMode ~= "R6" then
-                    AimbotBox.CurrentMode = "R6"
-                    CreateBodyParts(R6BodyParts)
-                    R6Button.BackgroundColor3 = Library.Scheme.AccentColor
-                    R15Button.BackgroundColor3 = Library.Scheme.MainColor
-                    AimbotBox.SelectedPart = nil
-                    AimbotBox:UpdateSettingsPanel()
-                end
-            end)
-
-            -- Initialize with R15
-            CreateBodyParts(R15BodyParts)
+            -- Initialize with the specified style
+            CreateBodyParts(style == "r6" and R6BodyParts or R15BodyParts)
 
             -- Settings panel content
             local SelectedLabel = New("TextLabel", {
