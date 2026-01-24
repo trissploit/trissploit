@@ -8385,7 +8385,7 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.fromOffset(120, 60),
                 Position = UDim2.fromOffset(0, 0),
                 Visible = false,
-                ZIndex = 50,
+                ZIndex = 10,
                 Parent = BodyCanvas,
             })
             New("UICorner", {
@@ -8401,7 +8401,6 @@ function Library:CreateWindow(WindowInfo)
                 Text = "Hit Chance",
                 TextSize = 12,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 53,
                 Parent = SliderFrame,
             })
 
@@ -8409,7 +8408,6 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundColor3 = "MainColor",
                 Position = UDim2.fromOffset(6, 26),
                 Size = UDim2.new(1, -12, 0, 20),
-                ZIndex = 51,
                 Parent = SliderFrame,
             })
             New("UICorner", {
@@ -8421,7 +8419,6 @@ function Library:CreateWindow(WindowInfo)
             local SliderFill = New("Frame", {
                 BackgroundColor3 = "AccentColor",
                 Size = UDim2.fromScale(1, 1),
-                ZIndex = 52,
                 Parent = SliderBG,
             })
             New("UICorner", {
@@ -8434,7 +8431,7 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.fromScale(1, 1),
                 Text = "100%",
                 TextSize = 12,
-                ZIndex = 54,
+                ZIndex = 2,
                 Parent = SliderBG,
             })
 
@@ -8566,14 +8563,22 @@ function Library:CreateWindow(WindowInfo)
                             SliderValue.Text = chance .. "%"
                             SliderLabel.Text = partInfo.Name
                             
-                            -- Position slider above the part
-                            local posX = btn.Position.X.Offset - 35
-                            local posY = btn.Position.Y.Offset - 65
-                            SliderFrame.Position = UDim2.fromOffset(posX, math.max(5, posY))
-                            -- Ensure the slider renders above all body part buttons
-                            if SliderFrame.BringToFront then
-                                SliderFrame:BringToFront()
-                            end
+                            -- Position slider above the part using absolute coordinates
+                            local canvasPos = BodyCanvas.AbsolutePosition
+                            local btnPos = btn.AbsolutePosition
+                            local btnSize = btn.AbsoluteSize
+
+                            local sliderW = SliderFrame.AbsoluteSize.X
+                            local sliderH = SliderFrame.AbsoluteSize.Y
+                            if sliderW == 0 then sliderW = SliderFrame.Size.X.Offset end
+                            if sliderH == 0 then sliderH = SliderFrame.Size.Y.Offset end
+
+                            local localX = math.floor(btnPos.X - canvasPos.X + (btnSize.X * 0.5) - (sliderW * 0.5))
+                            local localY = math.floor(btnPos.Y - canvasPos.Y - sliderH - 8)
+
+                            local maxX = math.max(4, BodyCanvas.AbsoluteSize.X - sliderW - 4)
+                            local clampedX = math.clamp(localX, 4, maxX)
+                            SliderFrame.Position = UDim2.fromOffset(clampedX, math.max(4, localY))
                             SliderFrame.Visible = true
 
                             Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, chance, AimbotBox.HitChances)
