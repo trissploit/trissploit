@@ -8392,7 +8392,9 @@ function Library:CreateWindow(WindowInfo)
                 CornerRadius = UDim.new(0, 6),
                 Parent = SliderFrame,
             })
-            Library:AddOutline(SliderFrame)
+            -- Hide outer slider frame visuals; we'll show only the slider `Bar` overlay
+            SliderFrame.BackgroundTransparency = 1
+            -- Do not add outline for the outer frame
 
             local SliderLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
@@ -8403,6 +8405,7 @@ function Library:CreateWindow(WindowInfo)
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = SliderFrame,
             })
+            SliderLabel.Visible = false
 
             -- Use existing slider visuals (bar + gradient fill + value text)
             local Bar = New("TextButton", {
@@ -8414,7 +8417,8 @@ function Library:CreateWindow(WindowInfo)
                 Position = UDim2.fromOffset(6, 26),
                 Size = UDim2.new(1, -12, 0, 20),
                 Text = "",
-                Parent = SliderFrame,
+                Parent = BodyCanvas,
+                Visible = false,
             })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Bar })
             local BarStroke = New("UIStroke", { Color = "OutlineColor", Parent = Bar })
@@ -8572,18 +8576,18 @@ function Library:CreateWindow(WindowInfo)
                             local btnPos = btn.AbsolutePosition
                             local btnSize = btn.AbsoluteSize
 
-                            local sliderW = SliderFrame.AbsoluteSize.X
-                            local sliderH = SliderFrame.AbsoluteSize.Y
-                            if sliderW == 0 then sliderW = SliderFrame.Size.X.Offset end
-                            if sliderH == 0 then sliderH = SliderFrame.Size.Y.Offset end
+                            local sliderW = Bar.AbsoluteSize.X
+                            local sliderH = Bar.AbsoluteSize.Y
+                            if sliderW == 0 then sliderW = Bar.Size.X.Offset end
+                            if sliderH == 0 then sliderH = Bar.Size.Y.Offset end
 
                             local localX = math.floor(btnPos.X - canvasPos.X + (btnSize.X * 0.5) - (sliderW * 0.5))
                             local localY = math.floor(btnPos.Y - canvasPos.Y - sliderH - 8)
 
                             local maxX = math.max(4, BodyCanvas.AbsoluteSize.X - sliderW - 4)
                             local clampedX = math.clamp(localX, 4, maxX)
-                            SliderFrame.Position = UDim2.fromOffset(clampedX, math.max(4, localY))
-                            SliderFrame.Visible = true
+                            Bar.Position = UDim2.fromOffset(clampedX, math.max(4, localY))
+                            Bar.Visible = true
 
                             Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, chance, AimbotBox.HitChances)
                         end)
@@ -8621,7 +8625,7 @@ function Library:CreateWindow(WindowInfo)
                             }):Play()
                         end
                         AimbotBox.SelectedPart = nil
-                        SliderFrame.Visible = false
+                        Bar.Visible = false
                     end
                 end
             end))
