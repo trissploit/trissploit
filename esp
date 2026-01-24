@@ -781,7 +781,7 @@ local function updateESP(deltaTime)
                 if settings.ShowHealthText then
                     espObj.HealthText.Visible = true
                     espObj.HealthText.Text = string.format("%d%%", math.floor(healthRatio * 100))
-                    espObj.HealthText.Position = UDim2.new(0, barX + barThickness + 5, 0, boxY + boxH - barHeight)
+                    espObj.HealthText.Position = UDim2.new(0, barX + barThickness + 5, 0, localY + localH - barHeight)
                 else
                     espObj.HealthText.Visible = false
                 end
@@ -795,7 +795,7 @@ local function updateESP(deltaTime)
             if settings.ShowName then
                 espObj.Name.Visible = true
                 espObj.Name.Text = "Preview"
-                espObj.Name.Position = UDim2.new(0, boxX + boxW/2, 0, boxY - 20)
+                espObj.Name.Position = UDim2.new(0, localX + (localW / 2), 0, localY - 20)
             else
                 espObj.Name.Visible = false
             end
@@ -1409,6 +1409,20 @@ getgenv().TrisESP = {
         if PreviewESPObject.Container then
             PreviewESPObject.Container.Parent = viewportHolder
         end
+
+        -- Bump ZIndex for preview elements so they render above the ViewportFrame
+        pcall(function()
+            local o = PreviewESPObject
+            if o.Box then o.Box.ZIndex = 50 end
+            if o.BoxFill then o.BoxFill.ZIndex = 49 end
+            if o.BoxOutline then o.BoxOutline.ZIndex = 51 end
+            if o.HealthBarBG then o.HealthBarBG.ZIndex = 52 end
+            if o.HealthBar then o.HealthBar.ZIndex = 53 end
+            if o.Name then o.Name.ZIndex = 54 end
+            if o.HealthText then o.HealthText.ZIndex = 54 end
+            if o.Tracer then o.Tracer.ZIndex = 48 end
+            if o.Highlight then o.Highlight.Parent = viewportHolder end
+        end)
 
         return true
     end,
