@@ -23,8 +23,8 @@ local RotationAngle = -90
 -- Preview ESP (separate from main ESP system)
 local PreviewESPObject = nil
 local PreviewCharacter = nil
-local PreviewViewport = nil -- ViewportFrame inside the holder
-local PreviewViewportHolder = nil -- Frame that contains the ViewportFrame
+local PreviewHolder = nil -- Frame that contains the preview area (no ViewportFrame)
+local PreviewCam = { Distance = 5, FOV = 70 } -- virtual camera settings for preview projection
 -- Persistent state across hot-reloads (if executor preserves getgenv)
 getgenv()._TrisESP_Persistent = getgenv()._TrisESP_Persistent or {}
 local PERSIST = getgenv()._TrisESP_Persistent
@@ -603,76 +603,96 @@ local function updateESP(deltaTime)
     PERSIST.SpinAngle = SpinAngle
     -- Note: gradient autorotation will be integrated per-object below using deltaTime
 
-    -- Update preview ESP if it exists (viewport-specific rendering)
-    if PreviewESPObject and PreviewCharacter and PreviewViewport and PreviewViewportHolder then
+    -- Update preview ESP if it exists (projection-based, no ViewportFrame)
+    if PreviewESPObject and PreviewCharacter and PreviewHolder then
         local success = pcall(function()
             local char = PreviewCharacter
-            local viewport = PreviewViewport
-            local camera = viewport.CurrentCamera
-            
-            if not camera then
-                hideESP(PreviewESPObject)
-                return
-            end
-            
             local hrp = char:FindFirstChild("HumanoidRootPart")
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if not hrp or not humanoid then
                 hideESP(PreviewESPObject)
                 return
             end
-            
-            -- Calculate bounding box using viewport camera projection
-            local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
-            local viewportSize = viewport.AbsoluteSize
-            
+
+            local holder = PreviewHolder
+            local holderSize = holder.AbsoluteSize
+            if not holderSize or holderSize.X <= 0 or holderSize.Y <= 0 then
+                hideESP(PreviewESPObject)
+                return
+            end
+
+            -- Setup a virtual camera looking at the character center
+            local center = hrp.Position
+            local camDistance = PreviewCam.Distance or 5
+            local camPos = center + Vector3.new(0, 0, camDistance)
+            local camCF = CFrame.new(camPos, center)
+            local fov = PreviewCam.FOV or 70
+            local aspect = math.max(0.0001, holderSize.X / holderSize.Y)
+            local scale = 1 / math.tan(math.rad(fov) / 2)
+            local scaleX = scale / aspect
+            local scaleY = scale
+
+            -- Project part corners into preview-holder pixel coordinates
+            local minX, minY = math.huge, math.huge
+            local maxX, maxY = -math.huge, -math.huge
+
             for _, part in ipairs(char:GetDescendants()) do
                 if part:IsA("BasePart") then
+                    local hx, hy, hz = part.Size.X/2, part.Size.Y/2, part.Size.Z/2
                     local corners = {
-                        part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                        part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                        part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, part.Size.Z/2),
-                        part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, part.Size.Z/2)
+                        part.CFrame * CFrame.new(-hx, -hy, -hz),
+                        part.CFrame * CFrame.new(hx, -hy, -hz),
+                        part.CFrame * CFrame.new(-hx, hy, -hz),
+                        part.CFrame * CFrame.new(hx, hy, -hz),
+                        part.CFrame * CFrame.new(-hx, -hy, hz),
+                        part.CFrame * CFrame.new(hx, -hy, hz),
+                        part.CFrame * CFrame.new(-hx, hy, hz),
+                        part.CFrame * CFrame.new(hx, hy, hz),
                     }
-                    
                     for _, cornerCF in ipairs(corners) do
-                        local screenPos, inFront = camera:WorldToViewportPoint(cornerCF.Position)
-                        if inFront then
-                            minX = math.min(minX, screenPos.X)
-                            minY = math.min(minY, screenPos.Y)
-                            maxX = math.max(maxX, screenPos.X)
-                            maxY = math.max(maxY, screenPos.Y)
+                        local worldPos = cornerCF.Position
+                        -- Transform into camera-local coordinates
+                        local localPos = camCF:PointToObjectSpace(worldPos)
+                        local z = localPos.Z
+                        -- We require points in front of the virtual camera (z < 0 because CFrame lookAt makes -Z forward)
+                        if z < 0 then
+                            local x = localPos.X
+                            local y = localPos.Y
+                            -- normalized device coords projected to holder pixels
+                            local ndcX = (x * (scaleX / -z))
+                            local ndcY = ( -y * (scaleY / -z))
+                            local px = (ndcX * 0.5 + 0.5) * holderSize.X
+                            local py = (ndcY * 0.5 + 0.5) * holderSize.Y
+                            minX = math.min(minX, px)
+                            minY = math.min(minY, py)
+                            maxX = math.max(maxX, px)
+                            maxY = math.max(maxY, py)
                         end
                     end
                 end
             end
-            
+
             if minX == math.huge then
                 hideESP(PreviewESPObject)
                 return
             end
-            
-            -- Clamp to viewport bounds
-            minX = math.max(0, math.min(minX, viewportSize.X))
-            minY = math.max(0, math.min(minY, viewportSize.Y))
-            maxX = math.max(0, math.min(maxX, viewportSize.X))
-            maxY = math.max(0, math.min(maxY, viewportSize.Y))
-            
+
+            -- Clamp to holder bounds
+            minX = math.max(0, math.min(minX, holderSize.X))
+            minY = math.max(0, math.min(minY, holderSize.Y))
+            maxX = math.max(0, math.min(maxX, holderSize.X))
+            maxY = math.max(0, math.min(maxY, holderSize.Y))
+
             local boxW = maxX - minX
             local boxH = maxY - minY
-            
             if boxW <= 0 or boxH <= 0 then
                 hideESP(PreviewESPObject)
                 return
             end
-            
+
             local settings = ESPSettings
             local espObj = PreviewESPObject
-            
+
             -- Box Fill
             if settings.BoxFill and boxW > 1 and boxH > 1 then
                 espObj.BoxFill.Visible = true
@@ -680,7 +700,6 @@ local function updateESP(deltaTime)
                 espObj.BoxFill.Size = UDim2.new(0, boxW, 0, boxH)
                 espObj.BoxFill.BackgroundTransparency = settings.BoxFillTransparency or 0.5
                 espObj.BoxFill.ZIndex = 2
-                
                 local seq = createGradientSequence(
                     settings.BoxFillCustomColor1,
                     settings.BoxFillCustomColor2,
@@ -691,7 +710,7 @@ local function updateESP(deltaTime)
             else
                 espObj.BoxFill.Visible = false
             end
-            
+
             -- Box Outline
             if settings.Boxes and boxW > 1 and boxH > 1 then
                 espObj.Box.Visible = true
@@ -699,11 +718,9 @@ local function updateESP(deltaTime)
                 espObj.Box.Size = UDim2.new(0, boxW, 0, boxH)
                 espObj.Box.BackgroundTransparency = 1
                 espObj.Box.ZIndex = 3
-                
                 espObj.BoxOutline.Color = settings.BoxOutlineColor
                 espObj.BoxOutline.Thickness = 1
                 espObj.BoxOutline.Enabled = true
-                
                 local outlineSeq = createGradientSequence(
                     settings.BoxCustomColor1,
                     settings.BoxCustomColor2,
@@ -712,66 +729,55 @@ local function updateESP(deltaTime)
                 espObj.OutlineGradient.Color = outlineSeq
                 espObj.OutlineGradient.Enabled = true
                 espObj.OutlineGradient.Rotation = -90
-                
-                for _, corner in ipairs(espObj.Corners) do
-                    corner.Visible = false
-                end
+                for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
             else
                 espObj.Box.Visible = false
             end
-            
+
             -- Health Bar
             if settings.HealthBarEnabled and humanoid and boxH > 10 then
                 local healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
                 local barThickness = math.min(settings.HealthBarThickness or 2.5, boxW * 0.1)
                 local barHeight = boxH * healthRatio
-                
                 local barX = minX
                 if settings.HealthBarPosition == "Right" then
                     barX = maxX + 2
-                elseif settings.HealthBarPosition == "Left" then
+                else
                     barX = minX - barThickness - 2
                 end
-                
                 espObj.HealthBarBG.Visible = true
                 espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, minY)
                 espObj.HealthBarBG.Size = UDim2.new(0, barThickness, 0, boxH)
                 espObj.HealthBarBG.ZIndex = 4
-                
                 espObj.HealthBar.Visible = true
                 espObj.HealthBar.Position = UDim2.new(0, barX, 0, minY + boxH - barHeight)
                 espObj.HealthBar.Size = UDim2.new(0, barThickness, 0, barHeight)
                 espObj.HealthBar.ZIndex = 5
-                
-                -- Health gradient animation
                 if settings.HealthGradientEnabled then
                     espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0) + dt * (settings.HealthGradientSpeed or 0.5)
-                    if espObj.HealthGradientPhase > 1 then
-                        espObj.HealthGradientPhase = espObj.HealthGradientPhase - 1
-                    end
+                    if espObj.HealthGradientPhase > 1 then espObj.HealthGradientPhase = espObj.HealthGradientPhase - 1 end
                 end
-                
-                local phase = espObj.HealthGradientPhase or 0
+                -- build gradient (kept simple)
+                local hc1 = settings.HealthBarColor1 or Color3.fromRGB(255,0,0)
+                local hc2 = settings.HealthBarColor2 or Color3.fromRGB(38,0,255)
+                local hc3 = settings.HealthBarColor3 or Color3.fromRGB(0,255,0)
                 local samples = 12
                 local keypoints = {}
-                for i = 0, samples do
-                    local t = i / samples
-                    local offsetT = (t + phase) % 1
+                for i = 0, (samples-1) do
+                    local t = i / (samples-1)
+                    local phase = espObj.HealthGradientPhase or 0
+                    local pos = (t - phase) % 1
                     local c
-                    if offsetT < 0.33 then
-                        local blend = offsetT / 0.33
-                        c = lerpColor(settings.HealthBarColor1, settings.HealthBarColor2, blend)
-                    elseif offsetT < 0.66 then
-                        local blend = (offsetT - 0.33) / 0.33
-                        c = lerpColor(settings.HealthBarColor2, settings.HealthBarColor3, blend)
+                    if pos < 1/3 then
+                        c = lerpColor(hc1, hc2, pos / (1/3))
+                    elseif pos < 2/3 then
+                        c = lerpColor(hc2, hc3, (pos - 1/3) / (1/3))
                     else
-                        local blend = (offsetT - 0.66) / 0.34
-                        c = lerpColor(settings.HealthBarColor3, settings.HealthBarColor1, blend)
+                        c = lerpColor(hc3, hc1, (pos - 2/3) / (1/3))
                     end
                     table.insert(keypoints, ColorSequenceKeypoint.new(t, c))
                 end
                 espObj.HealthBarGradient.Color = ColorSequence.new(keypoints)
-                
                 if settings.ShowHealthText then
                     espObj.HealthText.Visible = true
                     espObj.HealthText.Text = string.format("%d%%", math.floor(healthRatio * 100))
@@ -785,7 +791,7 @@ local function updateESP(deltaTime)
                 espObj.HealthBar.Visible = false
                 espObj.HealthText.Visible = false
             end
-            
+
             -- Name
             if settings.ShowName then
                 espObj.Name.Visible = true
@@ -795,20 +801,15 @@ local function updateESP(deltaTime)
             else
                 espObj.Name.Visible = false
             end
-            
-            -- Hide elements not used in preview
+
             espObj.Distance.Visible = false
             espObj.Weapon.Visible = false
             espObj.Tracer.Visible = false
-            if espObj.Highlight then
-                espObj.Highlight.Enabled = false
-            end
+            if espObj.Highlight then espObj.Highlight.Enabled = false end
         end)
-        
+
         if not success then
-            if PreviewESPObject then
-                hideESP(PreviewESPObject)
-            end
+            if PreviewESPObject then hideESP(PreviewESPObject) end
         end
     end
 
@@ -1372,19 +1373,8 @@ getgenv().TrisESP = {
     end,
 
     -- Preview ESP functions (for viewport character models)
-    CreatePreviewESP = function(character, viewportHolder)
-        if not character or not viewportHolder then return false end
-
-        -- Find the ViewportFrame inside the holder
-        local viewportFrame = nil
-        for _, v in ipairs(viewportHolder:GetChildren()) do
-            if v:IsA("ViewportFrame") then
-                viewportFrame = v
-                break
-            end
-        end
-
-        if not viewportFrame then return false end
+    CreatePreviewESP = function(character, previewHolder)
+        if not character or not previewHolder then return false end
 
         -- Remove existing preview ESP if any
         if PreviewESPObject then
@@ -1392,17 +1382,16 @@ getgenv().TrisESP = {
             PreviewESPObject = nil
         end
 
-        -- Create new ESP object for preview
+        -- Create new ESP object for preview (projection-based)
         PreviewESPObject = createESPObject()
         PreviewCharacter = character
-        PreviewViewport = viewportFrame
-        PreviewViewportHolder = viewportHolder
+        PreviewHolder = previewHolder
         PreviewESPObject.HealthGradientPhase = 0
         PreviewESPObject.GradientAngle = 0
 
-        -- Parent the ESP container to the viewport holder so 2D overlays render atop the viewport
+        -- Parent the ESP container to the preview holder so overlays render inside it
         if PreviewESPObject.Container then
-            PreviewESPObject.Container.Parent = viewportHolder
+            PreviewESPObject.Container.Parent = previewHolder
         end
 
         return true
@@ -1414,8 +1403,7 @@ getgenv().TrisESP = {
             PreviewESPObject = nil
         end
         PreviewCharacter = nil
-        PreviewViewport = nil
-        PreviewViewportHolder = nil
+        PreviewHolder = nil
         return true
     end,
 
