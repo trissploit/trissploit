@@ -8400,11 +8400,9 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.new(1, -12, 0, 16),
                 Text = "Hit Chance",
                 TextSize = 12,
-                TextXAlignment = Enum.TextXAlignment.Center,
-                TextYAlignment = Enum.TextYAlignment.Center,
+                TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = SliderFrame,
             })
-            Library.Registry[SliderLabel] = { TextColor3 = "FontColor" }
 
             -- Use existing slider visuals (bar + gradient fill + value text)
             local Bar = New("TextButton", {
@@ -8426,8 +8424,6 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.fromScale(1, 1),
                 Text = "100%",
                 TextSize = 12,
-                TextXAlignment = Enum.TextXAlignment.Center,
-                TextYAlignment = Enum.TextYAlignment.Center,
                 ZIndex = 2,
                 Parent = Bar,
             })
@@ -8447,12 +8443,6 @@ function Library:CreateWindow(WindowInfo)
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Fill })
             local FillGradient = New("UIGradient", { Color = Library:GetAccentGradientSequence(), Rotation = 90, Parent = Fill })
             Library.Registry[FillGradient] = { Color = function() return Library:GetAccentGradientSequence() end }
-            Library.Registry[Fill] = { BackgroundColor3 = "AccentGradientStart" }
-
-            Library.Registry[Bar] = { BackgroundColor3 = "MainColor" }
-            Library.Registry[BarStroke] = { Color = "OutlineColor" }
-            Library.Registry[DisplayLabel] = { TextColor3 = "FontColor" }
-            Library.Registry[SliderFrame] = { BackgroundColor3 = "BackgroundColor" }
 
             -- Slider interaction (reusing library slider behavior)
             local SliderMin, SliderMax, SliderRounding = 0, 100, 0
