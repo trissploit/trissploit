@@ -8492,6 +8492,10 @@ function Library:CreateWindow(WindowInfo)
                     DisplayLabel.Text = tostring(SliderValueNum) .. "%"
 
                     AimbotBox.HitChances[AimbotBox.SelectedPart] = SliderValueNum
+                    -- update percent label on the button
+                    if BodyPartButtons[AimbotBox.SelectedPart] and BodyPartButtons[AimbotBox.SelectedPart].Label then
+                        BodyPartButtons[AimbotBox.SelectedPart].Label.Text = tostring(SliderValueNum) .. "%"
+                    end
                     if SliderValueNum ~= OldValue then
                         Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, SliderValueNum, AimbotBox.HitChances)
                     end
@@ -8555,9 +8559,23 @@ function Library:CreateWindow(WindowInfo)
                         Parent = BodyCanvas,
                     })
 
+                    -- percent label centered inside the body part button
+                    local PercentLabel = New("TextLabel", {
+                        BackgroundTransparency = 1,
+                        Size = UDim2.fromScale(1, 1),
+                        Text = tostring(AimbotBox.HitChances[partInfo.Name]) .. "%",
+                        TextSize = 12,
+                        TextXAlignment = Enum.TextXAlignment.Center,
+                        TextYAlignment = Enum.TextYAlignment.Center,
+                        Parent = btn,
+                    })
+                    Library.Registry[PercentLabel] = Library.Registry[PercentLabel] or {}
+                    Library.Registry[PercentLabel].TextColor3 = "FontColor"
+
                     BodyPartButtons[partInfo.Name] = {
                         Button = btn,
                         Info = partInfo,
+                        Label = PercentLabel,
                     }
 
                     if not partInfo.NoSelect then
@@ -8630,6 +8648,10 @@ function Library:CreateWindow(WindowInfo)
                         for k, v in pairs(AimbotBox.HitChances) do
                             local scaled = math.floor(((tonumber(v) or 0) / total) * 100)
                             AimbotBox.HitChances[k] = math.max(0, scaled)
+                            -- update percent label if present
+                            if BodyPartButtons[k] and BodyPartButtons[k].Label then
+                                BodyPartButtons[k].Label.Text = tostring(AimbotBox.HitChances[k]) .. "%"
+                            end
                         end
                     end
                 end
