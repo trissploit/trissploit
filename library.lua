@@ -5007,7 +5007,7 @@ do
         })
         New("UIStroke", {
             ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-            Color = "OutlineColor",
+            Color = "Dark",
             LineJoinMode = Enum.LineJoinMode.Miter,
             Parent = DisplayLabel,
         })
@@ -8012,12 +8012,12 @@ function Library:CreateWindow(WindowInfo)
 				TextYAlignment = Enum.TextYAlignment.Top,
 			})
 			
-            New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = "OutlineColor",
-                LineJoinMode = Enum.LineJoinMode.Miter,
-                Parent = WarningText,
-            })
+			New("UIStroke", {
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+				Color = "Dark",
+				LineJoinMode = Enum.LineJoinMode.Miter,
+				Parent = WarningText,
+			})
 		end
 
         --// Tab Table \\--
@@ -8407,6 +8407,13 @@ function Library:CreateWindow(WindowInfo)
             })
             Library.Registry[SliderLabel] = Library.Registry[SliderLabel] or {}
             Library.Registry[SliderLabel].TextColor3 = "FontColor"
+            local SliderLabelStroke = New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = "OutlineColor",
+                Parent = SliderLabel,
+            })
+            Library.Registry[SliderLabelStroke] = Library.Registry[SliderLabelStroke] or {}
+            Library.Registry[SliderLabelStroke].Color = "OutlineColor"
 
             -- Use existing slider visuals (bar + gradient fill + value text)
             local Bar = New("TextButton", {
@@ -8434,12 +8441,14 @@ function Library:CreateWindow(WindowInfo)
             })
             Library.Registry[DisplayLabel] = Library.Registry[DisplayLabel] or {}
             Library.Registry[DisplayLabel].TextColor3 = "FontColor"
-            New("UIStroke", {
+            local DisplayLabelStroke = New("UIStroke", {
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
                 Color = "OutlineColor",
                 LineJoinMode = Enum.LineJoinMode.Miter,
                 Parent = DisplayLabel,
             })
+            Library.Registry[DisplayLabelStroke] = Library.Registry[DisplayLabelStroke] or {}
+            Library.Registry[DisplayLabelStroke].Color = "OutlineColor"
 
             local Fill = New("Frame", {
                 BackgroundColor3 = "AccentGradientStart",
