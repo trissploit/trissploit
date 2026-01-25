@@ -314,8 +314,6 @@ local Templates = {
         FontFace = "Font",
         RichText = true,
         TextColor3 = "FontColor",
-        TextStrokeColor3 = "Dark",
-        TextStrokeTransparency = 0,
     },
     TextButton = {
         AutoButtonColor = false,
@@ -323,8 +321,6 @@ local Templates = {
         FontFace = "Font",
         RichText = true,
         TextColor3 = "FontColor",
-        TextStrokeColor3 = "Dark",
-        TextStrokeTransparency = 0,
     },
     TextBox = {
         BorderSizePixel = 0,
@@ -335,8 +331,6 @@ local Templates = {
         end,
         Text = "",
         TextColor3 = "FontColor",
-        TextStrokeColor3 = "Dark",
-        TextStrokeTransparency = 0,
     },
     UIListLayout = {
         SortOrder = Enum.SortOrder.LayoutOrder,
@@ -5013,7 +5007,7 @@ do
         })
         New("UIStroke", {
             ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-            Color = "Dark",
+            Color = "OutlineColor",
             LineJoinMode = Enum.LineJoinMode.Miter,
             Parent = DisplayLabel,
         })
@@ -8018,12 +8012,12 @@ function Library:CreateWindow(WindowInfo)
 				TextYAlignment = Enum.TextYAlignment.Top,
 			})
 			
-			New("UIStroke", {
-				ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-				Color = "Dark",
-				LineJoinMode = Enum.LineJoinMode.Miter,
-				Parent = WarningText,
-			})
+            New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = "OutlineColor",
+                LineJoinMode = Enum.LineJoinMode.Miter,
+                Parent = WarningText,
+            })
 		end
 
         --// Tab Table \\--
@@ -8442,7 +8436,7 @@ function Library:CreateWindow(WindowInfo)
             Library.Registry[DisplayLabel].TextColor3 = "FontColor"
             New("UIStroke", {
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = "Dark",
+                Color = "OutlineColor",
                 LineJoinMode = Enum.LineJoinMode.Miter,
                 Parent = DisplayLabel,
             })
