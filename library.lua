@@ -314,6 +314,8 @@ local Templates = {
         FontFace = "Font",
         RichText = true,
         TextColor3 = "FontColor",
+        TextStrokeColor3 = "Dark",
+        TextStrokeTransparency = 0,
     },
     TextButton = {
         AutoButtonColor = false,
@@ -321,6 +323,8 @@ local Templates = {
         FontFace = "Font",
         RichText = true,
         TextColor3 = "FontColor",
+        TextStrokeColor3 = "Dark",
+        TextStrokeTransparency = 0,
     },
     TextBox = {
         BorderSizePixel = 0,
@@ -331,6 +335,8 @@ local Templates = {
         end,
         Text = "",
         TextColor3 = "FontColor",
+        TextStrokeColor3 = "Dark",
+        TextStrokeTransparency = 0,
     },
     UIListLayout = {
         SortOrder = Enum.SortOrder.LayoutOrder,
@@ -1241,19 +1247,6 @@ function Library:UpdateColorsUsingRegistry()
             if val ~= nil then
                 Instance[Property] = val
             end
-        end
-        -- Ensure text objects use themed font color by default and have a black outline.
-        local ok, isa = pcall(function() return Instance:IsA end)
-        if ok and isa and (Instance:IsA("TextLabel") or Instance:IsA("TextButton") or Instance:IsA("TextBox") or Instance:IsA("TextScaledLabel")) then
-            if not Properties["TextColor3"] then
-                Instance.TextColor3 = Library.Scheme.FontColor
-                Library.Registry[Instance].TextColor3 = "FontColor"
-            end
-            -- Apply a solid black outline for better contrast
-            pcall(function()
-                Instance.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                Instance.TextStrokeTransparency = 0
-            end)
         end
     end
 end
