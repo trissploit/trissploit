@@ -8407,13 +8407,6 @@ function Library:CreateWindow(WindowInfo)
             })
             Library.Registry[SliderLabel] = Library.Registry[SliderLabel] or {}
             Library.Registry[SliderLabel].TextColor3 = "FontColor"
-            local SliderLabelStroke = New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = "OutlineColor",
-                Parent = SliderLabel,
-            })
-            Library.Registry[SliderLabelStroke] = Library.Registry[SliderLabelStroke] or {}
-            Library.Registry[SliderLabelStroke].Color = "OutlineColor"
 
             -- Use existing slider visuals (bar + gradient fill + value text)
             local Bar = New("TextButton", {
@@ -8441,14 +8434,12 @@ function Library:CreateWindow(WindowInfo)
             })
             Library.Registry[DisplayLabel] = Library.Registry[DisplayLabel] or {}
             Library.Registry[DisplayLabel].TextColor3 = "FontColor"
-            local DisplayLabelStroke = New("UIStroke", {
+            New("UIStroke", {
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = "OutlineColor",
+                Color = "Dark",
                 LineJoinMode = Enum.LineJoinMode.Miter,
                 Parent = DisplayLabel,
             })
-            Library.Registry[DisplayLabelStroke] = Library.Registry[DisplayLabelStroke] or {}
-            Library.Registry[DisplayLabelStroke].Color = "OutlineColor"
 
             local Fill = New("Frame", {
                 BackgroundColor3 = "AccentGradientStart",
@@ -8580,6 +8571,14 @@ function Library:CreateWindow(WindowInfo)
                     })
                     Library.Registry[percLabel] = Library.Registry[percLabel] or {}
                     Library.Registry[percLabel].TextColor3 = "FontColor"
+
+                    -- add outline stroke to percent label so outline follows theme
+                    New("UIStroke", {
+                        ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                        Color = "OutlineColor",
+                        Thickness = 1,
+                        Parent = percLabel,
+                    })
 
                     BodyPartButtons[partInfo.Name] = {
                         Button = btn,
