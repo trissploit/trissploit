@@ -8369,6 +8369,18 @@ function Library:CreateWindow(WindowInfo)
                 Callback = Info.Callback or function() end,
             }
 
+            -- Helper: compute maximum allowed value for a given part so total <= 100
+            local function GetMaxForPart(partName)
+                local total = 0
+                for name, v in pairs(AimbotBox.HitChances) do
+                    total = total + (tonumber(v) or 0)
+                end
+                local current = tonumber(AimbotBox.HitChances[partName]) or 0
+                local otherTotal = total - current
+                local maxAllowed = math.max(0, 100 - otherTotal)
+                return maxAllowed
+            end
+
             -- Body part buttons
             local BodyPartButtons = {}
             local SkinColor = Color3.fromRGB(255, 255, 255)
@@ -8471,12 +8483,20 @@ function Library:CreateWindow(WindowInfo)
 
                 while IsDragInput(Input) do
                     local Location = Mouse.X
-                    local Scale = math.clamp((Location - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+                    local Scale = 0
+                    if SliderMax > SliderMin then
+                        Scale = math.clamp((Location - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+                    end
 
                     local OldValue = SliderValueNum
                     SliderValueNum = Round(SliderMin + ((SliderMax - SliderMin) * Scale), SliderRounding)
 
-                    Fill.Size = UDim2.fromScale((SliderValueNum - SliderMin) / (SliderMax - SliderMin), 1)
+                    local denom = (SliderMax - SliderMin)
+                    if denom > 0 then
+                        Fill.Size = UDim2.fromScale((SliderValueNum - SliderMin) / denom, 1)
+                    else
+                        Fill.Size = UDim2.fromScale(0, 1)
+                    end
                     DisplayLabel.Text = tostring(SliderValueNum) .. "%"
 
                     AimbotBox.HitChances[AimbotBox.SelectedPart] = SliderValueNum
@@ -8570,10 +8590,22 @@ function Library:CreateWindow(WindowInfo)
 
                             -- Show slider on top of the clicked part
                             local chance = AimbotBox.HitChances[partInfo.Name] or 100
-                            Fill.Size = UDim2.fromScale(chance / 100, 1)
+                            -- compute the max allowed for this part so total <= 100
+                            SliderMin = 0
+                            SliderMax = GetMaxForPart(partInfo.Name)
+                            -- clamp chance to allowed max
+                            chance = math.clamp(chance, SliderMin, SliderMax)
+                            AimbotBox.HitChances[partInfo.Name] = chance
+
+                            local denom = (SliderMax - SliderMin)
+                            if denom > 0 then
+                                Fill.Size = UDim2.fromScale((chance - SliderMin) / denom, 1)
+                            else
+                                Fill.Size = UDim2.fromScale(0, 1)
+                            end
                             DisplayLabel.Text = chance .. "%"
                             SliderLabel.Text = partInfo.Name
-                            
+
                             -- Position slider above the part using absolute coordinates
                             local canvasPos = BodyCanvas.AbsolutePosition
                             local btnPos = btn.AbsolutePosition
@@ -8642,10 +8674,34 @@ function Library:CreateWindow(WindowInfo)
 
             function AimbotBox:SetHitChance(partName, value)
                 if AimbotBox.HitChances[partName] ~= nil then
-                    AimbotBox.HitChances[partName] = math.clamp(value, 0, 100)
+                    local maxForPart = GetMaxForPart(partName)
+                    local newVal = math.clamp(math.floor(tonumber(value) or 0), 0, maxForPart)
+                    AimbotBox.HitChances[partName] = newVal
+
+                    -- If this part is currently selected, update the overlay visuals and slider range
                     if AimbotBox.SelectedPart == partName then
-                        Fill.Size = UDim2.fromScale(value / 100, 1)
-                        DisplayLabel.Text = value .. "%"
+                        SliderMin = 0
+                        SliderMax = GetMaxForPart(partName)
+                        local denom = (SliderMax - SliderMin)
+                        if denom > 0 then
+                            Fill.Size = UDim2.fromScale((newVal - SliderMin) / denom, 1)
+                        else
+                            Fill.Size = UDim2.fromScale(0, 1)
+                        end
+                        DisplayLabel.Text = newVal .. "%"
+                    else
+                        -- If another part is selected, its max may need to change
+                        if AimbotBox.SelectedPart and AimbotBox.HitChances[AimbotBox.SelectedPart] ~= nil then
+                            SliderMax = GetMaxForPart(AimbotBox.SelectedPart)
+                            local cur = AimbotBox.HitChances[AimbotBox.SelectedPart]
+                            local denom2 = (SliderMax - SliderMin)
+                            if denom2 > 0 then
+                                Fill.Size = UDim2.fromScale((cur - SliderMin) / denom2, 1)
+                            else
+                                Fill.Size = UDim2.fromScale(0, 1)
+                            end
+                            DisplayLabel.Text = tostring(cur) .. "%"
+                        end
                     end
                 end
             end
