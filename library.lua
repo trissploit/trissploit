@@ -314,6 +314,8 @@ local Templates = {
         FontFace = "Font",
         RichText = true,
         TextColor3 = "FontColor",
+        TextStrokeColor3 = "Dark",
+        TextStrokeTransparency = 0,
     },
     TextButton = {
         AutoButtonColor = false,
@@ -321,6 +323,8 @@ local Templates = {
         FontFace = "Font",
         RichText = true,
         TextColor3 = "FontColor",
+        TextStrokeColor3 = "Dark",
+        TextStrokeTransparency = 0,
     },
     TextBox = {
         BorderSizePixel = 0,
@@ -331,6 +335,8 @@ local Templates = {
         end,
         Text = "",
         TextColor3 = "FontColor",
+        TextStrokeColor3 = "Dark",
+        TextStrokeTransparency = 0,
     },
     UIListLayout = {
         SortOrder = Enum.SortOrder.LayoutOrder,
