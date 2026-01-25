@@ -8619,6 +8619,21 @@ function Library:CreateWindow(WindowInfo)
                         end)
                     end
                 end
+
+                -- Normalize defaults so total doesn't exceed 100
+                do
+                    local total = 0
+                    for k, v in pairs(AimbotBox.HitChances) do
+                        total = total + (tonumber(v) or 0)
+                    end
+                    if total > 100 and total > 0 then
+                        for k, v in pairs(AimbotBox.HitChances) do
+                            local scaled = math.floor(((tonumber(v) or 0) / total) * 100)
+                            AimbotBox.HitChances[k] = math.max(0, scaled)
+                        end
+                    end
+                end
+
             end
 
             -- Click outside to deselect
