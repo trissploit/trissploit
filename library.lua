@@ -8492,9 +8492,10 @@ function Library:CreateWindow(WindowInfo)
                     DisplayLabel.Text = tostring(SliderValueNum) .. "%"
 
                     AimbotBox.HitChances[AimbotBox.SelectedPart] = SliderValueNum
-                    -- update percent label on the button
-                    if BodyPartButtons[AimbotBox.SelectedPart] and BodyPartButtons[AimbotBox.SelectedPart].Label then
-                        BodyPartButtons[AimbotBox.SelectedPart].Label.Text = tostring(SliderValueNum) .. "%"
+                    -- update percent label on the selected part
+                    local sel = AimbotBox.SelectedPart
+                    if sel and BodyPartButtons[sel] and BodyPartButtons[sel].Label then
+                        BodyPartButtons[sel].Label.Text = tostring(SliderValueNum) .. "%"
                     end
                     if SliderValueNum ~= OldValue then
                         Library:SafeCallback(AimbotBox.Callback, AimbotBox.SelectedPart, SliderValueNum, AimbotBox.HitChances)
@@ -8559,8 +8560,7 @@ function Library:CreateWindow(WindowInfo)
                         Parent = BodyCanvas,
                     })
 
-                    -- percent label centered inside the body part button
-                    local PercentLabel = New("TextLabel", {
+                    local percLabel = New("TextLabel", {
                         BackgroundTransparency = 1,
                         Size = UDim2.fromScale(1, 1),
                         Text = tostring(AimbotBox.HitChances[partInfo.Name]) .. "%",
@@ -8569,13 +8569,13 @@ function Library:CreateWindow(WindowInfo)
                         TextYAlignment = Enum.TextYAlignment.Center,
                         Parent = btn,
                     })
-                    Library.Registry[PercentLabel] = Library.Registry[PercentLabel] or {}
-                    Library.Registry[PercentLabel].TextColor3 = "FontColor"
+                    Library.Registry[percLabel] = Library.Registry[percLabel] or {}
+                    Library.Registry[percLabel].TextColor3 = "FontColor"
 
                     BodyPartButtons[partInfo.Name] = {
                         Button = btn,
                         Info = partInfo,
-                        Label = PercentLabel,
+                        Label = percLabel,
                     }
 
                     if not partInfo.NoSelect then
@@ -8608,6 +8608,10 @@ function Library:CreateWindow(WindowInfo)
                             end
                             SliderMax = allowedMax
                             SliderValueNum = chance
+                            -- update label for the clicked part
+                            if BodyPartButtons[partInfo.Name] and BodyPartButtons[partInfo.Name].Label then
+                                BodyPartButtons[partInfo.Name].Label.Text = tostring(chance) .. "%"
+                            end
 
                             local denom = (SliderMax - SliderMin)
                             if denom <= 0 then denom = 1 end
@@ -8648,9 +8652,11 @@ function Library:CreateWindow(WindowInfo)
                         for k, v in pairs(AimbotBox.HitChances) do
                             local scaled = math.floor(((tonumber(v) or 0) / total) * 100)
                             AimbotBox.HitChances[k] = math.max(0, scaled)
-                            -- update percent label if present
-                            if BodyPartButtons[k] and BodyPartButtons[k].Label then
-                                BodyPartButtons[k].Label.Text = tostring(AimbotBox.HitChances[k]) .. "%"
+                        end
+                        -- update labels after normalization
+                        for k, data in pairs(BodyPartButtons) do
+                            if data and data.Label and AimbotBox.HitChances[k] ~= nil then
+                                data.Label.Text = tostring(AimbotBox.HitChances[k]) .. "%"
                             end
                         end
                     end
@@ -8708,6 +8714,10 @@ function Library:CreateWindow(WindowInfo)
                             local allowed = GetRemainingFor(partName)
                             numeric = math.clamp(numeric, 0, allowed)
                             AimbotBox.HitChances[partName] = numeric
+                            -- update label (always) and overlay if currently selected
+                            if BodyPartButtons[partName] and BodyPartButtons[partName].Label then
+                                BodyPartButtons[partName].Label.Text = tostring(numeric) .. "%"
+                            end
                             if AimbotBox.SelectedPart == partName then
                                 SliderMax = allowed
                                 local denom = (SliderMax - SliderMin)
