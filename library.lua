@@ -8308,13 +8308,22 @@ function Library:CreateWindow(WindowInfo)
                         UpdateIcon(expanded)
 
                         if expanded then
-                            -- restore full size based on contents
-                            Groupbox:Resize()
+                            -- wait a frame so layout updates then restore size
+                            task.spawn(function()
+                                task.wait()
+                                Groupbox:Resize()
+                                if Tab and Tab.RefreshSides then
+                                    Tab:RefreshSides()
+                                end
+                            end)
                         else
                             -- collapse to header-only height (34 px scaled)
                             pcall(function()
                                 GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
                             end)
+                            if Tab and Tab.RefreshSides then
+                                Tab:RefreshSides()
+                            end
                         end
                     end)
                 end
