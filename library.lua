@@ -8306,7 +8306,16 @@ function Library:CreateWindow(WindowInfo)
                         expanded = not expanded
                         GroupboxContainer.Visible = expanded
                         UpdateIcon(expanded)
-                        Groupbox:Resize()
+
+                        if expanded then
+                            -- restore full size based on contents
+                            Groupbox:Resize()
+                        else
+                            -- collapse to header-only height (34 px scaled)
+                            pcall(function()
+                                GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                            end)
+                        end
                     end)
                 end
 
