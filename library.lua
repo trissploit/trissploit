@@ -6826,7 +6826,10 @@ function Library:Notify(...)
             Size = UDim2.fromOffset(18 * Library.DPIScale, 18 * Library.DPIScale),
             BackgroundTransparency = 1,
             Image = iconData.Url,
-            Parent = Holder,
+            Parent = FakeBackground, -- place as sibling to Holder so it can overlay
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -8, 0, 8), -- top-right with small inset
+            ZIndex = 6,
             ScaleType = Enum.ScaleType.Crop,
         })
         if iconData.ImageRectOffset then
@@ -6963,17 +6966,17 @@ function Library:Notify(...)
         Parent = TimerHolder,
     })
     TimerFill = New("Frame", {
-        BackgroundColor3 = "AccentColor",
+        BackgroundColor3 = "White",
         Size = UDim2.fromScale(1, 1),
         Parent = TimerBar,
     })
 
-    -- If this is a warning notification, use the red scheme for the timer fill as well
-    if Data.Type and tostring(Data.Type):lower() == "warning" then
-        pcall(function()
-            TimerFill.BackgroundColor3 = Library.Scheme.Red
-        end)
-    end
+    -- Ensure progress/timer fill always uses the white scheme regardless of type
+    pcall(function()
+        if Library.Scheme.White then
+            TimerFill.BackgroundColor3 = Library.Scheme.White
+        end
+    end)
 
     if typeof(Data.Time) == "Instance" then
         TimerFill.Size = UDim2.fromScale(0, 1)
