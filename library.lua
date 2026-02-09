@@ -6744,6 +6744,7 @@ function Library:Notify(...)
         Data.Time = Info.Time or 5
         Data.SoundId = Info.SoundId
         Data.Steps = Info.Steps
+        Data.Type = Info.Type
         Data.Persist = Info.Persist
     else
         Data.Description = tostring(Info)
@@ -6804,6 +6805,37 @@ function Library:Notify(...)
         Parent = Holder,
     })
     Library:AddOutline(Holder)
+
+    -- Determine notification style (default = MainColor).
+    local notifyColorName = "MainColor"
+    local iconData = nil
+    if Data.Type then
+        local t = tostring(Data.Type):lower()
+        if t == "warning" or t == "warn" then
+            notifyColorName = "Red"
+            iconData = Library:GetIcon("triangle-alert")
+        end
+    end
+
+    if Library.Scheme[notifyColorName] then
+        Holder.BackgroundColor3 = Library.Scheme[notifyColorName]
+    end
+
+    if iconData then
+        local Img = New("ImageLabel", {
+            Size = UDim2.fromOffset(18 * Library.DPIScale, 18 * Library.DPIScale),
+            BackgroundTransparency = 1,
+            Image = iconData.Url,
+            Parent = Holder,
+            ScaleType = Enum.ScaleType.Crop,
+        })
+        if iconData.ImageRectOffset then
+            pcall(function() Img.ImageRectOffset = iconData.ImageRectOffset end)
+        end
+        if iconData.ImageRectSize then
+            pcall(function() Img.ImageRectSize = iconData.ImageRectSize end)
+        end
+    end
 
     local Title
     local Desc
@@ -6935,6 +6967,13 @@ function Library:Notify(...)
         Size = UDim2.fromScale(1, 1),
         Parent = TimerBar,
     })
+
+    -- If this is a warning notification, use the red scheme for the timer fill as well
+    if Data.Type and tostring(Data.Type):lower() == "warning" then
+        pcall(function()
+            TimerFill.BackgroundColor3 = Library.Scheme.Red
+        end)
+    end
 
     if typeof(Data.Time) == "Instance" then
         TimerFill.Size = UDim2.fromScale(0, 1)
