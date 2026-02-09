@@ -6821,24 +6821,7 @@ function Library:Notify(...)
         Holder.BackgroundColor3 = Library.Scheme[notifyColorName]
     end
 
-    if iconData then
-        local Img = New("ImageLabel", {
-            Size = UDim2.fromOffset(18 * Library.DPIScale, 18 * Library.DPIScale),
-            BackgroundTransparency = 1,
-            Image = iconData.Url,
-            Parent = FakeBackground, -- place as sibling to Holder so it can overlay
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -8, 0, 8), -- top-right with small inset
-            ZIndex = 6,
-            ScaleType = Enum.ScaleType.Crop,
-        })
-        if iconData.ImageRectOffset then
-            pcall(function() Img.ImageRectOffset = iconData.ImageRectOffset end)
-        end
-        if iconData.ImageRectSize then
-            pcall(function() Img.ImageRectSize = iconData.ImageRectSize end)
-        end
-    end
+    -- iconData is used later once the Holder has been sized
 
     local Title
     local Desc
@@ -6950,6 +6933,26 @@ function Library:Notify(...)
     end
 
     Data:Resize()
+
+    -- Create icon inside the Holder after sizing so it moves with the notification
+    if iconData then
+        local Img = New("ImageLabel", {
+            Size = UDim2.fromOffset(18 * Library.DPIScale, 18 * Library.DPIScale),
+            BackgroundTransparency = 1,
+            Image = iconData.Url,
+            Parent = Holder, -- place inside Holder so it animates together
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -8, 0, 8), -- top-right inset inside Holder
+            ZIndex = 6,
+            ScaleType = Enum.ScaleType.Crop,
+        })
+        if iconData.ImageRectOffset then
+            pcall(function() Img.ImageRectOffset = iconData.ImageRectOffset end)
+        end
+        if iconData.ImageRectSize then
+            pcall(function() Img.ImageRectSize = iconData.ImageRectSize end)
+        end
+    end
 
     local TimerHolder = New("Frame", {
         BackgroundTransparency = 1,
