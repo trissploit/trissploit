@@ -6940,10 +6940,10 @@ function Library:Notify(...)
             Size = UDim2.fromOffset(18 * Library.DPIScale, 18 * Library.DPIScale),
             BackgroundTransparency = 1,
             Image = iconData.Url,
-            Parent = Holder, -- place inside Holder so it animates together
+            Parent = FakeBackground, -- place as sibling to Holder so UIListLayout won't move it
             AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -8, 0, 8), -- top-right inset inside Holder
-            ZIndex = 6,
+            Position = UDim2.new(1, -8, 0, 8), -- top-right inset relative to FakeBackground
+            ZIndex = 8,
             ScaleType = Enum.ScaleType.Crop,
         })
         if iconData.ImageRectOffset then
