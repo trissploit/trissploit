@@ -6813,7 +6813,7 @@ function Library:Notify(...)
         local t = tostring(Data.Type):lower()
         if t == "warning" or t == "warn" then
             notifyColorName = "Red"
-            iconData = Library:GetIcon("triangle-alert")
+            -- intentionally no icon for warning notifications
         end
     end
 
@@ -8268,6 +8268,47 @@ function Library:CreateWindow(WindowInfo)
                     PaddingRight = UDim.new(0, 12),
                     Parent = GroupboxLabel,
                 })
+
+                -- Collapse/expand button on the right of the groupbox label
+                do
+                    local DownIcon = Library:GetIcon("chevron-down")
+                    local UpIcon = Library:GetIcon("chevron-up")
+
+                    local ToggleBtn = New("ImageButton", {
+                        Size = UDim2.fromOffset(20 * Library.DPIScale, 20 * Library.DPIScale),
+                        BackgroundTransparency = 1,
+                        Position = UDim2.new(1, -12, 0, 7),
+                        AnchorPoint = Vector2.new(1, 0),
+                        AutoButtonColor = false,
+                        Parent = GroupboxHolder,
+                        ZIndex = 5,
+                    })
+
+                    local function UpdateIcon(expanded)
+                        local icon = expanded and UpIcon or DownIcon
+                        if icon and icon.Url then
+                            pcall(function() ToggleBtn.Image = icon.Url end)
+                            if icon.ImageRectOffset then
+                                pcall(function() ToggleBtn.ImageRectOffset = icon.ImageRectOffset end)
+                            end
+                            if icon.ImageRectSize then
+                                pcall(function() ToggleBtn.ImageRectSize = icon.ImageRectSize end)
+                            end
+                        else
+                            ToggleBtn.Image = ""
+                        end
+                    end
+
+                    local expanded = true
+                    UpdateIcon(expanded)
+
+                    ToggleBtn.MouseButton1Click:Connect(function()
+                        expanded = not expanded
+                        GroupboxContainer.Visible = expanded
+                        UpdateIcon(expanded)
+                        Groupbox:Resize()
+                    end)
+                end
 
                 GroupboxContainer = New("Frame", {
                     BackgroundTransparency = 1,
