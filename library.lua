@@ -8305,6 +8305,9 @@ function Library:CreateWindow(WindowInfo)
                     ToggleBtn.MouseButton1Click:Connect(function()
                         expanded = not expanded
                         GroupboxContainer.Visible = expanded
+                        if expanded then
+                            GroupboxHolder.Visible = true
+                        end
                         UpdateIcon(expanded)
 
                         if expanded then
