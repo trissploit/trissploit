@@ -8355,11 +8355,33 @@ function Library:CreateWindow(WindowInfo)
                         if expanded then
                             -- Make container visible first so layout can calculate
                             GroupboxContainer.Visible = true
-                            -- Wait for layout to update, then resize based on content
+                            -- Wait for layout to update, then resize based on content (wait for AbsoluteContentSize to change with timeout)
                             task.spawn(function()
-                                task.wait()
-                                -- Call resize which will calculate proper size from content
+                                local timeout = 0.5
+                                local elapsed = 0
+                                local interval = 0.03
                                 local contentHeight = GroupboxList.AbsoluteContentSize.Y
+
+                                if contentHeight == 0 then
+                                    local changed = false
+                                    local conn = nil
+                                    pcall(function()
+                                        conn = GroupboxList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                                            changed = true
+                                        end)
+                                    end)
+
+                                    while not changed and elapsed < timeout and not Library.Unloaded do
+                                        task.wait(interval)
+                                        elapsed = elapsed + interval
+                                    end
+
+                                    if conn then
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                    contentHeight = GroupboxList.AbsoluteContentSize.Y
+                                end
+
                                 pcall(function()
                                     GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil((contentHeight + 53) * Library.DPIScale))
                                 end)
