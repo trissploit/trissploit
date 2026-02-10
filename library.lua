@@ -5045,7 +5045,7 @@ do
             end,
         }
         -- Square handle at the end of the slider (matches gradient)
-        local handleSize = math.ceil(10 * Library.DPIScale)
+        local handleSize = math.ceil(14 * Library.DPIScale)
         local Handle = New("Frame", {
             Size = UDim2.fromOffset(handleSize, handleSize),
             AnchorPoint = Vector2.new(0.5, 0.5),
@@ -5123,7 +5123,8 @@ do
             Fill.Size = UDim2.fromScale(X, 1)
             -- position the square handle at the end of the fill
             pcall(function()
-                Handle.Position = UDim2.new(math.clamp(X, 0, 1), 0, 0.5, 0)
+                local yOffset = -math.ceil(handleSize * 0.35)
+                Handle.Position = UDim2.new(math.clamp(X, 0, 1), 0, 0.5, yOffset)
             end)
         end
 
