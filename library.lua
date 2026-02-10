@@ -8300,31 +8300,34 @@ function Library:CreateWindow(WindowInfo)
                     end
 
                     local expanded = true
+                    local expandedSize = nil
                     UpdateIcon(expanded)
 
                     ToggleBtn.MouseButton1Click:Connect(function()
                         expanded = not expanded
                         GroupboxContainer.Visible = expanded
-                        if expanded then
-                            GroupboxHolder.Visible = true
-                        end
                         UpdateIcon(expanded)
 
                         if expanded then
-                            -- wait a frame so layout updates then restore size
+                            -- restore the expanded size immediately to prevent background rendering issues
+                            if expandedSize then
+                                pcall(function()
+                                    GroupboxHolder.Size = expandedSize
+                                end)
+                            end
+                            -- wait a frame so layout updates then recalculate size
                             task.spawn(function()
                                 task.wait()
                                 Groupbox:Resize()
-                                -- ensure holder size and DPI are explicitly restored in case layout
-                                pcall(function()
-                                    GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil((GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale))
-                                    Library:UpdateDPI(GroupboxHolder, { Size = GroupboxHolder.Size })
-                                end)
+                                -- store the expanded size for next collapse/expand cycle
+                                expandedSize = GroupboxHolder.Size
                                 if Tab and Tab.RefreshSides then
                                     Tab:RefreshSides()
                                 end
                             end)
                         else
+                            -- store current expanded size before collapsing
+                            expandedSize = GroupboxHolder.Size
                             -- collapse to header-only height (34 px scaled)
                             pcall(function()
                                 GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
