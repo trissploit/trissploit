@@ -8353,10 +8353,10 @@ function Library:CreateWindow(WindowInfo)
                         UpdateIcon(expanded)
 
                         if expanded then
-                            -- Make container visible first so layout can calculate
+                            -- Expand: make container visible, wait for layout, then tween to content size
                             GroupboxContainer.Visible = true
-                            -- Wait for layout to update, then resize based on content (wait for AbsoluteContentSize to change with timeout)
                             task.spawn(function()
+                                -- wait for AbsoluteContentSize to update (with timeout)
                                 local timeout = 0.5
                                 local elapsed = 0
                                 local interval = 0.03
@@ -8382,22 +8382,31 @@ function Library:CreateWindow(WindowInfo)
                                     contentHeight = GroupboxList.AbsoluteContentSize.Y
                                 end
 
+                                local targetHeight = math.ceil((contentHeight + 53) * Library.DPIScale)
                                 pcall(function()
-                                    GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil((contentHeight + 53) * Library.DPIScale))
+                                    local tween = TweenService:Create(GroupboxHolder, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, targetHeight) })
+                                    tween:Play()
+                                    task.wait(0.12)
                                 end)
+
                                 if Tab and Tab.RefreshSides then
                                     Tab:RefreshSides()
                                 end
                             end)
                         else
-                            -- Collapse to header-only height (34 px scaled)
-                            pcall(function()
-                                GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                            -- Collapse: tween to header-only height, then hide container
+                            task.spawn(function()
+                                local headerHeight = math.ceil(34 * Library.DPIScale)
+                                pcall(function()
+                                    local tween = TweenService:Create(GroupboxHolder, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, headerHeight) })
+                                    tween:Play()
+                                    task.wait(0.12)
+                                end)
+                                GroupboxContainer.Visible = false
+                                if Tab and Tab.RefreshSides then
+                                    Tab:RefreshSides()
+                                end
                             end)
-                            GroupboxContainer.Visible = false
-                            if Tab and Tab.RefreshSides then
-                                Tab:RefreshSides()
-                            end
                         end
                     end)
                 end
