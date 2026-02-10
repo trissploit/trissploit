@@ -9523,38 +9523,46 @@ function Library:CreateWindow(WindowInfo)
         Window._FooterCycleActive = false
 
         function Window:SetFooterCycle(Texts, Interval, FadeTime)
-            if not Texts or type(Texts) ~= "table" or #Texts == 0 then
+            if not Texts or type(Texts) ~= "table" then
                 return
             end
+            -- normalize texts into a numeric array of strings
+            local items = {}
+            for _, v in ipairs(Texts) do
+                table.insert(items, tostring(v))
+            end
+            if #items == 0 then return end
+
             Interval = Interval or 3
             FadeTime = FadeTime or 0.35
 
             -- stop any previous cycle
-            self:StopFooterCycle()
+            pcall(function() self:StopFooterCycle() end)
             self._FooterCycleActive = true
 
-            local idx = 1
             task.spawn(function()
+                local idx = 1
                 while self._FooterCycleActive and not Library.Unloaded do
                     if not FooterLabel or not FooterLabel.Parent then break end
 
-                    -- set text and fade in
+                    -- set next text (ensure fully transparent before tween in)
                     pcall(function()
-                        FooterLabel.Text = Texts[idx]
+                        FooterLabel.Text = items[idx]
                         FooterLabel.TextTransparency = 1
                     end)
-                    local ok, tween = pcall(function()
+
+                    -- fade in
+                    local ok, tweenIn = pcall(function()
                         return TweenService:Create(FooterLabel, TweenInfo.new(FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0.5 })
                     end)
-                    if ok and tween then tween:Play() end
+                    if ok and tweenIn then tweenIn:Play() end
 
-                    -- wait for the visible interval
-                    local waitTime = 0
-                    repeat
+                    -- wait while visible
+                    local elapsed = 0
+                    while elapsed < Interval and self._FooterCycleActive and not Library.Unloaded do
                         task.wait(0.05)
-                        waitTime = waitTime + 0.05
-                    until waitTime >= Interval or not self._FooterCycleActive or Library.Unloaded
-
+                        elapsed = elapsed + 0.05
+                    end
                     if not self._FooterCycleActive or Library.Unloaded then break end
 
                     -- fade out
@@ -9566,7 +9574,8 @@ function Library:CreateWindow(WindowInfo)
                     end)
                     task.wait(FadeTime)
 
-                    idx = idx % #Texts + 1
+                    idx = idx + 1
+                    if idx > #items then idx = 1 end
                 end
             end)
         end
