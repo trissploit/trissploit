@@ -5044,6 +5044,28 @@ do
                 return Library:GetAccentGradientSequence()
             end,
         }
+        -- Square handle at the end of the slider (matches gradient)
+        local handleSize = math.ceil(10 * Library.DPIScale)
+        local Handle = New("Frame", {
+            Size = UDim2.fromOffset(handleSize, handleSize),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            BackgroundColor3 = "AccentGradientStart",
+            ZIndex = Fill.ZIndex + 2,
+            Parent = Bar,
+            DPIExclude = { Size = true, Position = true },
+        })
+        -- square (no corner) to match request; apply gradient so it matches fill
+        local HandleGradient = New("UIGradient", {
+            Color = Library:GetAccentGradientSequence(),
+            Rotation = 90,
+            Parent = Handle,
+        })
+        Library.Registry[HandleGradient] = {
+            Color = function()
+                return Library:GetAccentGradientSequence()
+            end,
+        }
 
         function Slider:UpdateColors()
             if Library.Unloaded then
@@ -5058,6 +5080,12 @@ do
             FillGradient.Enabled = not Slider.Disabled
             Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentGradientStart
             Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentGradientStart"
+            -- handle color/gradient update
+            if Handle then
+                HandleGradient.Enabled = not Slider.Disabled
+                Handle.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentGradientStart
+                Library.Registry[Handle] = { BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentGradientStart" }
+            end
         end
 
         function Slider:Display()
@@ -5093,6 +5121,10 @@ do
 
             local X = (Slider.Value - Slider.Min) / (Slider.Max - Slider.Min)
             Fill.Size = UDim2.fromScale(X, 1)
+            -- position the square handle at the end of the fill
+            pcall(function()
+                Handle.Position = UDim2.new(math.clamp(X, 0, 1), 0, 0.5, 0)
+            end)
         end
 
         function Slider:OnChanged(Func)
@@ -5180,6 +5212,15 @@ do
                 Side.ScrollingEnabled = false
             end
 
+            -- enlarge handle when user starts interacting
+            local ok, origSize = pcall(function() return Handle.Size end)
+            local baseW, baseH = handleSize, handleSize
+            pcall(function()
+                TweenService:Create(Handle, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.fromOffset(math.ceil(baseW * 1.25), math.ceil(baseH * 1.25))
+                }):Play()
+            end)
+
             while IsDragInput(Input) do
                 local Location = Mouse.X
                 local Scale = math.clamp((Location - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
@@ -5195,6 +5236,12 @@ do
 
                 RunService.RenderStepped:Wait()
             end
+            -- restore handle size when interaction ends
+            pcall(function()
+                TweenService:Create(Handle, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.fromOffset(baseW, baseH)
+                }):Play()
+            end)
 
             for _, Side in pairs(Library.ActiveTab.Sides) do
                 Side.ScrollingEnabled = true
