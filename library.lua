@@ -8315,6 +8315,11 @@ function Library:CreateWindow(WindowInfo)
                             task.spawn(function()
                                 task.wait()
                                 Groupbox:Resize()
+                                -- ensure holder size and DPI are explicitly restored in case layout
+                                pcall(function()
+                                    GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil((GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale))
+                                    Library:UpdateDPI(GroupboxHolder, { Size = GroupboxHolder.Size })
+                                end)
                                 if Tab and Tab.RefreshSides then
                                     Tab:RefreshSides()
                                 end
