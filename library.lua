@@ -5045,7 +5045,7 @@ do
             end,
         }
         -- Square handle at the end of the slider (matches gradient)
-        local handleSize = math.ceil(14 * Library.DPIScale)
+        local handleSize = math.ceil(20 * Library.DPIScale)
         local Handle = New("Frame", {
             Size = UDim2.fromOffset(handleSize, handleSize),
             AnchorPoint = Vector2.new(0.5, 0.5),
