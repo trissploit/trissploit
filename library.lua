@@ -342,7 +342,9 @@ local Templates = {
     --// Library \\--
     Window = {
         Title = "No Title",
-        Footer = "No Footer",
+        Footer = "No Footer", -- Can be a string or array of strings for cycling
+        FooterCycleInterval = 3, -- Seconds between footer changes (when Footer is an array)
+        FooterFadeDuration = 0.5, -- Duration of fade transition (when Footer is an array)
         Position = UDim2.fromOffset(6, 6),
         Size = UDim2.fromOffset(720, 600),
         IconSize = UDim2.fromOffset(30, 30),
@@ -2665,6 +2667,13 @@ function Library:Unload()
     end
 
     Library.Unloaded = true
+    
+    -- Clean up footer cycle thread if it exists
+    if Library._FooterCycleThread then
+        task.cancel(Library._FooterCycleThread)
+        Library._FooterCycleThread = nil
+    end
+    
     ScreenGui:Destroy()
 
     getgenv().Library = nil
@@ -7602,11 +7611,48 @@ function Library:CreateWindow(WindowInfo)
         local FooterLabel = New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
-            Text = (type(WindowInfo.Footer) == "table" and WindowInfo.Footer[1]) or WindowInfo.Footer,
+            Text = typeof(WindowInfo.Footer) == "table" and WindowInfo.Footer[1] or WindowInfo.Footer,
             TextSize = 14,
             TextTransparency = 0.5,
             Parent = BottomBar,
         })
+        
+        -- Dynamic footer cycling for array footers
+        if typeof(WindowInfo.Footer) == "table" and #WindowInfo.Footer > 1 then
+            local footerIndex = 1
+            local footerCycleInterval = WindowInfo.FooterCycleInterval or 3 -- seconds between changes
+            local footerFadeDuration = WindowInfo.FooterFadeDuration or 0.5 -- fade transition duration
+            
+            local footerCycleThread = task.spawn(function()
+                while not Library.Unloaded do
+                    task.wait(footerCycleInterval)
+                    if Library.Unloaded then break end
+                    
+                    -- Fade out
+                    local fadeOut = TweenService:Create(FooterLabel, TweenInfo.new(footerFadeDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                        TextTransparency = 1
+                    })
+                    fadeOut:Play()
+                    fadeOut.Completed:Wait()
+                    
+                    if Library.Unloaded then break end
+                    
+                    -- Change text
+                    footerIndex = footerIndex % #WindowInfo.Footer + 1
+                    FooterLabel.Text = WindowInfo.Footer[footerIndex]
+                    
+                    -- Fade in
+                    local fadeIn = TweenService:Create(FooterLabel, TweenInfo.new(footerFadeDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                        TextTransparency = 0.5
+                    })
+                    fadeIn:Play()
+                    fadeIn.Completed:Wait()
+                end
+            end)
+            
+            -- Clean up on unload
+            Library._FooterCycleThread = footerCycleThread
+        end
 
         --// Resize Button
         if WindowInfo.Resizable then
@@ -9517,78 +9563,6 @@ function Library:CreateWindow(WindowInfo)
     Library:GiveSignal(UserInputService.WindowFocusReleased:Connect(function()
         Library.IsRobloxFocused = false
     end))
-
-    --// Footer cycling API
-    do
-        Window._FooterCycleActive = false
-
-        function Window:SetFooterCycle(Texts, Interval, FadeTime)
-            if not Texts or type(Texts) ~= "table" then
-                return
-            end
-            -- normalize texts into a numeric array of strings
-            local items = {}
-            for _, v in ipairs(Texts) do
-                table.insert(items, tostring(v))
-            end
-            if #items == 0 then return end
-
-            Interval = Interval or 3
-            FadeTime = FadeTime or 0.35
-
-            -- stop any previous cycle
-            pcall(function() self:StopFooterCycle() end)
-            self._FooterCycleActive = true
-
-            task.spawn(function()
-                local idx = 1
-                while self._FooterCycleActive and not Library.Unloaded do
-                    if not FooterLabel or not FooterLabel.Parent then break end
-
-                    -- set next text (ensure fully transparent before tween in)
-                    pcall(function()
-                        FooterLabel.Text = items[idx]
-                        FooterLabel.TextTransparency = 1
-                    end)
-
-                    -- fade in
-                    local ok, tweenIn = pcall(function()
-                        return TweenService:Create(FooterLabel, TweenInfo.new(FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextTransparency = 0.5 })
-                    end)
-                    if ok and tweenIn then tweenIn:Play() end
-
-                    -- wait while visible
-                    local elapsed = 0
-                    while elapsed < Interval and self._FooterCycleActive and not Library.Unloaded do
-                        task.wait(0.05)
-                        elapsed = elapsed + 0.05
-                    end
-                    if not self._FooterCycleActive or Library.Unloaded then break end
-
-                    -- fade out
-                    pcall(function()
-                        local ok2, tweenOut = pcall(function()
-                            return TweenService:Create(FooterLabel, TweenInfo.new(FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1 })
-                        end)
-                        if ok2 and tweenOut then tweenOut:Play() end
-                    end)
-                    task.wait(FadeTime)
-
-                    idx = idx + 1
-                    if idx > #items then idx = 1 end
-                end
-            end)
-        end
-
-        function Window:StopFooterCycle()
-            self._FooterCycleActive = false
-        end
-
-        -- Auto-start if Footer provided as a table
-        if type(WindowInfo.Footer) == "table" then
-            Window:SetFooterCycle(WindowInfo.Footer, WindowInfo.FooterInterval or 3, WindowInfo.FooterFade or 0.35)
-        end
-    end
 
     return Window
 end
