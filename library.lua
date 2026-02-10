@@ -7633,7 +7633,7 @@ function Library:CreateWindow(WindowInfo)
                         TextTransparency = 1
                     })
                     fadeOut:Play()
-                    fadeOut.Completed:Wait()
+                    task.wait(footerFadeDuration)
                     
                     if Library.Unloaded then break end
                     
@@ -7646,7 +7646,7 @@ function Library:CreateWindow(WindowInfo)
                         TextTransparency = 0.5
                     })
                     fadeIn:Play()
-                    fadeIn.Completed:Wait()
+                    task.wait(footerFadeDuration)
                 end
             end)
             
