@@ -1302,6 +1302,10 @@ function Library:SetDPIScale(DPIScale: number)
                 if Groupbox.ExpandedState and Groupbox.Container then
                     Groupbox.Container.Visible = Groupbox.ExpandedState.value
                 end
+                -- Ensure holder background transparency remains visible after DPI change
+                if Groupbox.Holder and Groupbox.Holder.BackgroundTransparency ~= 0 then
+                    Groupbox.Holder.BackgroundTransparency = 0
+                end
             end)
         end
     end
@@ -8285,6 +8289,7 @@ function Library:CreateWindow(WindowInfo)
             do
                 GroupboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
+                    BackgroundTransparency = 0,
                     Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
                 })
@@ -8475,6 +8480,7 @@ function Library:CreateWindow(WindowInfo)
 
             local GroupboxHolder = New("Frame", {
                 BackgroundColor3 = "BackgroundColor",
+                BackgroundTransparency = 0,
                 Size = UDim2.fromScale(1, 0),
                 Parent = BoxHolder,
             })
