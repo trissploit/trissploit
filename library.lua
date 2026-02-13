@@ -8345,68 +8345,37 @@ function Library:CreateWindow(WindowInfo)
                         end
                     end
 
-                    local expanded = true
-                    UpdateIcon(expanded)
+                    local expandedState = { value = true }
+                    UpdateIcon(expandedState.value)
 
                     ToggleBtn.MouseButton1Click:Connect(function()
-                        expanded = not expanded
-                        UpdateIcon(expanded)
+                        expandedState.value = not expandedState.value
+                        UpdateIcon(expandedState.value)
 
-                        if expanded then
-                            -- Expand: make container visible, wait for layout, then tween to content size
+                        if expandedState.value then
+                            -- Make container visible first so layout can calculate
                             GroupboxContainer.Visible = true
+                            -- Wait for layout to update, then resize based on content
                             task.spawn(function()
-                                -- wait for AbsoluteContentSize to update (with timeout)
-                                local timeout = 0.5
-                                local elapsed = 0
-                                local interval = 0.03
+                                task.wait()
+                                -- Call resize which will calculate proper size from content
                                 local contentHeight = GroupboxList.AbsoluteContentSize.Y
-
-                                if contentHeight == 0 then
-                                    local changed = false
-                                    local conn = nil
-                                    pcall(function()
-                                        conn = GroupboxList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                                            changed = true
-                                        end)
-                                    end)
-
-                                    while not changed and elapsed < timeout and not Library.Unloaded do
-                                        task.wait(interval)
-                                        elapsed = elapsed + interval
-                                    end
-
-                                    if conn then
-                                        pcall(function() conn:Disconnect() end)
-                                    end
-                                    contentHeight = GroupboxList.AbsoluteContentSize.Y
-                                end
-
-                                local targetHeight = math.ceil((contentHeight + 53) * Library.DPIScale)
                                 pcall(function()
-                                    local tween = TweenService:Create(GroupboxHolder, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, targetHeight) })
-                                    tween:Play()
-                                    task.wait(0.12)
+                                    GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil((contentHeight + 53) * Library.DPIScale))
                                 end)
-
                                 if Tab and Tab.RefreshSides then
                                     Tab:RefreshSides()
                                 end
                             end)
                         else
-                            -- Collapse: tween to header-only height, then hide container
-                            task.spawn(function()
-                                local headerHeight = math.ceil(34 * Library.DPIScale)
-                                pcall(function()
-                                    local tween = TweenService:Create(GroupboxHolder, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, headerHeight) })
-                                    tween:Play()
-                                    task.wait(0.12)
-                                end)
-                                GroupboxContainer.Visible = false
-                                if Tab and Tab.RefreshSides then
-                                    Tab:RefreshSides()
-                                end
+                            -- Collapse to header-only height (34 px scaled)
+                            pcall(function()
+                                GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
                             end)
+                            GroupboxContainer.Visible = false
+                            if Tab and Tab.RefreshSides then
+                                Tab:RefreshSides()
+                            end
                         end
                     end)
                 end
@@ -8435,6 +8404,7 @@ function Library:CreateWindow(WindowInfo)
                 BoxHolder = BoxHolder,
                 Holder = GroupboxHolder,
                 Container = GroupboxContainer,
+                ExpandedState = expandedState,
 
                 Tab = Tab,
                 DependencyBoxes = {},
@@ -8442,7 +8412,16 @@ function Library:CreateWindow(WindowInfo)
             }
 
             local function ResizeGroupbox()
-                GroupboxHolder.Size = UDim2.new(1, 0, 0, (GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale)
+                task.defer(function()
+                    -- When expanded, size to content; when collapsed, keep header height scaled
+                    if Groupbox.ExpandedState and Groupbox.ExpandedState.value then
+                        GroupboxHolder.Size = UDim2.new(1, 0, 0, (GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale)
+                        GroupboxContainer.Visible = true
+                    else
+                        GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                        GroupboxContainer.Visible = false
+                    end
+                end)
             end
 
             function Groupbox:Resize() task.defer(ResizeGroupbox) end
