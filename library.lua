@@ -1291,6 +1291,21 @@ function Library:SetDPIScale(DPIScale: number)
         end
     end
 
+    -- Ensure groupbox container visibility matches expanded state after DPI change
+    for _, Tab in pairs(Library.Tabs) do
+        if Tab.IsKeyTab then
+            continue
+        end
+
+        for _, Groupbox in pairs(Tab.Groupboxes) do
+            pcall(function()
+                if Groupbox.ExpandedState and Groupbox.Container then
+                    Groupbox.Container.Visible = Groupbox.ExpandedState.value
+                end
+            end)
+        end
+    end
+
     for _, Option in pairs(Options) do
         if Option.Type == "Dropdown" then
             Option:RecalculateListSize()
@@ -8316,6 +8331,7 @@ function Library:CreateWindow(WindowInfo)
                 })
 
                 -- Collapse/expand button on the right of the groupbox label
+                local expandedState = { value = true }
                 do
                     local DownIcon = Library:GetIcon("chevron-down")
                     local UpIcon = Library:GetIcon("chevron-up")
@@ -8345,7 +8361,6 @@ function Library:CreateWindow(WindowInfo)
                         end
                     end
 
-                    local expandedState = { value = true }
                     UpdateIcon(expandedState.value)
 
                     ToggleBtn.MouseButton1Click:Connect(function()
@@ -8413,13 +8428,10 @@ function Library:CreateWindow(WindowInfo)
 
             local function ResizeGroupbox()
                 task.defer(function()
-                    -- When expanded, size to content; when collapsed, keep header height scaled
                     if Groupbox.ExpandedState and Groupbox.ExpandedState.value then
                         GroupboxHolder.Size = UDim2.new(1, 0, 0, (GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale)
-                        GroupboxContainer.Visible = true
                     else
                         GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
-                        GroupboxContainer.Visible = false
                     end
                 end)
             end
