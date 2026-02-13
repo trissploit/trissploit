@@ -1310,6 +1310,18 @@ function Library:SetDPIScale(DPIScale: number)
         end
     end
 
+    -- Also ensure any dependency boxes/groupboxes restored
+    for _, Dep in pairs(Library.DependencyBoxes) do
+        pcall(function()
+            if Dep and Dep.Holder and Dep.Holder.BackgroundTransparency ~= 0 then
+                Dep.Holder.BackgroundTransparency = 0
+            end
+            if Dep and Dep.Container and Dep.Container.BackgroundTransparency ~= 0 then
+                Dep.Container.BackgroundTransparency = 0
+            end
+        end)
+    end
+
     for _, Option in pairs(Options) do
         if Option.Type == "Dropdown" then
             Option:RecalculateListSize()
