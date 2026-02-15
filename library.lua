@@ -6669,7 +6669,6 @@ do
             Library:AddOutline(DepGroupboxContainer)
             Library:UpdateDPI(DepGroupboxContainer, {
                 Size = false,
-                BackgroundTransparency = false,
             })
 
             DepGroupboxList = New("UIListLayout", {
@@ -8338,7 +8337,6 @@ function Library:CreateWindow(WindowInfo)
                 Library:AddOutline(GroupboxHolder)
                 Library:UpdateDPI(GroupboxHolder, {
                     Size = false,
-                    BackgroundTransparency = false,
                 })
 
                 Library:MakeLine(GroupboxHolder, {
@@ -8536,10 +8534,9 @@ function Library:CreateWindow(WindowInfo)
                 Parent = GroupboxHolder,
             })
             Library:AddOutline(GroupboxHolder)
-            Library:UpdateDPI(GroupboxHolder, {
-                Size = false,
-                BackgroundTransparency = false,
-            })
+                Library:UpdateDPI(GroupboxHolder, {
+                    Size = false,
+                })
 
             Library:MakeLine(GroupboxHolder, {
                 Position = UDim2.fromOffset(0, 34),
@@ -9019,7 +9016,6 @@ function Library:CreateWindow(WindowInfo)
                 Library:AddOutline(TabboxHolder)
                 Library:UpdateDPI(TabboxHolder, {
                     Size = false,
-                    BackgroundTransparency = false,
                 })
 
                 TabboxButtons = New("Frame", {
