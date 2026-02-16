@@ -1245,6 +1245,41 @@ function Library:UpdateColorsUsingRegistry()
             end
         end
     end
+    
+    -- Ensure groupbox backgrounds remain visible after color updates
+    for _, Tab in pairs(Library.Tabs) do
+        if Tab.IsKeyTab then
+            continue
+        end
+        
+        for _, Groupbox in pairs(Tab.Groupboxes) do
+            pcall(function()
+                if Groupbox.Holder and Groupbox.Holder.BackgroundTransparency ~= 0 then
+                    Groupbox.Holder.BackgroundTransparency = 0
+                end
+            end)
+        end
+        
+        for _, DepGroupbox in pairs(Tab.DependencyGroupboxes or {}) do
+            pcall(function()
+                if DepGroupbox.Holder and DepGroupbox.Holder.BackgroundTransparency ~= 0 then
+                    DepGroupbox.Holder.BackgroundTransparency = 0
+                end
+            end)
+        end
+    end
+    
+    -- Ensure dependency boxes remain visible
+    for _, Dep in pairs(Library.DependencyBoxes or {}) do
+        pcall(function()
+            if Dep.Holder and Dep.Holder.BackgroundTransparency ~= 0 then
+                Dep.Holder.BackgroundTransparency = 0
+            end
+            if Dep.Container and Dep.Container.BackgroundTransparency ~= 0 then
+                Dep.Container.BackgroundTransparency = 0
+            end
+        end)
+    end
 end
 
 function Library:UpdateDPI(Instance, Properties)
@@ -1263,6 +1298,7 @@ function Library:SetDPIScale(DPIScale: number)
 
     for Instance, Properties in pairs(Library.DPIRegistry) do
         local DPIExclude = Properties["DPIExclude"] or {}
+        local DPIOffset = Properties["DPIOffset"] or {}
         for Property, Value in pairs(Properties) do
             if Property == "DPIExclude" or Property == "DPIOffset" then
                 continue
@@ -1271,7 +1307,7 @@ function Library:SetDPIScale(DPIScale: number)
             elseif Property == "TextSize" then
                 Instance[Property] = ApplyTextScale(Value)
             else
-                Instance[Property] = ApplyDPIScale(Value, Properties["DPIOffset"][Property])
+                Instance[Property] = ApplyDPIScale(Value, DPIOffset[Property])
             end
         end
     end
@@ -6543,11 +6579,15 @@ do
                     BackgroundTransparency = true,
                 },
             })
-            DepboxContainer:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+            local transparencyConnection = DepboxContainer:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
                 if DepboxContainer.BackgroundTransparency ~= 0 then
                     DepboxContainer.BackgroundTransparency = 0
                 end
             end)
+            -- Store connection to prevent garbage collection
+            Library:GiveSignal(transparencyConnection)
+            -- Explicitly ensure transparency is 0 after signal connection
+            DepboxContainer.BackgroundTransparency = 0
 
             DepboxList = New("UIListLayout", {
                 Padding = UDim.new(0, 8),
@@ -6660,11 +6700,16 @@ do
                     BackgroundTransparency = true,
                 },
             })
-            DepGroupboxContainer:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+            local transparencyConnection = DepGroupboxContainer:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
                 if DepGroupboxContainer.BackgroundTransparency ~= 0 then
                     DepGroupboxContainer.BackgroundTransparency = 0
                 end
             end)
+            -- Store connection to prevent garbage collection
+            Library:GiveSignal(transparencyConnection)
+            -- Explicitly ensure transparency is 0 after signal connection
+            DepGroupboxContainer.BackgroundTransparency = 0
+            
             New("UICorner", {
                 CornerRadius = UDim.new(0, Library.CornerRadius),
                 Parent = DepGroupboxContainer,
@@ -8328,11 +8373,16 @@ function Library:CreateWindow(WindowInfo)
                         BackgroundTransparency = true,
                     },
                 })
-                GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+                local transparencyConnection = GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
                     if GroupboxHolder.BackgroundTransparency ~= 0 then
                         GroupboxHolder.BackgroundTransparency = 0
                     end
                 end)
+                -- Store connection to prevent garbage collection
+                Library:GiveSignal(transparencyConnection)
+                -- Explicitly ensure transparency is 0 after signal connection
+                GroupboxHolder.BackgroundTransparency = 0
+                
                 New("UICorner", {
                     CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
                     Parent = GroupboxHolder,
@@ -8527,11 +8577,16 @@ function Library:CreateWindow(WindowInfo)
                     BackgroundTransparency = true,
                 },
             })
-            GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+            local transparencyConnection = GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
                 if GroupboxHolder.BackgroundTransparency ~= 0 then
                     GroupboxHolder.BackgroundTransparency = 0
                 end
             end)
+            -- Store connection to prevent garbage collection
+            Library:GiveSignal(transparencyConnection)
+            -- Explicitly ensure transparency is 0 after signal connection
+            GroupboxHolder.BackgroundTransparency = 0
+            
             New("UICorner", {
                 CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
                 Parent = GroupboxHolder,
