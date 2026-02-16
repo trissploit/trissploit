@@ -1257,6 +1257,12 @@ function Library:UpdateColorsUsingRegistry()
                 if Groupbox.Holder and Groupbox.Holder.BackgroundTransparency ~= 0 then
                     Groupbox.Holder.BackgroundTransparency = 0
                 end
+                if Groupbox.Holder and Groupbox.Holder.Size then
+                    local ok, yOff = pcall(function() return Groupbox.Holder.Size.Y.Offset end)
+                    if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
+                        Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                    end
+                end
             end)
         end
         
@@ -6738,6 +6744,20 @@ do
             Library:GiveSignal(transparencyConnection)
             -- Explicitly ensure transparency is 0 after signal connection
             DepGroupboxContainer.BackgroundTransparency = 0
+            -- Prevent accidental collapse of dependency groupbox size
+            do
+                local _depSizeGuard = false
+                local depSizeConnection = DepGroupboxContainer:GetPropertyChangedSignal("Size"):Connect(function()
+                    if _depSizeGuard then return end
+                    _depSizeGuard = true
+                    local ok, yOff = pcall(function() return DepGroupboxContainer.Size.Y.Offset end)
+                    if ok and tonumber(yOff) and yOff < math.ceil(18 * Library.DPIScale) then
+                        DepGroupboxContainer.Size = UDim2.new(1, 0, 0, math.ceil(18 * Library.DPIScale))
+                    end
+                    _depSizeGuard = false
+                end)
+                Library:GiveSignal(depSizeConnection)
+            end
             
             New("UICorner", {
                 CornerRadius = UDim.new(0, Library.CornerRadius),
@@ -8409,6 +8429,20 @@ function Library:CreateWindow(WindowInfo)
                 Library:GiveSignal(transparencyConnection)
                 -- Explicitly ensure transparency is 0 after signal connection
                 GroupboxHolder.BackgroundTransparency = 0
+                -- Prevent accidental collapse of groupbox holder size
+                do
+                    local _sizeGuard = false
+                    local sizeConnection = GroupboxHolder:GetPropertyChangedSignal("Size"):Connect(function()
+                        if _sizeGuard then return end
+                        _sizeGuard = true
+                        local ok, yOff = pcall(function() return GroupboxHolder.Size.Y.Offset end)
+                        if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
+                            GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                        end
+                        _sizeGuard = false
+                    end)
+                    Library:GiveSignal(sizeConnection)
+                end
                 
                 New("UICorner", {
                     CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
@@ -8611,6 +8645,20 @@ function Library:CreateWindow(WindowInfo)
             Library:GiveSignal(transparencyConnection)
             -- Explicitly ensure transparency is 0 after signal connection
             GroupboxHolder.BackgroundTransparency = 0
+            -- Prevent accidental collapse of aimbot groupbox size
+            do
+                local _aimSizeGuard = false
+                local aimSizeConnection = GroupboxHolder:GetPropertyChangedSignal("Size"):Connect(function()
+                    if _aimSizeGuard then return end
+                    _aimSizeGuard = true
+                    local ok, yOff = pcall(function() return GroupboxHolder.Size.Y.Offset end)
+                    if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
+                        GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                    end
+                    _aimSizeGuard = false
+                end)
+                Library:GiveSignal(aimSizeConnection)
+            end
             
             New("UICorner", {
                 CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
@@ -9095,6 +9143,20 @@ function Library:CreateWindow(WindowInfo)
                     Parent = TabboxHolder,
                 })
                 Library:AddOutline(TabboxHolder)
+                -- Prevent accidental collapse of tabbox holder size
+                do
+                    local _tabSizeGuard = false
+                    local tabSizeConnection = TabboxHolder:GetPropertyChangedSignal("Size"):Connect(function()
+                        if _tabSizeGuard then return end
+                        _tabSizeGuard = true
+                        local ok, yOff = pcall(function() return TabboxHolder.Size.Y.Offset end)
+                        if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
+                            TabboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                        end
+                        _tabSizeGuard = false
+                    end)
+                    Library:GiveSignal(tabSizeConnection)
+                end
 
                 TabboxButtons = New("Frame", {
                     BackgroundTransparency = 1,
