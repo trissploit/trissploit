@@ -3756,9 +3756,18 @@ do
                 table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
             end
 
+            -- ColorSequence requires at least two keypoints; ensure we have two
             if #keypoints == 0 then
                 keypoints[1] = ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1))
+                keypoints[2] = ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
                 tpoints[1] = NumberSequenceKeypoint.new(0, 0)
+                tpoints[2] = NumberSequenceKeypoint.new(1, 0)
+            elseif #keypoints == 1 then
+                -- duplicate the single keypoint to form a valid two-point sequence
+                local kp = keypoints[1]
+                local tp = tpoints[1] or NumberSequenceKeypoint.new(kp.Time or 0, 0)
+                keypoints[2] = ColorSequenceKeypoint.new(1, kp.Value or Color3.new(1,1,1))
+                tpoints[2] = NumberSequenceKeypoint.new(1, tp.Value or 0)
             end
 
             GradientUI.Color = ColorSequence.new(keypoints)
