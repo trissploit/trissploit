@@ -3738,7 +3738,7 @@ do
         end
 
         --// Gradient Picker (optional) \\--
-        local GradientHolder, GradientBar, GradientUI, DotsContainer, PlusButton, PreviewUI
+        local GradientHolder, GradientBar, GradientUI, DotsContainer, PlusButton
         local GradientStops = {}
         local SelectedStop = nil
 
@@ -3786,10 +3786,6 @@ do
             GradientUI.Transparency = NumberSequence.new(tpoints)
             -- update preview gradient if present
             pcall(function()
-                if PreviewUI and PreviewUI.Parent then
-                    PreviewUI.Color = ColorSequence.new(keypoints)
-                    PreviewUI.Transparency = NumberSequence.new(tpoints)
-                end
                 if HolderGradient and HolderGradient.Parent then
                     HolderGradient.Color = ColorSequence.new(keypoints)
                     HolderGradient.Transparency = NumberSequence.new(tpoints)
@@ -3922,10 +3918,7 @@ do
             -- show the gradient on the small holder preview as well
             HolderGradient = New("UIGradient", { Parent = Holder })
 
-            -- small preview box to display the full gradient
-            local PreviewBox = New("Frame", { BackgroundColor3 = "White", Size = UDim2.fromOffset(36, 12), Parent = GradientHolder })
-            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = PreviewBox })
-            PreviewUI = New("UIGradient", { Parent = PreviewBox })
+            -- (removed in-menu preview box; preview shown on the small holder instead)
 
             DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
 
@@ -3938,7 +3931,7 @@ do
             -- initialize with one stop in middle
             AddGradientStop(0.5)
 
-            -- PreviewUI is assigned above; no need to attach to instance
+            -- Preview handled via HolderGradient
         end
 
         --// End \\--
