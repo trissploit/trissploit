@@ -3894,10 +3894,16 @@ do
         end
 
         if Info.Gradient then
-            GradientHolder = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 36), Parent = ColorMenu.Menu })
+            GradientHolder = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 28), Parent = ColorMenu.Menu })
             New("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), Parent = GradientHolder })
 
             PlusButton = New("ImageButton", {
+                Size = UDim2.fromOffset(12, 12),
+                BackgroundTransparency = 1,
+                AutoButtonColor = false,
+                Parent = GradientHolder,
+            })
+            local MinusButton = New("ImageButton", {
                 Size = UDim2.fromOffset(12, 12),
                 BackgroundTransparency = 1,
                 AutoButtonColor = false,
@@ -3908,9 +3914,15 @@ do
                 pcall(function() PlusButton.Image = PlusIcon.Url end)
                 if PlusIcon.ImageRectOffset then pcall(function() PlusButton.ImageRectOffset = PlusIcon.ImageRectOffset end) end
                 if PlusIcon.ImageRectSize then pcall(function() PlusButton.ImageRectSize = PlusIcon.ImageRectSize end) end
+            local MinusIcon = Library:GetIcon("minus")
+            if MinusIcon and MinusIcon.Url then
+                pcall(function() MinusButton.Image = MinusIcon.Url end)
+                if MinusIcon.ImageRectOffset then pcall(function() MinusButton.ImageRectOffset = MinusIcon.ImageRectOffset end) end
+                if MinusIcon.ImageRectSize then pcall(function() MinusButton.ImageRectSize = MinusIcon.ImageRectSize end) end
+            end
             end
 
-            GradientBar = New("Frame", { BackgroundColor3 = "White", Size = UDim2.new(1, -24, 0, 12), Parent = GradientHolder })
+            GradientBar = New("Frame", { BackgroundColor3 = "White", Size = UDim2.new(1, -30, 0, 12), Parent = GradientHolder })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = GradientBar })
 
             GradientUI = New("UIGradient", { Parent = GradientBar })
@@ -3925,6 +3937,26 @@ do
             PlusButton.MouseButton1Click:Connect(function()
                 pcall(function()
                     AddGradientStop(0.5)
+                end)
+            end)
+
+            MinusButton.MouseButton1Click:Connect(function()
+                pcall(function()
+                    if not SelectedStop then return end
+                    if #GradientStops <= 1 then return end
+                    local idx = nil
+                    for i, s in ipairs(GradientStops) do
+                        if s == SelectedStop then idx = i break end
+                    end
+                    if idx then
+                        table.remove(GradientStops, idx)
+                        if SelectedStop.dot and SelectedStop.dot.Parent then
+                            pcall(function() SelectedStop.dot:Destroy() end)
+                        end
+                        SelectedStop = nil
+                        UpdateGradientRender()
+                        Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
+                    end
                 end)
             end)
 
