@@ -3782,13 +3782,27 @@ do
             GradientUI.Color = ColorSequence.new(keypoints)
             GradientUI.Transparency = NumberSequence.new(tpoints)
 
-            -- reposition interactive dots if present
+            -- reposition interactive dots if present and update visual state
             for _, s in ipairs(GradientStops) do
                 if s and s.dot then
                     local okPos = math.clamp(tonumber(s.pos) or 0, 0, 1)
                     if s.dot.Parent then
                         pcall(function()
                             s.dot.Position = UDim2.new(okPos, 0, 0.5, 0)
+                            -- update dot color/border
+                            if s.color then
+                                s.dot.BackgroundColor3 = s.color
+                                s.dot.BorderColor3 = Library:GetDarkerColor(s.color)
+                            end
+                            -- update outline visibility if present
+                            if s.outline then
+                                s.outline.Transparency = (s == SelectedStop) and 0 or 1
+                            else
+                                local stroke = s.dot:FindFirstChildOfClass("UIStroke")
+                                if stroke then
+                                    stroke.Transparency = (s == SelectedStop) and 0 or 1
+                                end
+                            end
                         end)
                     end
                 end
@@ -3806,15 +3820,20 @@ do
                 Parent = DotsContainer,
             })
             New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Dot })
+            local OutlineStroke = New("UIStroke", { Color = "AccentColor", Thickness = 2, Transparency = 1, Parent = Dot })
+            Library.Registry[OutlineStroke] = { Color = "AccentColor" }
 
             stop.dot = Dot
+            stop.outline = OutlineStroke
 
             Dot.MouseButton1Click:Connect(function()
                 pcall(function()
                     SelectedStop = stop
+                    -- reveal outline for this dot, hide others in UpdateGradientRender
                     if ColorPicker and type(ColorPicker.SetValueRGB) == "function" then
                         ColorPicker:SetValueRGB(stop.color or Color3.new(1,1,1), stop.transparency or 0)
                     end
+                    UpdateGradientRender()
                 end)
             end)
 
