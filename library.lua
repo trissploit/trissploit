@@ -70,25 +70,38 @@ do
                 return
             end
 
-            table.sort(GradientStops, function(a, b) return a.pos < b.pos end)
+            local ok, err = pcall(function()
+                table.sort(GradientStops, function(a, b) return a.pos < b.pos end)
 
-            local keypoints = {}
-            local tpoints = {}
-            for i, s in ipairs(GradientStops) do
-                table.insert(keypoints, ColorSequenceKeypoint.new(s.pos, s.color))
-                table.insert(tpoints, NumberSequenceKeypoint.new(s.pos, s.transparency or 0))
-            end
-
-            GradientUI.Color = ColorSequence.new(keypoints)
-            GradientUI.Transparency = NumberSequence.new(tpoints)
-
-            -- reposition dots
-            if DotsContainer then
+                local keypoints = {}
+                local tpoints = {}
                 for i, s in ipairs(GradientStops) do
-                    if s.dot and s.pos then
-                        s.dot.Position = UDim2.new(s.pos, 0, 0.5, 0)
+                    local pos = tonumber(s.pos) or 0
+                    local color = s.color or Color3.new(1, 1, 1)
+                    local transp = tonumber(s.transparency) or 0
+                    table.insert(keypoints, ColorSequenceKeypoint.new(pos, color))
+                    table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
+                end
+
+                if #keypoints == 0 then
+                    keypoints[1] = ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1))
+                end
+
+                GradientUI.Color = ColorSequence.new(keypoints)
+                GradientUI.Transparency = NumberSequence.new(tpoints)
+
+                -- reposition dots only if they exist
+                for _, s in ipairs(GradientStops) do
+                    if s and s.dot and s.pos then
+                        pcall(function()
+                            s.dot.Position = UDim2.new(math.clamp(tonumber(s.pos) or 0, 0, 1), 0, 0.5, 0)
+                        end)
                     end
                 end
+            end)
+
+            if not ok then
+                warn("UpdateGradientRender failed:", err)
             end
         end
 
@@ -3878,8 +3891,13 @@ do
         function ColorPicker:Update()
             ColorPicker:Display()
 
-            Library:SafeCallback(ColorPicker.Callback, ColorPicker.Value)
-            Library:SafeCallback(ColorPicker.Changed, ColorPicker.Value)
+            if Info.Gradient then
+                Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
+                Library:SafeCallback(ColorPicker.Changed, { Stops = GradientStops })
+            else
+                Library:SafeCallback(ColorPicker.Callback, ColorPicker.Value)
+                Library:SafeCallback(ColorPicker.Changed, ColorPicker.Value)
+            end
         end
 
         function ColorPicker:OnChanged(Func)
