@@ -3745,38 +3745,34 @@ do
                 return
             end
 
-            local ok, err = pcall(function()
-                table.sort(GradientStops, function(a, b) return a.pos < b.pos end)
+            table.sort(GradientStops, function(a, b) return (tonumber(a and a.pos) or 0) < (tonumber(b and b.pos) or 0) end)
 
-                local keypoints = {}
-                local tpoints = {}
-                for i, s in ipairs(GradientStops) do
-                    local pos = tonumber(s.pos) or 0
-                    local color = s.color or Color3.new(1, 1, 1)
-                    local transp = tonumber(s.transparency) or 0
-                    table.insert(keypoints, ColorSequenceKeypoint.new(pos, color))
-                    table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
+            local keypoints = {}
+            local tpoints = {}
+            for i, s in ipairs(GradientStops) do
+                local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
+                local color = (s and s.color) or Color3.new(1, 1, 1)
+                local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
+                table.insert(keypoints, ColorSequenceKeypoint.new(pos, color))
+                table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
+            end
+
+            if #keypoints == 0 then
+                keypoints[1] = ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1))
+                tpoints[1] = NumberSequenceKeypoint.new(0, 0)
+            end
+
+            GradientUI.Color = ColorSequence.new(keypoints)
+            GradientUI.Transparency = NumberSequence.new(tpoints)
+
+            -- reposition dots only if they exist
+            for _, s in ipairs(GradientStops) do
+                if s and s.dot and s.pos then
+                    local okPos = math.clamp(tonumber(s.pos) or 0, 0, 1)
+                    pcall(function()
+                        s.dot.Position = UDim2.new(okPos, 0, 0.5, 0)
+                    end)
                 end
-
-                if #keypoints == 0 then
-                    keypoints[1] = ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1))
-                end
-
-                GradientUI.Color = ColorSequence.new(keypoints)
-                GradientUI.Transparency = NumberSequence.new(tpoints)
-
-                -- reposition dots only if they exist
-                for _, s in ipairs(GradientStops) do
-                    if s and s.dot and s.pos then
-                        pcall(function()
-                            s.dot.Position = UDim2.new(math.clamp(tonumber(s.pos) or 0, 0, 1), 0, 0.5, 0)
-                        end)
-                    end
-                end
-            end)
-
-            if not ok then
-                warn("UpdateGradientRender failed:", err)
             end
         end
 
@@ -3784,9 +3780,9 @@ do
             local Dot = New("ImageButton", {
                 Size = UDim2.fromOffset(14, 14),
                 AnchorPoint = Vector2.new(0.5, 0.5),
-                BackgroundColor3 = stop.color,
-                BorderColor3 = Library:GetDarkerColor(stop.color),
-                Position = UDim2.new(stop.pos, 0, 0.5, 0),
+                BackgroundColor3 = stop and stop.color or Color3.new(1,1,1),
+                BorderColor3 = Library:GetDarkerColor((stop and stop.color) or Color3.new(1,1,1)),
+                Position = UDim2.new(math.clamp(tonumber(stop and stop.pos) or 0, 0, 1), 0, 0.5, 0),
                 AutoButtonColor = false,
                 Parent = DotsContainer,
             })
@@ -3796,11 +3792,9 @@ do
 
             Dot.MouseButton1Click:Connect(function()
                 SelectedStop = stop
-                pcall(function()
-                    if ColorPicker and ColorPicker.SetValueRGB then
-                        ColorPicker:SetValueRGB(stop.color, stop.transparency)
-                    end
-                end)
+                if ColorPicker and type(ColorPicker.SetValueRGB) == "function" then
+                    ColorPicker:SetValueRGB(stop.color or Color3.new(1,1,1), stop.transparency or 0)
+                end
             end)
 
             Dot.InputBegan:Connect(function(Input)
@@ -3808,7 +3802,9 @@ do
                     if not GradientBar then break end
                     local MinX = GradientBar.AbsolutePosition.X
                     local MaxX = MinX + GradientBar.AbsoluteSize.X
-                    local PosX = math.clamp(Mouse.X, MinX, MaxX)
+                    if MaxX - MinX <= 0 then break end
+                    local mouseX = (Mouse and Mouse.X) and Mouse.X or 0
+                    local PosX = math.clamp(mouseX, MinX, MaxX)
                     stop.pos = (PosX - MinX) / (MaxX - MinX)
                     UpdateGradientRender()
                     RunService.RenderStepped:Wait()
@@ -3819,13 +3815,21 @@ do
         end
 
         local function AddGradientStop(pos, color, transparency)
-            local stop = { pos = pos or 0.5, color = color or ColorPicker.Value, transparency = transparency or ColorPicker.Transparency }
+            local p = math.clamp(tonumber(pos) or 0.5, 0, 1)
+            local col = color or (ColorPicker and ColorPicker.Value) or Color3.new(1,1,1)
+            local transp = math.clamp(tonumber(transparency) or (ColorPicker and ColorPicker.Transparency) or 0, 0, 1)
+            local stop = { pos = p, color = col, transparency = transp }
             table.insert(GradientStops, stop)
-            if not DotsContainer then return end
+            if not DotsContainer then
+                if GradientBar then
+                    DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
+                else
+                    return
+                end
+            end
             CreateDot(stop)
             UpdateGradientRender()
             SelectedStop = stop
-            -- callback with current gradient representation
             Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
         end
 
@@ -3854,7 +3858,7 @@ do
             DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
 
             PlusButton.MouseButton1Click:Connect(function()
-                pcall(function() AddGradientStop(0.5) end)
+                AddGradientStop(0.5)
             end)
 
             -- initialize with one stop in middle
@@ -3898,14 +3902,9 @@ do
 
             -- sync gradient selected stop with current picker color
             if Info.Gradient and SelectedStop then
-                local ok, err = pcall(function()
-                    SelectedStop.color = ColorPicker.Value
-                    SelectedStop.transparency = ColorPicker.Transparency
-                    UpdateGradientRender()
-                end)
-                if not ok then
-                    warn("Gradient sync failed:", err)
-                end
+                SelectedStop.color = ColorPicker.Value
+                SelectedStop.transparency = ColorPicker.Transparency
+                UpdateGradientRender()
             end
         end
 
