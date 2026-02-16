@@ -60,6 +60,114 @@ do
             table.remove(Segments, #Segments)
         end
 
+        --// Gradient Picker (optional) \--
+        local GradientHolder, GradientBar, GradientUI, DotsContainer, PlusButton
+        local GradientStops = {}
+        local SelectedStop = nil
+
+        local function UpdateGradientRender()
+            if not GradientUI then
+                return
+            end
+
+            table.sort(GradientStops, function(a, b) return a.pos < b.pos end)
+
+            local keypoints = {}
+            local tpoints = {}
+            for i, s in ipairs(GradientStops) do
+                table.insert(keypoints, ColorSequenceKeypoint.new(s.pos, s.color))
+                table.insert(tpoints, NumberSequenceKeypoint.new(s.pos, s.transparency or 0))
+            end
+
+            GradientUI.Color = ColorSequence.new(keypoints)
+            GradientUI.Transparency = NumberSequence.new(tpoints)
+
+            -- reposition dots
+            if DotsContainer then
+                for i, s in ipairs(GradientStops) do
+                    if s.dot and s.pos then
+                        s.dot.Position = UDim2.new(s.pos, 0, 0.5, 0)
+                    end
+                end
+            end
+        end
+
+        local function CreateDot(stop)
+            local Dot = New("ImageButton", {
+                Size = UDim2.fromOffset(14, 14),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = stop.color,
+                BorderColor3 = Library:GetDarkerColor(stop.color),
+                Position = UDim2.new(stop.pos, 0, 0.5, 0),
+                AutoButtonColor = false,
+                Parent = DotsContainer,
+            })
+            New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Dot })
+
+            stop.dot = Dot
+
+            Dot.MouseButton1Click:Connect(function()
+                SelectedStop = stop
+                ColorPicker:SetValueRGB(stop.color, stop.transparency)
+            end)
+
+            Dot.InputBegan:Connect(function(Input)
+                while IsDragInput(Input) do
+                    local MinX = GradientBar.AbsolutePosition.X
+                    local MaxX = MinX + GradientBar.AbsoluteSize.X
+                    local PosX = math.clamp(Mouse.X, MinX, MaxX)
+                    stop.pos = (PosX - MinX) / (MaxX - MinX)
+                    UpdateGradientRender()
+                    RunService.RenderStepped:Wait()
+                end
+            end)
+
+            return Dot
+        end
+
+        local function AddGradientStop(pos, color, transparency)
+            local stop = { pos = pos or 0.5, color = color or ColorPicker.Value, transparency = transparency or ColorPicker.Transparency }
+            table.insert(GradientStops, stop)
+            if not DotsContainer then return end
+            CreateDot(stop)
+            UpdateGradientRender()
+            SelectedStop = stop
+            -- callback with current gradient representation
+            Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
+        end
+
+        if Info.Gradient then
+            GradientHolder = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 36), Parent = ColorMenu.Menu })
+            New("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), Parent = GradientHolder })
+
+            PlusButton = New("ImageButton", {
+                Size = UDim2.fromOffset(28, 28),
+                BackgroundTransparency = 1,
+                AutoButtonColor = false,
+                Parent = GradientHolder,
+            })
+            local PlusIcon = Library:GetIcon("plus")
+            if PlusIcon and PlusIcon.Url then
+                pcall(function() PlusButton.Image = PlusIcon.Url end)
+                if PlusIcon.ImageRectOffset then pcall(function() PlusButton.ImageRectOffset = PlusIcon.ImageRectOffset end) end
+                if PlusIcon.ImageRectSize then pcall(function() PlusButton.ImageRectSize = PlusIcon.ImageRectSize end) end
+            end
+
+            GradientBar = New("Frame", { BackgroundColor3 = "MainColor", Size = UDim2.new(1, -34, 0, 12), Parent = GradientHolder })
+            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = GradientBar })
+
+            GradientUI = New("UIGradient", { Parent = GradientBar })
+
+            DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
+
+            PlusButton.MouseButton1Click:Connect(function()
+                AddGradientStop(0.5)
+            end)
+
+            -- initialize with one stop in middle
+            AddGradientStop(0.5)
+        end
+
         for _, Segment in ipairs(Segments) do
             if not isfolder(TraversedPath .. Segment) then
                 makefolder(TraversedPath .. Segment)
@@ -3758,6 +3866,13 @@ do
                 math.floor(ColorPicker.Value.G * 255),
                 math.floor(ColorPicker.Value.B * 255),
             }, ", ")
+
+            -- sync gradient selected stop with current picker color
+            if Info.Gradient and SelectedStop then
+                SelectedStop.color = ColorPicker.Value
+                SelectedStop.transparency = ColorPicker.Transparency
+                UpdateGradientRender()
+            end
         end
 
         function ColorPicker:Update()
