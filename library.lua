@@ -3829,7 +3829,8 @@ do
                 AutoButtonColor = false,
                 Parent = DotsContainer,
             })
-            New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Dot })
+            -- make dots square (no corner radius)
+            New("UICorner", { CornerRadius = UDim.new(0, 0), Parent = Dot })
             -- small persistent dark outline for visibility
             local SmallStroke = New("UIStroke", { Color = "Dark", Thickness = 1, Transparency = 0, Parent = Dot })
             Library.Registry[SmallStroke] = { Color = "Dark" }
