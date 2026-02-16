@@ -1262,8 +1262,11 @@ function Library:SetDPIScale(DPIScale: number)
     Library.MinSize = Library.OriginalMinSize * Library.DPIScale
 
     for Instance, Properties in pairs(Library.DPIRegistry) do
+        local DPIExclude = Properties["DPIExclude"] or {}
         for Property, Value in pairs(Properties) do
             if Property == "DPIExclude" or Property == "DPIOffset" then
+                continue
+            elseif DPIExclude[Property] then
                 continue
             elseif Property == "TextSize" then
                 Instance[Property] = ApplyTextScale(Value)
