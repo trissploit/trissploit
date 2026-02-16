@@ -3796,11 +3796,16 @@ do
 
             Dot.MouseButton1Click:Connect(function()
                 SelectedStop = stop
-                ColorPicker:SetValueRGB(stop.color, stop.transparency)
+                pcall(function()
+                    if ColorPicker and ColorPicker.SetValueRGB then
+                        ColorPicker:SetValueRGB(stop.color, stop.transparency)
+                    end
+                end)
             end)
 
             Dot.InputBegan:Connect(function(Input)
                 while IsDragInput(Input) do
+                    if not GradientBar then break end
                     local MinX = GradientBar.AbsolutePosition.X
                     local MaxX = MinX + GradientBar.AbsoluteSize.X
                     local PosX = math.clamp(Mouse.X, MinX, MaxX)
@@ -3849,7 +3854,7 @@ do
             DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
 
             PlusButton.MouseButton1Click:Connect(function()
-                AddGradientStop(0.5)
+                pcall(function() AddGradientStop(0.5) end)
             end)
 
             -- initialize with one stop in middle
