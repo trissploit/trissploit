@@ -3781,6 +3781,13 @@ do
 
             GradientUI.Color = ColorSequence.new(keypoints)
             GradientUI.Transparency = NumberSequence.new(tpoints)
+            -- update preview gradient if present
+            pcall(function()
+                if GradientUI._preview and GradientUI._preview.Parent then
+                    GradientUI._preview.Color = ColorSequence.new(keypoints)
+                    GradientUI._preview.Transparency = NumberSequence.new(tpoints)
+                end
+            end)
 
             -- reposition interactive dots if present and update visual state
             for _, s in ipairs(GradientStops) do
@@ -3890,10 +3897,15 @@ do
                 if PlusIcon.ImageRectSize then pcall(function() PlusButton.ImageRectSize = PlusIcon.ImageRectSize end) end
             end
 
-            GradientBar = New("Frame", { BackgroundColor3 = "MainColor", Size = UDim2.new(1, -34, 0, 12), Parent = GradientHolder })
+            GradientBar = New("Frame", { BackgroundColor3 = "White", Size = UDim2.new(1, -34, 0, 12), Parent = GradientHolder })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = GradientBar })
 
             GradientUI = New("UIGradient", { Parent = GradientBar })
+
+            -- small preview box to display the full gradient
+            local PreviewBox = New("Frame", { BackgroundColor3 = "White", Size = UDim2.fromOffset(36, 12), Parent = GradientHolder })
+            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = PreviewBox })
+            local PreviewUI = New("UIGradient", { Parent = PreviewBox })
 
             DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
 
@@ -3905,6 +3917,9 @@ do
 
             -- initialize with one stop in middle
             AddGradientStop(0.5)
+
+            -- expose preview UI to the update function via closure
+            GradientUI._preview = PreviewUI
         end
 
         --// End \\--
