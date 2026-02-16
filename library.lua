@@ -3271,11 +3271,12 @@ do
                 KeyPicker.Value = "Unknown"
             end
 
-            KeyPicker.Modifiers =
-                VerifyModifiers(if typeof(Modifiers) == "table" then Modifiers else KeyPicker.Modifiers)
-            KeyPicker.DisplayValue = if GetTableSize(KeyPicker.Modifiers) > 0
-                then (table.concat(KeyPicker.Modifiers, " + ") .. " + " .. KeyPicker.Value)
-                else KeyPicker.Value
+            KeyPicker.Modifiers = VerifyModifiers(typeof(Modifiers) == "table" and Modifiers or KeyPicker.Modifiers)
+            if GetTableSize(KeyPicker.Modifiers) > 0 then
+                KeyPicker.DisplayValue = table.concat(KeyPicker.Modifiers, " + ") .. " + " .. KeyPicker.Value
+            else
+                KeyPicker.DisplayValue = KeyPicker.Value
+            end
 
             if ModeButtons[Mode] then
                 ModeButtons[Mode]:Select()
@@ -3388,7 +3389,9 @@ do
                 Key = Input.KeyCode == Enum.KeyCode.Escape and "None" or Input.KeyCode.Name;
             end
 
-            ActiveModifiers = if Input.KeyCode == Enum.KeyCode.Escape or Key == "Unknown" then {} else ActiveModifiers;
+            if Input.KeyCode == Enum.KeyCode.Escape or Key == "Unknown" then
+                ActiveModifiers = {}
+            end
 
             KeyPicker.Toggled = false
             KeyPicker:SetValue({ Key, KeyPicker.Mode, ActiveModifiers })
@@ -6184,7 +6187,7 @@ do
 
         local Viewport = {
             Object = ViewportObject,
-            Camera = if not Info.Camera then Instance.new("Camera") else Info.Camera,
+            Camera = Info.Camera or Instance.new("Camera"),
             Interactive = Info.Interactive,
             AutoFocus = Info.AutoFocus,
             Visible = Info.Visible,
@@ -7743,9 +7746,7 @@ function Library:CreateWindow(WindowInfo)
         local WindowIcon
         if WindowInfo.Icon then
             WindowIcon = New("ImageButton", {
-                Image = if tonumber(WindowInfo.Icon)
-                    then string.format("rbxassetid://%d", WindowInfo.Icon)
-                    else WindowInfo.Icon,
+                Image = tonumber(WindowInfo.Icon) and string.format("rbxassetid://%d", WindowInfo.Icon) or WindowInfo.Icon,
                 Size = WindowInfo.IconSize,
                 BackgroundTransparency = 1,
                 Parent = TitleHolder,
@@ -9645,7 +9646,7 @@ function Library:CreateWindow(WindowInfo)
 
         local TabContainer
 
-        Icon = if Icon == "key" then KeyIcon else Library:GetCustomIcon(Icon)
+        Icon = (Icon == "key") and KeyIcon or Library:GetCustomIcon(Icon)
         do
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
