@@ -3894,8 +3894,8 @@ do
         end
 
         if Info.Gradient then
-            GradientHolder = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 28), Parent = ColorMenu.Menu })
-            New("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), Parent = GradientHolder })
+            GradientHolder = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), Parent = ColorMenu.Menu })
+            New("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), Parent = GradientHolder })
 
             PlusButton = New("ImageButton", {
                 Size = UDim2.fromOffset(12, 12),
@@ -3903,26 +3903,9 @@ do
                 AutoButtonColor = false,
                 Parent = GradientHolder,
             })
-            local MinusButton = New("ImageButton", {
-                Size = UDim2.fromOffset(12, 12),
-                BackgroundTransparency = 1,
-                AutoButtonColor = false,
-                Parent = GradientHolder,
-            })
-            local PlusIcon = Library:GetIcon("plus")
-            if PlusIcon and PlusIcon.Url then
-                pcall(function() PlusButton.Image = PlusIcon.Url end)
-                if PlusIcon.ImageRectOffset then pcall(function() PlusButton.ImageRectOffset = PlusIcon.ImageRectOffset end) end
-                if PlusIcon.ImageRectSize then pcall(function() PlusButton.ImageRectSize = PlusIcon.ImageRectSize end) end
-            local MinusIcon = Library:GetIcon("minus")
-            if MinusIcon and MinusIcon.Url then
-                pcall(function() MinusButton.Image = MinusIcon.Url end)
-                if MinusIcon.ImageRectOffset then pcall(function() MinusButton.ImageRectOffset = MinusIcon.ImageRectOffset end) end
-                if MinusIcon.ImageRectSize then pcall(function() MinusButton.ImageRectSize = MinusIcon.ImageRectSize end) end
-            end
-            end
 
-            GradientBar = New("Frame", { BackgroundColor3 = "White", Size = UDim2.new(1, -30, 0, 12), Parent = GradientHolder })
+            -- Gradient bar sits between the plus and minus buttons
+            GradientBar = New("Frame", { BackgroundColor3 = "White", Size = UDim2.new(1, -36, 0, 12), Parent = GradientHolder })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = GradientBar })
 
             GradientUI = New("UIGradient", { Parent = GradientBar })
@@ -3933,6 +3916,28 @@ do
             -- (removed in-menu preview box; preview shown on the small holder instead)
 
             DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
+
+            -- minus button placed on the right side of the bar
+            local MinusButton = New("ImageButton", {
+                Size = UDim2.fromOffset(12, 12),
+                BackgroundTransparency = 1,
+                AutoButtonColor = false,
+                Parent = GradientHolder,
+            })
+
+            -- load icons independently
+            local PlusIcon = Library:GetIcon("plus")
+            if PlusIcon and PlusIcon.Url then
+                pcall(function() PlusButton.Image = PlusIcon.Url end)
+                if PlusIcon.ImageRectOffset then pcall(function() PlusButton.ImageRectOffset = PlusIcon.ImageRectOffset end) end
+                if PlusIcon.ImageRectSize then pcall(function() PlusButton.ImageRectSize = PlusIcon.ImageRectSize end) end
+            end
+            local MinusIcon = Library:GetIcon("minus")
+            if MinusIcon and MinusIcon.Url then
+                pcall(function() MinusButton.Image = MinusIcon.Url end)
+                if MinusIcon.ImageRectOffset then pcall(function() MinusButton.ImageRectOffset = MinusIcon.ImageRectOffset end) end
+                if MinusIcon.ImageRectSize then pcall(function() MinusButton.ImageRectSize = MinusIcon.ImageRectSize end) end
+            end
 
             PlusButton.MouseButton1Click:Connect(function()
                 pcall(function()
