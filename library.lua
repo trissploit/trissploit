@@ -1369,6 +1369,34 @@ function Library:SetDPIScale(DPIScale: number)
         end
     end
 
+    -- Ensure groupboxes recompute sizes after layout updates settle
+    task.defer(function()
+        for _, Tab in pairs(Library.Tabs) do
+            if Tab.IsKeyTab then
+                continue
+            end
+
+            for _, Groupbox in pairs(Tab.Groupboxes) do
+                pcall(function()
+                    if Groupbox and Groupbox.Container and Groupbox.Holder then
+                        local list = Groupbox.Container:FindFirstChildOfClass("UIListLayout")
+                        if list then
+                            local contentH = list.AbsoluteContentSize.Y
+                            if Groupbox.ExpandedState and Groupbox.ExpandedState.value then
+                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil((contentH + 53) * Library.DPIScale))
+                            else
+                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                            end
+                        end
+                        if Groupbox.Holder.BackgroundTransparency ~= 0 then
+                            Groupbox.Holder.BackgroundTransparency = 0
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
     Library:UpdateKeybindFrame()
     for _, Notification in pairs(Library.Notifications) do
         Notification:Resize()
