@@ -3514,9 +3514,10 @@ do
             Parent = ToggleLabel,
         })
 
+        local _transImg = (CustomImageManager and CustomImageManager.GetAsset) and CustomImageManager.GetAsset("TransparencyTexture") or ""
         local HolderTransparency = New("ImageLabel", {
-            Image = CustomImageManager.GetAsset("TransparencyTexture"),
-            ImageTransparency = (1 - ColorPicker.Transparency),
+            Image = _transImg,
+            ImageTransparency = (1 - (ColorPicker.Transparency or 0)),
             ScaleType = Enum.ScaleType.Tile,
             Size = UDim2.fromScale(1, 1),
             TileSize = UDim2.fromOffset(9, 9),
@@ -3566,9 +3567,10 @@ do
         })
 
         --// Sat Map
+        local _satImg = (CustomImageManager and CustomImageManager.GetAsset) and CustomImageManager.GetAsset("SaturationMap") or ""
         local SatVipMap = New("ImageButton", {
             BackgroundColor3 = ColorPicker.Value,
-            Image = CustomImageManager.GetAsset("SaturationMap"),
+            Image = _satImg,
             Size = UDim2.fromOffset(200, 200),
             Parent = ColorHolder,
         })
@@ -3613,8 +3615,9 @@ do
         --// Alpha
         local TransparencySelector, TransparencyColor, TransparencyCursor
         if Info.Transparency then
+            local _transSelImg = (CustomImageManager and CustomImageManager.GetAsset) and CustomImageManager.GetAsset("TransparencyTexture") or ""
             TransparencySelector = New("ImageButton", {
-                Image = CustomImageManager.GetAsset("TransparencyTexture"),
+                Image = _transSelImg,
                 ScaleType = Enum.ScaleType.Tile,
                 Size = UDim2.fromOffset(16, 200),
                 TileSize = UDim2.fromOffset(8, 8),
