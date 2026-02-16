@@ -7831,6 +7831,47 @@ function Library:CreateWindow(WindowInfo)
         })
         Library:AddOutline(MainFrame)
 
+        -- rotating outline helper (thin divider-like frames that rotate their UIGradient)
+        do
+            Library._RotatingGradients = Library._RotatingGradients or {}
+            Library.AddRotatingOutline = Library.AddRotatingOutline or function(ParentFrame)
+                local thickness = math.max(1, math.floor(2 * Library.DPIScale))
+                local top = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(1, 0, 0, thickness), Position = UDim2.new(0, 0, 0, 0), Parent = ParentFrame, ZIndex = 999 })
+                local right = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, 1, 0), Position = UDim2.new(1, -thickness, 0, 0), Parent = ParentFrame, ZIndex = 999 })
+                local bottom = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(1, 0, 0, thickness), Position = UDim2.new(0, 0, 1, -thickness), Parent = ParentFrame, ZIndex = 999 })
+                local left = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, 1, 0), Position = UDim2.new(0, 0, 0, 0), Parent = ParentFrame, ZIndex = 999 })
+
+                local function makeGrad(Part)
+                    local g = New("UIGradient", { Parent = Part })
+                    g.Color = Library:GetAccentGradientSequence()
+                    g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0) })
+                    g.Rotation = 0
+                    table.insert(Library._RotatingGradients, g)
+                    Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
+                end
+
+                pcall(makeGrad, top)
+                pcall(makeGrad, right)
+                pcall(makeGrad, bottom)
+                pcall(makeGrad, left)
+            end
+
+            -- start a single render loop to rotate all registered gradients
+            if not Library._RotConn then
+                Library._RotConn = RunService.RenderStepped:Connect(function(dt)
+                    for _, g in ipairs(Library._RotatingGradients) do
+                        if g and g.Parent then
+                            local r = (g.Rotation or 0) + dt * 20
+                            g.Rotation = r % 360
+                        end
+                    end
+                end)
+            end
+
+            -- attach to main frame
+            pcall(function() Library.AddRotatingOutline(MainFrame) end)
+        end
+
         local InitialTitleWidth = math.max(
             LayoutState.CompactWidth,
             Library:GetTextBounds(WindowInfo.Title, Library.Scheme.Font, 20)
@@ -8206,6 +8247,9 @@ function Library:CreateWindow(WindowInfo)
         })
         LayoutRefs.TabsFrame = Tabs
         LayoutRefs.TabsList = TabsList
+
+        -- attach rotating outline to tab island
+        pcall(function() if Library.AddRotatingOutline then Library.AddRotatingOutline(Tabs) end end)
 
         -- Update tab bar window size when tabs change
         local function UpdateTabBarSize()
