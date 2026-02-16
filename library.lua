@@ -3765,15 +3765,7 @@ do
             GradientUI.Color = ColorSequence.new(keypoints)
             GradientUI.Transparency = NumberSequence.new(tpoints)
 
-            -- reposition dots only if they exist
-            for _, s in ipairs(GradientStops) do
-                if s and s.dot and s.pos then
-                    local okPos = math.clamp(tonumber(s.pos) or 0, 0, 1)
-                    pcall(function()
-                        s.dot.Position = UDim2.new(okPos, 0, 0.5, 0)
-                    end)
-                end
-            end
+            -- no interactive dots in this safer implementation
         end
 
         local function CreateDot(stop)
@@ -3824,14 +3816,7 @@ do
             local transp = math.clamp(tonumber(transparency) or (ColorPicker and ColorPicker.Transparency) or 0, 0, 1)
             local stop = { pos = p, color = col, transparency = transp }
             table.insert(GradientStops, stop)
-            if not DotsContainer then
-                if GradientBar then
-                    DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
-                else
-                    return
-                end
-            end
-            CreateDot(stop)
+            -- update visual gradient only; interactive dots are disabled for stability
             UpdateGradientRender()
             SelectedStop = stop
             Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
@@ -3859,7 +3844,7 @@ do
 
             GradientUI = New("UIGradient", { Parent = GradientBar })
 
-            DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
+            -- interactive dots removed for stability; no DotsContainer created
 
             PlusButton.MouseButton1Click:Connect(function()
                 pcall(function()
