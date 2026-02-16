@@ -6698,6 +6698,7 @@ do
                 Parent = BoxHolder,
                 DPIExclude = {
                     BackgroundTransparency = true,
+                    Size = true,
                 },
             })
             local transparencyConnection = DepGroupboxContainer:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
@@ -6715,9 +6716,6 @@ do
                 Parent = DepGroupboxContainer,
             })
             Library:AddOutline(DepGroupboxContainer)
-            Library:UpdateDPI(DepGroupboxContainer, {
-                Size = false,
-            })
 
             DepGroupboxList = New("UIListLayout", {
                 Padding = UDim.new(0, 8),
@@ -8371,6 +8369,7 @@ function Library:CreateWindow(WindowInfo)
                     Parent = BoxHolder,
                     DPIExclude = {
                         BackgroundTransparency = true,
+                        Size = true,
                     },
                 })
                 local transparencyConnection = GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
@@ -8388,9 +8387,6 @@ function Library:CreateWindow(WindowInfo)
                     Parent = GroupboxHolder,
                 })
                 Library:AddOutline(GroupboxHolder)
-                Library:UpdateDPI(GroupboxHolder, {
-                    Size = false,
-                })
 
                 Library:MakeLine(GroupboxHolder, {
                     Position = UDim2.fromOffset(0, 34),
@@ -8575,6 +8571,7 @@ function Library:CreateWindow(WindowInfo)
                 Parent = BoxHolder,
                 DPIExclude = {
                     BackgroundTransparency = true,
+                    Size = true,
                 },
             })
             local transparencyConnection = GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
@@ -8592,9 +8589,6 @@ function Library:CreateWindow(WindowInfo)
                 Parent = GroupboxHolder,
             })
             Library:AddOutline(GroupboxHolder)
-                Library:UpdateDPI(GroupboxHolder, {
-                    Size = false,
-                })
 
             Library:MakeLine(GroupboxHolder, {
                 Position = UDim2.fromOffset(0, 34),
@@ -9065,6 +9059,7 @@ function Library:CreateWindow(WindowInfo)
                     Parent = BoxHolder,
                     DPIExclude = {
                         BackgroundTransparency = true,
+                        Size = true,
                     },
                 })
                 New("UICorner", {
@@ -9072,9 +9067,6 @@ function Library:CreateWindow(WindowInfo)
                     Parent = TabboxHolder,
                 })
                 Library:AddOutline(TabboxHolder)
-                Library:UpdateDPI(TabboxHolder, {
-                    Size = false,
-                })
 
                 TabboxButtons = New("Frame", {
                     BackgroundTransparency = 1,
