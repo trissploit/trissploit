@@ -8584,7 +8584,7 @@ function Library:CreateWindow(WindowInfo)
                     PaddingLeft = UDim.new(0, 7),
                     PaddingRight = UDim.new(0, 7),
                     PaddingTop = UDim.new(0, 7),
-                    Parent = GroupboxContainer,
+                    Parent = DepGroupboxContainer,
                 })
             end
 
