@@ -1601,9 +1601,7 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         if hasRect then
             local grad = Instance:FindFirstChild("LucideAccentGradient") or Instance:FindFirstChildOfClass("UIGradient")
             if not grad then
-                grad = Instance.new("UIGradient")
-                grad.Name = "LucideAccentGradient"
-                grad.Parent = Instance
+                grad = New("UIGradient", { Name = "LucideAccentGradient", Parent = Instance })
             end
 
             pcall(function()
@@ -3958,9 +3956,7 @@ do
                 if (PlusIcon.ImageRectOffset or PlusIcon.ImageRectSize) then
                     local g = PlusButton:FindFirstChild("LucideAccentGradient") or PlusButton:FindFirstChildOfClass("UIGradient")
                     if not g then
-                        g = Instance.new("UIGradient")
-                        g.Name = "LucideAccentGradient"
-                        g.Parent = PlusButton
+                        g = New("UIGradient", { Name = "LucideAccentGradient", Parent = PlusButton })
                     end
                     pcall(function() g.Color = Library:GetAccentGradientSequence() end)
                     Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
@@ -3974,9 +3970,7 @@ do
                 if (MinusIcon.ImageRectOffset or MinusIcon.ImageRectSize) then
                     local g2 = MinusButton:FindFirstChild("LucideAccentGradient") or MinusButton:FindFirstChildOfClass("UIGradient")
                     if not g2 then
-                        g2 = Instance.new("UIGradient")
-                        g2.Name = "LucideAccentGradient"
-                        g2.Parent = MinusButton
+                        g2 = New("UIGradient", { Name = "LucideAccentGradient", Parent = MinusButton })
                     end
                     pcall(function() g2.Color = Library:GetAccentGradientSequence() end)
                     Library.Registry[g2] = { Color = function() return Library:GetAccentGradientSequence() end }
@@ -7443,9 +7437,7 @@ function Library:Notify(...)
         if iconData.ImageRectOffset or iconData.ImageRectSize then
             local g = Img:FindFirstChild("LucideAccentGradient") or Img:FindFirstChildOfClass("UIGradient")
             if not g then
-                g = Instance.new("UIGradient")
-                g.Name = "LucideAccentGradient"
-                g.Parent = Img
+                g = New("UIGradient", { Name = "LucideAccentGradient", Parent = Img })
             end
             pcall(function() g.Color = Library:GetAccentGradientSequence() end)
             Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
@@ -8888,9 +8880,7 @@ function Library:CreateWindow(WindowInfo)
                             if icon.ImageRectOffset or icon.ImageRectSize then
                                 local g = ToggleBtn:FindFirstChild("LucideAccentGradient") or ToggleBtn:FindFirstChildOfClass("UIGradient")
                                 if not g then
-                                    g = Instance.new("UIGradient")
-                                    g.Name = "LucideAccentGradient"
-                                    g.Parent = ToggleBtn
+                                    g = New("UIGradient", { Name = "LucideAccentGradient", Parent = ToggleBtn })
                                 end
                                 pcall(function() g.Color = Library:GetAccentGradientSequence() end)
                                 Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
