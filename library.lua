@@ -3746,50 +3746,37 @@ do
 
             table.sort(GradientStops, function(a, b) return (tonumber(a and a.pos) or 0) < (tonumber(b and b.pos) or 0) end)
 
-            local keypoints = {}
-            local tpoints = {}
+            -- Build primitive stop list first (pos, color, transparency)
+            local stops = {}
             for i, s in ipairs(GradientStops) do
                 local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
                 local color = (s and s.color) or Color3.new(1, 1, 1)
-                    local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
-                table.insert(keypoints, ColorSequenceKeypoint.new(pos, color))
-                table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
+                local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
+                table.insert(stops, { pos = pos, color = color, transp = transp })
             end
 
-            -- ColorSequence requires at least two keypoints; ensure we have proper endpoints
-            if #keypoints == 0 then
-                keypoints[1] = ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1))
-                keypoints[2] = ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
-                tpoints[1] = NumberSequenceKeypoint.new(0, 0)
-                tpoints[2] = NumberSequenceKeypoint.new(1, 0)
-            elseif #keypoints == 1 then
-                -- duplicate the single keypoint to form a valid two-point sequence
-                local kp = keypoints[1]
-                local tp = tpoints[1] or NumberSequenceKeypoint.new(kp.Time or 0, 0)
-                keypoints[1] = ColorSequenceKeypoint.new(0, kp.Value or Color3.new(1,1,1))
-                keypoints[2] = ColorSequenceKeypoint.new(1, kp.Value or Color3.new(1,1,1))
-                tpoints[1] = NumberSequenceKeypoint.new(0, tp.Value or 0)
-                tpoints[2] = NumberSequenceKeypoint.new(1, tp.Value or 0)
+            -- Ensure at least two stops and endpoints at 0 and 1
+            if #stops == 0 then
+                stops = { { pos = 0, color = Color3.new(1,1,1), transp = 0 }, { pos = 1, color = Color3.new(1,1,1), transp = 0 } }
+            elseif #stops == 1 then
+                local s = stops[1]
+                stops = { { pos = 0, color = s.color, transp = s.transp }, { pos = 1, color = s.color, transp = s.transp } }
             else
-                -- ensure sequence starts at 0 and ends at 1 by duplicating endpoints if necessary
-                local first = keypoints[1]
-                local last = keypoints[#keypoints]
-                local firstTime = first and first.Time or nil
-                local lastTime = last and last.Time or nil
-
-                if firstTime == nil or firstTime > 0 then
-                    local val = first and first.Value or Color3.new(1,1,1)
-                    local tval = (tpoints[1] and tpoints[1].Value) or 0
-                    table.insert(keypoints, 1, ColorSequenceKeypoint.new(0, val))
-                    table.insert(tpoints, 1, NumberSequenceKeypoint.new(0, tval))
+                -- If first stop isn't at 0, prepend duplicate of first at 0
+                if stops[1].pos > 0 then
+                    table.insert(stops, 1, { pos = 0, color = stops[1].color, transp = stops[1].transp })
                 end
-
-                if lastTime == nil or lastTime < 1 then
-                    local val = last and last.Value or Color3.new(1,1,1)
-                    local tval = (tpoints[#tpoints] and tpoints[#tpoints].Value) or 0
-                    table.insert(keypoints, ColorSequenceKeypoint.new(1, val))
-                    table.insert(tpoints, NumberSequenceKeypoint.new(1, tval))
+                -- If last stop isn't at 1, append duplicate of last at 1
+                if stops[#stops].pos < 1 then
+                    table.insert(stops, { pos = 1, color = stops[#stops].color, transp = stops[#stops].transp })
                 end
+            end
+
+            local keypoints = {}
+            local tpoints = {}
+            for _, s in ipairs(stops) do
+                table.insert(keypoints, ColorSequenceKeypoint.new(s.pos, s.color))
+                table.insert(tpoints, NumberSequenceKeypoint.new(s.pos, s.transp))
             end
 
             GradientUI.Color = ColorSequence.new(keypoints)
