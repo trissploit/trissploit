@@ -3902,7 +3902,7 @@ do
             New("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), Parent = GradientHolder })
 
             PlusButton = New("ImageButton", {
-                Size = UDim2.fromOffset(28, 28),
+                Size = UDim2.fromOffset(12, 12),
                 BackgroundTransparency = 1,
                 AutoButtonColor = false,
                 Parent = GradientHolder,
