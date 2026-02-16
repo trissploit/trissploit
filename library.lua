@@ -3495,7 +3495,10 @@ do
         local ColorPicker = {
             Value = Info.Default,
 
-            Transparency = Info.Transparency or 0,
+            -- `Info.Transparency` is used as a boolean flag elsewhere to enable
+            -- transparency controls; ensure the stored transparency value is
+            -- numeric (default 0) to avoid arithmetic on booleans.
+            Transparency = (type(Info.Transparency) == "number" and Info.Transparency) or 0,
             Title = Info.Title,
 
             Callback = Info.Callback,
@@ -3517,7 +3520,7 @@ do
         local _transImg = (CustomImageManager and CustomImageManager.GetAsset) and CustomImageManager.GetAsset("TransparencyTexture") or ""
         local HolderTransparency = New("ImageLabel", {
             Image = _transImg,
-            ImageTransparency = (1 - (ColorPicker.Transparency or 0)),
+            ImageTransparency = (1 - (tonumber(ColorPicker.Transparency) or 0)),
             ScaleType = Enum.ScaleType.Tile,
             Size = UDim2.fromScale(1, 1),
             TileSize = UDim2.fromOffset(9, 9),
@@ -3638,12 +3641,13 @@ do
                 Parent = TransparencyColor,
             })
 
+            local _curTrans = tonumber(ColorPicker.Transparency) or 0
             TransparencyCursor = New("Frame", {
                 AnchorPoint = Vector2.new(0.5, 0.5),
                 BackgroundColor3 = "White",
                 BorderColor3 = "Dark",
                 BorderSizePixel = 1,
-                Position = UDim2.fromScale(0.5, ColorPicker.Transparency),
+                Position = UDim2.fromScale(0.5, _curTrans),
                 Size = UDim2.new(1, 2, 0, 1),
                 Parent = TransparencySelector,
             })
@@ -3744,7 +3748,7 @@ do
             for i, s in ipairs(GradientStops) do
                 local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
                 local color = (s and s.color) or Color3.new(1, 1, 1)
-                local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
+                    local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
                 table.insert(keypoints, ColorSequenceKeypoint.new(pos, color))
                 table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
             end
@@ -3815,7 +3819,7 @@ do
         local function AddGradientStop(pos, color, transparency)
             local p = math.clamp(tonumber(pos) or 0.5, 0, 1)
             local col = color or (ColorPicker and ColorPicker.Value) or Color3.new(1,1,1)
-            local transp = math.clamp(tonumber(transparency) or (ColorPicker and ColorPicker.Transparency) or 0, 0, 1)
+            local transp = math.clamp(tonumber(transparency) or (ColorPicker and tonumber(ColorPicker.Transparency) or 0) or 0, 0, 1)
             local stop = { pos = p, color = col, transparency = transp }
             table.insert(GradientStops, stop)
             if not DotsContainer and GradientBar then
@@ -3878,7 +3882,8 @@ do
 
             Holder.BackgroundColor3 = ColorPicker.Value
             Holder.BorderColor3 = Library:GetDarkerColor(ColorPicker.Value)
-            HolderTransparency.ImageTransparency = (1 - ColorPicker.Transparency)
+            local _curTrans = tonumber(ColorPicker.Transparency) or 0
+            HolderTransparency.ImageTransparency = (1 - _curTrans)
 
             SatVipMap.BackgroundColor3 = Color3.fromHSV(ColorPicker.Hue, 1, 1)
             if TransparencyColor then
@@ -3888,7 +3893,7 @@ do
             SatVibCursor.Position = UDim2.fromScale(ColorPicker.Sat, 1 - ColorPicker.Vib)
             HueCursor.Position = UDim2.fromScale(0.5, ColorPicker.Hue)
             if TransparencyCursor then
-                TransparencyCursor.Position = UDim2.fromScale(0.5, ColorPicker.Transparency)
+                TransparencyCursor.Position = UDim2.fromScale(0.5, _curTrans)
             end
 
             HueBox.Text = "#" .. ColorPicker.Value:ToHex()
@@ -3901,7 +3906,7 @@ do
             -- sync gradient selected stop with current picker color
             if Info.Gradient and SelectedStop then
                 SelectedStop.color = ColorPicker.Value
-                SelectedStop.transparency = ColorPicker.Transparency
+                SelectedStop.transparency = tonumber(ColorPicker.Transparency) or 0
                 UpdateGradientRender()
             end
         end
