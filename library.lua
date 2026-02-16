@@ -8484,6 +8484,9 @@ function Library:CreateWindow(WindowInfo)
                 Library:UpdateDPI(GroupboxHolder, {
                     Size = false,
                 })
+                -- Ensure groupbox holder is registered for theme updates so its background appears immediately
+                Library:AddToRegistry(GroupboxHolder, { BackgroundColor3 = "BackgroundColor" })
+                Library:UpdateColorsUsingRegistry()
 
                 Library:MakeLine(GroupboxHolder, {
                     Position = UDim2.fromOffset(0, 34),
@@ -8585,6 +8588,8 @@ function Library:CreateWindow(WindowInfo)
                                 pcall(function()
                                     GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil((contentHeight + 53) * Library.DPIScale))
                                 end)
+                                -- Ensure themed colors are applied after resizing/expanding
+                                Library:UpdateColorsUsingRegistry()
                                 if Tab and Tab.RefreshSides then
                                     Tab:RefreshSides()
                                 end
@@ -8594,6 +8599,8 @@ function Library:CreateWindow(WindowInfo)
                             pcall(function()
                                 GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
                             end)
+                            -- Reapply theme colors after collapse
+                            Library:UpdateColorsUsingRegistry()
                             GroupboxContainer.Visible = false
                             if Tab and Tab.RefreshSides then
                                 Tab:RefreshSides()
@@ -8613,6 +8620,9 @@ function Library:CreateWindow(WindowInfo)
                         Size = true,
                     },
                 })
+                -- Register dependency groupbox container for immediate theming
+                Library:AddToRegistry(DepGroupboxContainer, { BackgroundColor3 = "BackgroundColor" })
+                Library:UpdateColorsUsingRegistry()
                 New("UIPadding", {
                     PaddingBottom = UDim.new(0, 7),
                     PaddingLeft = UDim.new(0, 7),
@@ -8640,6 +8650,8 @@ function Library:CreateWindow(WindowInfo)
                     else
                         GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
                     end
+                    -- Reapply theme colors after resize to ensure backgrounds remain visible
+                    Library:UpdateColorsUsingRegistry()
                 end)
             end
 
