@@ -1595,6 +1595,29 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         end
     end
 
+    -- Auto-attach accent gradient to lucide-style icons
+    if (ClassName == "ImageLabel" or ClassName == "ImageButton") and Properties and Properties.Image and Properties.Image ~= "" then
+        local hasRect = Properties.ImageRectSize or Properties.ImageRectOffset
+        if hasRect then
+            local grad = Instance:FindFirstChild("LucideAccentGradient") or Instance:FindFirstChildOfClass("UIGradient")
+            if not grad then
+                grad = Instance.new("UIGradient")
+                grad.Name = "LucideAccentGradient"
+                grad.Parent = Instance
+            end
+
+            pcall(function()
+                grad.Color = Library:GetAccentGradientSequence()
+            end)
+
+            Library.Registry[grad] = {
+                Color = function()
+                    return Library:GetAccentGradientSequence()
+                end,
+            }
+        end
+    end
+
     return Instance
 end
 
