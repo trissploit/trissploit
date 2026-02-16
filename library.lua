@@ -3948,8 +3948,13 @@ do
             ColorPicker.Value = Color3.fromHSV(ColorPicker.Hue, ColorPicker.Sat, ColorPicker.Vib)
 
             local _curTrans = tonumber(ColorPicker.Transparency) or 0
-            HolderTransparency.ImageTransparency = (1 - _curTrans)
-            if not Info.Gradient then
+            if Info.Gradient then
+                -- Show the full bar gradient on a white background; hide checker overlay
+                Holder.BackgroundColor3 = Color3.new(1, 1, 1)
+                Holder.BorderColor3 = Library:GetDarkerColor(Holder.BackgroundColor3)
+                HolderTransparency.ImageTransparency = 1
+            else
+                HolderTransparency.ImageTransparency = (1 - _curTrans)
                 Holder.BackgroundColor3 = ColorPicker.Value
                 Holder.BorderColor3 = Library:GetDarkerColor(ColorPicker.Value)
             end
