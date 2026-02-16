@@ -3530,6 +3530,9 @@ do
             Parent = Holder,
         })
 
+        -- optional gradient overlay on the small holder preview (shows full gradient)
+        local HolderGradient = nil
+
         --// Color Menu \\--
         local ColorMenu = Library:AddContextMenu(
             Holder,
@@ -3787,6 +3790,10 @@ do
                     PreviewUI.Color = ColorSequence.new(keypoints)
                     PreviewUI.Transparency = NumberSequence.new(tpoints)
                 end
+                if HolderGradient and HolderGradient.Parent then
+                    HolderGradient.Color = ColorSequence.new(keypoints)
+                    HolderGradient.Transparency = NumberSequence.new(tpoints)
+                end
             end)
 
             -- reposition interactive dots if present and update visual state
@@ -3911,6 +3918,9 @@ do
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = GradientBar })
 
             GradientUI = New("UIGradient", { Parent = GradientBar })
+
+            -- show the gradient on the small holder preview as well
+            HolderGradient = New("UIGradient", { Parent = Holder })
 
             -- small preview box to display the full gradient
             local PreviewBox = New("Frame", { BackgroundColor3 = "White", Size = UDim2.fromOffset(36, 12), Parent = GradientHolder })
