@@ -6754,10 +6754,6 @@ do
                 local _depSizeGuard = false
                 local depSizeConnection = DepGroupboxContainer:GetPropertyChangedSignal("Size"):Connect(function()
                     if _depSizeGuard then return end
-                    pcall(function()
-                        print("[UI DEBUG] DepGroupboxContainer Size changed to", tostring(DepGroupboxContainer.Size))
-                        print(debug.traceback())
-                    end)
                     _depSizeGuard = true
                     local ok, yOff = pcall(function() return DepGroupboxContainer.Size.Y.Offset end)
                     if ok and tonumber(yOff) and yOff < math.ceil(18 * Library.DPIScale) then
@@ -6773,6 +6769,9 @@ do
                 Parent = DepGroupboxContainer,
             })
             Library:AddOutline(DepGroupboxContainer)
+            Library:UpdateDPI(DepGroupboxContainer, {
+                Size = false,
+            })
 
             DepGroupboxList = New("UIListLayout", {
                 Padding = UDim.new(0, 8),
@@ -8449,11 +8448,6 @@ function Library:CreateWindow(WindowInfo)
                     local _sizeGuard = false
                     local sizeConnection = GroupboxHolder:GetPropertyChangedSignal("Size"):Connect(function()
                         if _sizeGuard then return end
-                        -- Log attempted size changes for debugging
-                        pcall(function()
-                            print("[UI DEBUG] GroupboxHolder Size changed to", tostring(GroupboxHolder.Size))
-                            print(debug.traceback())
-                        end)
                         _sizeGuard = true
                         local ok, yOff = pcall(function() return GroupboxHolder.Size.Y.Offset end)
                         if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
@@ -8469,6 +8463,9 @@ function Library:CreateWindow(WindowInfo)
                     Parent = GroupboxHolder,
                 })
                 Library:AddOutline(GroupboxHolder)
+                Library:UpdateDPI(GroupboxHolder, {
+                    Size = false,
+                })
 
                 Library:MakeLine(GroupboxHolder, {
                     Position = UDim2.fromOffset(0, 34),
@@ -8675,10 +8672,6 @@ function Library:CreateWindow(WindowInfo)
                 local _aimSizeGuard = false
                 local aimSizeConnection = GroupboxHolder:GetPropertyChangedSignal("Size"):Connect(function()
                     if _aimSizeGuard then return end
-                    pcall(function()
-                        print("[UI DEBUG] Aimbot GroupboxHolder Size changed to", tostring(GroupboxHolder.Size))
-                        print(debug.traceback())
-                    end)
                     _aimSizeGuard = true
                     local ok, yOff = pcall(function() return GroupboxHolder.Size.Y.Offset end)
                     if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
@@ -8694,6 +8687,9 @@ function Library:CreateWindow(WindowInfo)
                 Parent = GroupboxHolder,
             })
             Library:AddOutline(GroupboxHolder)
+            Library:UpdateDPI(GroupboxHolder, {
+                Size = false,
+            })
 
             Library:MakeLine(GroupboxHolder, {
                 Position = UDim2.fromOffset(0, 34),
@@ -9177,15 +9173,14 @@ function Library:CreateWindow(WindowInfo)
                     Parent = TabboxHolder,
                 })
                 Library:AddOutline(TabboxHolder)
+                Library:UpdateDPI(TabboxHolder, {
+                    Size = false,
+                })
                 -- Prevent accidental collapse of tabbox holder size
                 do
                     local _tabSizeGuard = false
                     local tabSizeConnection = TabboxHolder:GetPropertyChangedSignal("Size"):Connect(function()
                         if _tabSizeGuard then return end
-                        pcall(function()
-                            print("[UI DEBUG] TabboxHolder Size changed to", tostring(TabboxHolder.Size))
-                            print(debug.traceback())
-                        end)
                         _tabSizeGuard = true
                         local ok, yOff = pcall(function() return TabboxHolder.Size.Y.Offset end)
                         if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
