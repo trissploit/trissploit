@@ -3756,7 +3756,7 @@ do
                 table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
             end
 
-            -- ColorSequence requires at least two keypoints; ensure we have two
+            -- ColorSequence requires at least two keypoints; ensure we have proper endpoints
             if #keypoints == 0 then
                 keypoints[1] = ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1))
                 keypoints[2] = ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
@@ -3766,8 +3766,30 @@ do
                 -- duplicate the single keypoint to form a valid two-point sequence
                 local kp = keypoints[1]
                 local tp = tpoints[1] or NumberSequenceKeypoint.new(kp.Time or 0, 0)
+                keypoints[1] = ColorSequenceKeypoint.new(0, kp.Value or Color3.new(1,1,1))
                 keypoints[2] = ColorSequenceKeypoint.new(1, kp.Value or Color3.new(1,1,1))
+                tpoints[1] = NumberSequenceKeypoint.new(0, tp.Value or 0)
                 tpoints[2] = NumberSequenceKeypoint.new(1, tp.Value or 0)
+            else
+                -- ensure sequence starts at 0 and ends at 1 by duplicating endpoints if necessary
+                local first = keypoints[1]
+                local last = keypoints[#keypoints]
+                local firstTime = first and first.Time or nil
+                local lastTime = last and last.Time or nil
+
+                if firstTime == nil or firstTime > 0 then
+                    local val = first and first.Value or Color3.new(1,1,1)
+                    local tval = (tpoints[1] and tpoints[1].Value) or 0
+                    table.insert(keypoints, 1, ColorSequenceKeypoint.new(0, val))
+                    table.insert(tpoints, 1, NumberSequenceKeypoint.new(0, tval))
+                end
+
+                if lastTime == nil or lastTime < 1 then
+                    local val = last and last.Value or Color3.new(1,1,1)
+                    local tval = (tpoints[#tpoints] and tpoints[#tpoints].Value) or 0
+                    table.insert(keypoints, ColorSequenceKeypoint.new(1, val))
+                    table.insert(tpoints, NumberSequenceKeypoint.new(1, tval))
+                end
             end
 
             GradientUI.Color = ColorSequence.new(keypoints)
