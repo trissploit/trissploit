@@ -3898,9 +3898,14 @@ do
 
             -- sync gradient selected stop with current picker color
             if Info.Gradient and SelectedStop then
-                SelectedStop.color = ColorPicker.Value
-                SelectedStop.transparency = ColorPicker.Transparency
-                UpdateGradientRender()
+                local ok, err = pcall(function()
+                    SelectedStop.color = ColorPicker.Value
+                    SelectedStop.transparency = ColorPicker.Transparency
+                    UpdateGradientRender()
+                end)
+                if not ok then
+                    warn("Gradient sync failed:", err)
+                end
             end
         end
 
