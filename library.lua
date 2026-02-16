@@ -774,56 +774,72 @@ local function CheckDepbox(Box, Search)
 
     for _, ElementInfo in pairs(Box.Elements) do
         if ElementInfo.Type == "Divider" then
-            ElementInfo.Holder.Visible = false
+            if ElementInfo.Holder then
+                ElementInfo.Holder.Visible = false
+            end
             continue
         elseif ElementInfo.SubButton then
-            --// Check if any of the Buttons Name matches with Search
             local Visible = false
 
-            --// Check if Search matches Element's Name and if Element is Visible
-            if ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
+            if ElementInfo.Text and ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
                 Visible = true
             else
-                ElementInfo.Base.Visible = false
+                if ElementInfo.Base then
+                    ElementInfo.Base.Visible = false
+                end
             end
-            if ElementInfo.SubButton.Text:lower():match(Search) and ElementInfo.SubButton.Visible then
+
+            if ElementInfo.SubButton.Text and ElementInfo.SubButton.Text:lower():match(Search) and ElementInfo.SubButton.Visible then
                 Visible = true
             else
-                ElementInfo.SubButton.Base.Visible = false
+                if ElementInfo.SubButton.Base then
+                    ElementInfo.SubButton.Base.Visible = false
+                end
             end
-            ElementInfo.Holder.Visible = Visible
+
+            if ElementInfo.Holder then
+                ElementInfo.Holder.Visible = Visible
+            end
+
             if Visible then
-                VisibleElements += 1
+                VisibleElements = VisibleElements + 1
             end
 
             continue
         end
 
-        --// Check if Search matches Element's Name and if Element is Visible
         if ElementInfo.Text and ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
-            ElementInfo.Holder.Visible = true
-            VisibleElements += 1
+            if ElementInfo.Holder then
+                ElementInfo.Holder.Visible = true
+            end
+            VisibleElements = VisibleElements + 1
         else
-            ElementInfo.Holder.Visible = false
+            if ElementInfo.Holder then
+                ElementInfo.Holder.Visible = false
+            end
         end
     end
 
     for _, Depbox in pairs(Box.DependencyBoxes) do
-        if not Depbox.Visible then
+        if not Depbox or not Depbox.Visible then
             continue
         end
 
-        VisibleElements += CheckDepbox(Depbox, Search)
+        VisibleElements = VisibleElements + CheckDepbox(Depbox, Search)
     end
 
     return VisibleElements
 end
 local function RestoreDepbox(Box)
     for _, ElementInfo in pairs(Box.Elements) do
-        ElementInfo.Holder.Visible = typeof(ElementInfo.Visible) == "boolean" and ElementInfo.Visible or true
+        if ElementInfo.Holder then
+            ElementInfo.Holder.Visible = typeof(ElementInfo.Visible) == "boolean" and ElementInfo.Visible or true
+        end
 
         if ElementInfo.SubButton then
-            ElementInfo.Base.Visible = ElementInfo.Visible
+            if ElementInfo.Base then
+                ElementInfo.Base.Visible = ElementInfo.Visible
+            end
             if ElementInfo.SubButton.Base then
                 ElementInfo.SubButton.Base.Visible = ElementInfo.SubButton.Visible
             end
@@ -831,10 +847,12 @@ local function RestoreDepbox(Box)
     end
 
     Box:Resize()
-    Box.Holder.Visible = true
+    if Box.Holder then
+        Box.Holder.Visible = true
+    end
 
     for _, Depbox in pairs(Box.DependencyBoxes) do
-        if not Depbox.Visible then
+        if not Depbox or not Depbox.Visible then
             continue
         end
 
