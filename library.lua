@@ -3827,6 +3827,10 @@ do
                 Parent = DotsContainer,
             })
             New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Dot })
+            -- small persistent dark outline for visibility
+            local SmallStroke = New("UIStroke", { Color = "Dark", Thickness = 1, Transparency = 0, Parent = Dot })
+            Library.Registry[SmallStroke] = { Color = "Dark" }
+            -- accent outline shown only for selected dot
             local OutlineStroke = New("UIStroke", { Color = "AccentColor", Thickness = 2, Transparency = 1, Parent = Dot })
             Library.Registry[OutlineStroke] = { Color = "AccentColor" }
 
