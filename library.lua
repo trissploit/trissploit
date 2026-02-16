@@ -3955,12 +3955,32 @@ do
                 pcall(function() PlusButton.Image = PlusIcon.Url end)
                 if PlusIcon.ImageRectOffset then pcall(function() PlusButton.ImageRectOffset = PlusIcon.ImageRectOffset end) end
                 if PlusIcon.ImageRectSize then pcall(function() PlusButton.ImageRectSize = PlusIcon.ImageRectSize end) end
+                if (PlusIcon.ImageRectOffset or PlusIcon.ImageRectSize) then
+                    local g = PlusButton:FindFirstChild("LucideAccentGradient") or PlusButton:FindFirstChildOfClass("UIGradient")
+                    if not g then
+                        g = Instance.new("UIGradient")
+                        g.Name = "LucideAccentGradient"
+                        g.Parent = PlusButton
+                    end
+                    pcall(function() g.Color = Library:GetAccentGradientSequence() end)
+                    Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
+                end
             end
             local MinusIcon = Library:GetIcon("minus")
             if MinusIcon and MinusIcon.Url then
                 pcall(function() MinusButton.Image = MinusIcon.Url end)
                 if MinusIcon.ImageRectOffset then pcall(function() MinusButton.ImageRectOffset = MinusIcon.ImageRectOffset end) end
                 if MinusIcon.ImageRectSize then pcall(function() MinusButton.ImageRectSize = MinusIcon.ImageRectSize end) end
+                if (MinusIcon.ImageRectOffset or MinusIcon.ImageRectSize) then
+                    local g2 = MinusButton:FindFirstChild("LucideAccentGradient") or MinusButton:FindFirstChildOfClass("UIGradient")
+                    if not g2 then
+                        g2 = Instance.new("UIGradient")
+                        g2.Name = "LucideAccentGradient"
+                        g2.Parent = MinusButton
+                    end
+                    pcall(function() g2.Color = Library:GetAccentGradientSequence() end)
+                    Library.Registry[g2] = { Color = function() return Library:GetAccentGradientSequence() end }
+                end
             end
 
             PlusButton.MouseButton1Click:Connect(function()
@@ -7420,6 +7440,16 @@ function Library:Notify(...)
         if iconData.ImageRectSize then
             pcall(function() Img.ImageRectSize = iconData.ImageRectSize end)
         end
+        if iconData.ImageRectOffset or iconData.ImageRectSize then
+            local g = Img:FindFirstChild("LucideAccentGradient") or Img:FindFirstChildOfClass("UIGradient")
+            if not g then
+                g = Instance.new("UIGradient")
+                g.Name = "LucideAccentGradient"
+                g.Parent = Img
+            end
+            pcall(function() g.Color = Library:GetAccentGradientSequence() end)
+            Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
+        end
     end
 
     local TimerHolder = New("Frame", {
@@ -8854,6 +8884,16 @@ function Library:CreateWindow(WindowInfo)
                             end
                             if icon.ImageRectSize then
                                 pcall(function() ToggleBtn.ImageRectSize = icon.ImageRectSize end)
+                            end
+                            if icon.ImageRectOffset or icon.ImageRectSize then
+                                local g = ToggleBtn:FindFirstChild("LucideAccentGradient") or ToggleBtn:FindFirstChildOfClass("UIGradient")
+                                if not g then
+                                    g = Instance.new("UIGradient")
+                                    g.Name = "LucideAccentGradient"
+                                    g.Parent = ToggleBtn
+                                end
+                                pcall(function() g.Color = Library:GetAccentGradientSequence() end)
+                                Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
                             end
                         else
                             ToggleBtn.Image = ""
