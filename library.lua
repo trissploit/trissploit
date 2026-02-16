@@ -7835,11 +7835,20 @@ function Library:CreateWindow(WindowInfo)
         do
             Library._RotatingGradients = Library._RotatingGradients or {}
             Library.AddRotatingOutline = Library.AddRotatingOutline or function(ParentFrame)
-                local thickness = math.max(1, math.floor(2 * Library.DPIScale))
-                local top = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(1, 0, 0, thickness), Position = UDim2.new(0, 0, 0, 0), Parent = ParentFrame, ZIndex = 999 })
-                local right = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, 1, 0), Position = UDim2.new(1, -thickness, 0, 0), Parent = ParentFrame, ZIndex = 999 })
-                local bottom = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(1, 0, 0, thickness), Position = UDim2.new(0, 0, 1, -thickness), Parent = ParentFrame, ZIndex = 999 })
-                local left = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, 1, 0), Position = UDim2.new(0, 0, 0, 0), Parent = ParentFrame, ZIndex = 999 })
+                local thickness = math.clamp(math.max(1, math.floor(2 * Library.DPIScale)), 1, 3)
+                local segFrac = 0.15 -- fraction of edge to cover
+                local parentZ = 1
+                pcall(function() parentZ = ParentFrame.ZIndex or 1 end)
+                local z = parentZ + 1
+
+                -- top segment centered horizontally
+                local top = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(segFrac, 0, 0, thickness), Position = UDim2.new(0.5 - segFrac/2, 0, 0, 0), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
+                -- right segment centered vertically
+                local right = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, segFrac, 0), Position = UDim2.new(1, -thickness, 0.5 - segFrac/2, 0), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
+                -- bottom segment centered horizontally
+                local bottom = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(segFrac, 0, 0, thickness), Position = UDim2.new(0.5 - segFrac/2, 0, 1, -thickness), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
+                -- left segment centered vertically
+                local left = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, segFrac, 0), Position = UDim2.new(0, 0, 0.5 - segFrac/2, 0), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
 
                 local function makeGrad(Part)
                     local g = New("UIGradient", { Parent = Part })
