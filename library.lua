@@ -60,7 +60,18 @@ do
             table.remove(Segments, #Segments)
         end
 
-        --// Gradient Picker (optional) \--
+        for _, Segment in ipairs(Segments) do
+            if not isfolder(TraversedPath .. Segment) then
+                makefolder(TraversedPath .. Segment)
+            end
+
+            TraversedPath = TraversedPath .. Segment .. "/"
+        end
+
+        return TraversedPath
+    end
+
+    --// Gradient Picker (optional) \--
         local GradientHolder, GradientBar, GradientUI, DotsContainer, PlusButton
         local GradientStops = {}
         local SelectedStop = nil
