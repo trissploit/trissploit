@@ -70,7 +70,6 @@ do
 
         return TraversedPath
     end
-    end
 
     function CustomImageManager.AddAsset(AssetName: string, RobloxAssetId: number, URL: string, ForceRedownload: boolean?)
         if CustomImageManagerAssets[AssetName] ~= nil then
