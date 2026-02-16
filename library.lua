@@ -3910,7 +3910,7 @@ do
                 if PlusIcon.ImageRectSize then pcall(function() PlusButton.ImageRectSize = PlusIcon.ImageRectSize end) end
             end
 
-            GradientBar = New("Frame", { BackgroundColor3 = "White", Size = UDim2.new(1, -34, 0, 12), Parent = GradientHolder })
+            GradientBar = New("Frame", { BackgroundColor3 = "White", Size = UDim2.new(1, -24, 0, 12), Parent = GradientHolder })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = GradientBar })
 
             GradientUI = New("UIGradient", { Parent = GradientBar })
@@ -3947,10 +3947,12 @@ do
 
             ColorPicker.Value = Color3.fromHSV(ColorPicker.Hue, ColorPicker.Sat, ColorPicker.Vib)
 
-            Holder.BackgroundColor3 = ColorPicker.Value
-            Holder.BorderColor3 = Library:GetDarkerColor(ColorPicker.Value)
             local _curTrans = tonumber(ColorPicker.Transparency) or 0
             HolderTransparency.ImageTransparency = (1 - _curTrans)
+            if not Info.Gradient then
+                Holder.BackgroundColor3 = ColorPicker.Value
+                Holder.BorderColor3 = Library:GetDarkerColor(ColorPicker.Value)
+            end
 
             SatVipMap.BackgroundColor3 = Color3.fromHSV(ColorPicker.Hue, 1, 1)
             if TransparencyColor then
