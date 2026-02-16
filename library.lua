@@ -3735,7 +3735,7 @@ do
         end
 
         --// Gradient Picker (optional) \\--
-        local GradientHolder, GradientBar, GradientUI, DotsContainer, PlusButton
+        local GradientHolder, GradientBar, GradientUI, DotsContainer, PlusButton, PreviewUI
         local GradientStops = {}
         local SelectedStop = nil
 
@@ -3783,9 +3783,9 @@ do
             GradientUI.Transparency = NumberSequence.new(tpoints)
             -- update preview gradient if present
             pcall(function()
-                if GradientUI._preview and GradientUI._preview.Parent then
-                    GradientUI._preview.Color = ColorSequence.new(keypoints)
-                    GradientUI._preview.Transparency = NumberSequence.new(tpoints)
+                if PreviewUI and PreviewUI.Parent then
+                    PreviewUI.Color = ColorSequence.new(keypoints)
+                    PreviewUI.Transparency = NumberSequence.new(tpoints)
                 end
             end)
 
@@ -3841,6 +3841,12 @@ do
                         ColorPicker:SetValueRGB(stop.color or Color3.new(1,1,1), stop.transparency or 0)
                     end
                     UpdateGradientRender()
+                    -- open the color menu so user can edit the selected stop immediately
+                    pcall(function()
+                        if ColorMenu and type(ColorMenu.Open) == "function" then
+                            ColorMenu:Open()
+                        end
+                    end)
                 end)
             end)
 
@@ -3905,7 +3911,7 @@ do
             -- small preview box to display the full gradient
             local PreviewBox = New("Frame", { BackgroundColor3 = "White", Size = UDim2.fromOffset(36, 12), Parent = GradientHolder })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = PreviewBox })
-            local PreviewUI = New("UIGradient", { Parent = PreviewBox })
+            PreviewUI = New("UIGradient", { Parent = PreviewBox })
 
             DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
 
@@ -3918,8 +3924,7 @@ do
             -- initialize with one stop in middle
             AddGradientStop(0.5)
 
-            -- expose preview UI to the update function via closure
-            GradientUI._preview = PreviewUI
+            -- PreviewUI is assigned above; no need to attach to instance
         end
 
         --// End \\--
