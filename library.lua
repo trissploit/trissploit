@@ -8413,7 +8413,7 @@ function Library:CreateWindow(WindowInfo)
                 GroupboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
                     BackgroundTransparency = 0,
-                    Size = UDim2.fromScale(1, 0),
+                    Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale)),
                     Parent = BoxHolder,
                     DPIExclude = {
                         BackgroundTransparency = true,
@@ -8548,16 +8548,16 @@ function Library:CreateWindow(WindowInfo)
                     end)
                 end
 
-                GroupboxContainer = New("Frame", {
-                    BackgroundTransparency = 1,
-                    Position = UDim2.fromOffset(0, 35),
-                    Size = UDim2.new(1, 0, 1, -35),
-                    Parent = GroupboxHolder,
-                })
-
-                GroupboxList = New("UIListLayout", {
-                    Padding = UDim.new(0, 8),
-                    Parent = GroupboxContainer,
+                DepGroupboxContainer = New("Frame", {
+                    BackgroundColor3 = "BackgroundColor",
+                    BackgroundTransparency = 0,
+                    Size = UDim2.new(1, 0, 0, math.ceil(18 * Library.DPIScale)),
+                    Visible = false,
+                    Parent = BoxHolder,
+                    DPIExclude = {
+                        BackgroundTransparency = true,
+                        Size = true,
+                    },
                 })
                 New("UIPadding", {
                     PaddingBottom = UDim.new(0, 7),
@@ -8629,7 +8629,7 @@ function Library:CreateWindow(WindowInfo)
             local GroupboxHolder = New("Frame", {
                 BackgroundColor3 = "BackgroundColor",
                 BackgroundTransparency = 0,
-                Size = UDim2.fromScale(1, 0),
+                Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale)),
                 Parent = BoxHolder,
                 DPIExclude = {
                     BackgroundTransparency = true,
@@ -9131,7 +9131,7 @@ function Library:CreateWindow(WindowInfo)
                 TabboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
                     BackgroundTransparency = 0,
-                    Size = UDim2.fromScale(1, 0),
+                    Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale)),
                     Parent = BoxHolder,
                     DPIExclude = {
                         BackgroundTransparency = true,
