@@ -1593,6 +1593,11 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
             elseif k == "TextSize" then
                 DPIProperties[k] = v
                 v = ApplyTextScale(v)
+            elseif k == "ScrollBarThickness" then
+                DPIProperties[k] = v
+                if typeof(v) == "number" then
+                    v = math.ceil(v * Library.DPIScale)
+                end
             end
         end
 
@@ -2393,7 +2398,7 @@ function Library:AddContextMenu(
             BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             CanvasSize = UDim2.fromOffset(0, 0),
             ScrollBarImageColor3 = "OutlineColor",
-            ScrollBarThickness = math.ceil((List == 2 and 3 or 0) * Library.DPIScale),
+            ScrollBarThickness = (List == 2 and 6 or 0),
             ScrollingEnabled = true,
             Size = typeof(Size) == "function" and Size() or Size,
             TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
@@ -6005,7 +6010,6 @@ do
         Library:UpdateDPI(MenuTable.Menu, {
             Position = false,
             Size = false,
-            ScrollBarThickness = 3,
         })
 
         function Dropdown:RecalculateListSize(Count)
@@ -8681,12 +8685,16 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
-                ScrollBarThickness = math.ceil(3 * Library.DPIScale),
+                ScrollBarThickness = 6,
                 ScrollBarImageColor3 = "OutlineColor",
                 ScrollingEnabled = true,
                 BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
                 TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
                 Parent = TabContainer,
+                
+                DPIExclude = {
+                    ScrollBarThickness = false,
+                },
             })
             New("UIListLayout", {
                 Padding = UDim.new(0, 6),
@@ -8712,17 +8720,11 @@ function Library:CreateWindow(WindowInfo)
                 })
 
                 TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                Library:UpdateDPI(TabLeft, { 
-                    Size = TabLeft.Size,
-                    ScrollBarThickness = 3,
-                })
+                Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
 
                 TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
                     TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                    Library:UpdateDPI(TabLeft, { 
-                        Size = TabLeft.Size,
-                        ScrollBarThickness = 3,
-                    })
+                    Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
                 end)
             end
 
@@ -8732,12 +8734,16 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
                 Position = UDim2.fromScale(1, 0),
-                ScrollBarThickness = math.ceil(3 * Library.DPIScale),
+                ScrollBarThickness = 6,
                 ScrollBarImageColor3 = "OutlineColor",
                 ScrollingEnabled = true,
                 BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
                 TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
                 Parent = TabContainer,
+                
+                DPIExclude = {
+                    ScrollBarThickness = false,
+                },
             })
             New("UIListLayout", {
                 Padding = UDim.new(0, 6),
@@ -8763,17 +8769,11 @@ function Library:CreateWindow(WindowInfo)
                 })
 
                 TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                Library:UpdateDPI(TabRight, { 
-                    Size = TabRight.Size,
-                    ScrollBarThickness = 3,
-                })
+                Library:UpdateDPI(TabRight, { Size = TabRight.Size })
 
                 TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
                     TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                    Library:UpdateDPI(TabRight, { 
-                        Size = TabRight.Size,
-                        ScrollBarThickness = 3,
-                    })
+                    Library:UpdateDPI(TabRight, { Size = TabRight.Size })
                 end)
             end
 		end
@@ -9022,7 +9022,7 @@ function Library:CreateWindow(WindowInfo)
 
             do
                 GroupboxHolder = New("Frame", {
-                    BackgroundColor3 = Library.Scheme.BackgroundColor,
+                    BackgroundColor3 = "BackgroundColor",
                     BackgroundTransparency = 0,
                     Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale)),
                     Parent = BoxHolder,
@@ -9031,14 +9031,13 @@ function Library:CreateWindow(WindowInfo)
                         Size = true,
                     },
                 })
-                -- Register for theme updates IMMEDIATELY to ensure background is visible
-                Library:AddToRegistry(GroupboxHolder, { BackgroundColor3 = "BackgroundColor" })
                 -- Ensure no leftover DPI registry Size entry overrides this holder
                 pcall(function()
                     if Library.DPIRegistry and Library.DPIRegistry[GroupboxHolder] then
                         Library.DPIRegistry[GroupboxHolder]["Size"] = nil
                     end
                 end)
+                -- Force background to be opaque and prevent any accidental transparency changes
                 local transparencyConnection = GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
                     if GroupboxHolder.BackgroundTransparency ~= 0 then
                         GroupboxHolder.BackgroundTransparency = 0
@@ -9046,8 +9045,20 @@ function Library:CreateWindow(WindowInfo)
                 end)
                 -- Store connection to prevent garbage collection
                 Library:GiveSignal(transparencyConnection)
-                -- Explicitly ensure transparency is 0 after signal connection
-                task.defer(function() GroupboxHolder.BackgroundTransparency = 0 end)
+                -- Explicitly ensure transparency is 0 and color is applied
+                GroupboxHolder.BackgroundTransparency = 0
+                if Library.Scheme and Library.Scheme.BackgroundColor then
+                    GroupboxHolder.BackgroundColor3 = Library.Scheme.BackgroundColor
+                end
+                -- Force re-apply after a frame to ensure it sticks
+                task.defer(function()
+                    if GroupboxHolder and GroupboxHolder.Parent then
+                        GroupboxHolder.BackgroundTransparency = 0
+                        if Library.Scheme and Library.Scheme.BackgroundColor then
+                            GroupboxHolder.BackgroundColor3 = Library.Scheme.BackgroundColor
+                        end
+                    end
+                end)
                 -- Prevent accidental collapse of groupbox holder size
                 do
                     local _sizeGuard = false
