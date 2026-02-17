@@ -613,74 +613,86 @@ local function GetLighterColor(Color)
 end
 
 function Library:GetAccentGradientSequence()
-    -- Prefer full gradient stops if available (set by ThemeManager / ColorPicker)
     local g = self.Scheme and self.Scheme.AccentGradient
+    local defaultColor = (self.Scheme and self.Scheme.AccentColor) or Color3.fromRGB(255, 255, 255)
+
+    -- If explicit multi-stop gradient is present: normalize, clamp, ensure endpoints
     if type(g) == "table" and type(g.Stops) == "table" and #g.Stops > 0 then
-        local keypoints = {}
-        local defaultColor = self.Scheme and self.Scheme.AccentColor or Color3.fromRGB(255, 255, 255)
-        
+        local stops = {}
         for _, s in ipairs(g.Stops) do
             local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
             local col = s and s.color
-            
-            -- Parse hex string to Color3 if needed
             if typeof(col) == "string" and col:match("^#?%x%x%x%x%x%x$") then
                 local ok, c = pcall(Color3.fromHex, col:gsub("#", ""))
                 col = (ok and typeof(c) == "Color3") and c or defaultColor
             elseif typeof(col) ~= "Color3" then
                 col = defaultColor
             end
-            
-            table.insert(keypoints, ColorSequenceKeypoint.new(pos, col))
+            table.insert(stops, { pos = pos, color = col })
         end
 
-        -- Ensure at least two keypoints for ColorSequence
+        table.sort(stops, function(a, b) return a.pos < b.pos end)
+
+        -- Ensure endpoint at 0.0
+        if stops[1].pos > 0 then
+            table.insert(stops, 1, { pos = 0, color = stops[1].color })
+        end
+        -- Ensure endpoint at 1.0
+        if stops[#stops].pos < 1 then
+            table.insert(stops, { pos = 1, color = stops[#stops].color })
+        end
+
+        local keypoints = {}
+        for _, s in ipairs(stops) do
+            table.insert(keypoints, ColorSequenceKeypoint.new(s.pos, s.color))
+        end
+
+        -- Guarantee at least two keypoints
         if #keypoints == 1 then
             table.insert(keypoints, ColorSequenceKeypoint.new(1, keypoints[1].Value))
         end
+
         return ColorSequence.new(keypoints)
     end
 
-    -- Fallback to legacy start/end values (backwards compatible)
-    local defaultColor = self.Scheme.AccentColor
-    local function parseColor(col)
-        if typeof(col) == "Color3" then
-            return col
-        elseif typeof(col) == "string" and col ~= "" then
-            local ok, c = pcall(Color3.fromHex, col)
-            return (ok and typeof(c) == "Color3") and c or defaultColor
-        end
-        return defaultColor
-    end
-
-    local s = parseColor(self.Scheme.AccentGradientStart)
-    local e = parseColor(self.Scheme.AccentGradientEnd)
-
-    return ColorSequence.new({
-        ColorSequenceKeypoint.new(0, s),
-        ColorSequenceKeypoint.new(1, e),
-    })
+    -- No multi-stop gradient defined: return a solid ColorSequence using AccentColor
+    local c = defaultColor
+    return ColorSequence.new({ ColorSequenceKeypoint.new(0, c), ColorSequenceKeypoint.new(1, c) })
 end
 
 function Library:GetAccentGradientTransparencySequence()
     local g = self.Scheme and self.Scheme.AccentGradient
+
     if type(g) == "table" and type(g.Stops) == "table" and #g.Stops > 0 then
-        local keypoints = {}
+        local stops = {}
         for _, s in ipairs(g.Stops) do
             local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
             local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
-            table.insert(keypoints, NumberSequenceKeypoint.new(pos, transp))
+            table.insert(stops, { pos = pos, transp = transp })
         end
-        
-        -- Ensure at least two keypoints for NumberSequence
+
+        table.sort(stops, function(a, b) return a.pos < b.pos end)
+
+        if stops[1].pos > 0 then
+            table.insert(stops, 1, { pos = 0, transp = stops[1].transp })
+        end
+        if stops[#stops].pos < 1 then
+            table.insert(stops, { pos = 1, transp = stops[#stops].transp })
+        end
+
+        local keypoints = {}
+        for _, s in ipairs(stops) do
+            table.insert(keypoints, NumberSequenceKeypoint.new(s.pos, s.transp))
+        end
+
         if #keypoints == 1 then
             table.insert(keypoints, NumberSequenceKeypoint.new(1, keypoints[1].Value))
         end
         return NumberSequence.new(keypoints)
     end
 
-    -- Legacy fallback: no transparency information available
-    return NumberSequence.new(0)
+    -- Default: fully opaque (no transparency) at both ends
+    return NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0) })
 end
 
 function Library:GetAccentSolidSequence()
