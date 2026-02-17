@@ -1310,11 +1310,7 @@ function Library:UpdateColorsUsingRegistry()
                         local list = Groupbox.Container:FindFirstChildOfClass("UIListLayout")
                         if list then
                             local contentH = list.AbsoluteContentSize.Y or 0
-                            if Groupbox.ExpandedState and Groupbox.ExpandedState.value then
-                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil((contentH + 53) * Library.DPIScale))
-                            else
-                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
-                            end
+                            Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil((contentH + 53) * Library.DPIScale))
                         end
                         if Groupbox.Holder.BackgroundTransparency ~= 0 then
                             Groupbox.Holder.BackgroundTransparency = 0
@@ -1404,7 +1400,7 @@ function Library:SetDPIScale(DPIScale: number)
         end
     end
 
-    -- Ensure groupbox container visibility matches expanded state after DPI change
+    -- Ensure groupbox holder background transparency after DPI change
     for _, Tab in pairs(Library.Tabs) do
         if Tab.IsKeyTab then
             continue
@@ -1412,9 +1408,6 @@ function Library:SetDPIScale(DPIScale: number)
 
         for _, Groupbox in pairs(Tab.Groupboxes) do
             pcall(function()
-                if Groupbox.ExpandedState and Groupbox.Container then
-                    Groupbox.Container.Visible = Groupbox.ExpandedState.value
-                end
                 -- Ensure holder background transparency remains visible after DPI change
                 if Groupbox.Holder and Groupbox.Holder.BackgroundTransparency ~= 0 then
                     Groupbox.Holder.BackgroundTransparency = 0
@@ -1456,11 +1449,7 @@ function Library:SetDPIScale(DPIScale: number)
                         local list = Groupbox.Container:FindFirstChildOfClass("UIListLayout")
                         if list then
                             local contentH = list.AbsoluteContentSize.Y
-                            if Groupbox.ExpandedState and Groupbox.ExpandedState.value then
-                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil((contentH + 53) * Library.DPIScale))
-                            else
-                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
-                            end
+                            Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil((contentH + 53) * Library.DPIScale))
                         end
                         if Groupbox.Holder.BackgroundTransparency ~= 0 then
                             Groupbox.Holder.BackgroundTransparency = 0
@@ -4796,7 +4785,27 @@ do
                     SubButton.TooltipTable.Disabled = SubButton.Disabled
                 end
 
-            ... (truncated for brevity) ...
+            end
+
+            function SubButton:SetVisible(Visible)
+                SubButton.Visible = Visible
+                if SubButton.Base then
+                    SubButton.Base.Visible = SubButton.Visible
+                end
+                Groupbox:Resize()
+            end
+
+            function SubButton:SetText(Text)
+                SubButton.Text = Text
+                if SubButton.Base then
+                    SubButton.Base.Text = Text
+                end
+            end
+
+            SubButton:UpdateColors()
+
+            return SubButton
+        end
 
     function Funcs:AddCheckbox(Idx, Info)
         Info = Library:Validate(Info, Templates.Toggle)
@@ -10114,4 +10123,6 @@ Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 getgenv().Library = Library
+end
+
 return Library
