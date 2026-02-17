@@ -1317,7 +1317,18 @@ function Library:UpdateDPI(Instance, Properties)
 end
 
 function Library:SetDPIScale(DPIScale: number)
-    Library.DPIScale = DPIScale / 100
+    -- Accept either a percent (e.g. 100) or a ratio (e.g. 1.0).
+    local normalized = DPIScale
+    if typeof(normalized) ~= "number" then
+        normalized = 1
+    end
+    if normalized > 2 then
+        normalized = normalized / 100
+    end
+    -- clamp to reasonable bounds to avoid near-zero or huge scales
+    normalized = math.clamp(normalized, 0.25, 4)
+
+    Library.DPIScale = normalized
     Library.MinSize = Library.OriginalMinSize * Library.DPIScale
 
     for Instance, Properties in pairs(Library.DPIRegistry) do
