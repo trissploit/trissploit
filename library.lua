@@ -1373,6 +1373,13 @@ function Library:SetDPIScale(DPIScale: number)
                 continue
             elseif Property == "TextSize" then
                 Instance[Property] = ApplyTextScale(Value)
+            elseif Property == "ScrollBarThickness" then
+                -- Handle ScrollBarThickness with DPI scaling
+                if typeof(Value) == "UDim" then
+                    Instance[Property] = math.ceil(Value.Offset * Library.DPIScale)
+                elseif typeof(Value) == "number" then
+                    Instance[Property] = math.ceil(Value * Library.DPIScale)
+                end
             else
                 Instance[Property] = ApplyDPIScale(Value, DPIOffset[Property])
             end
@@ -2386,7 +2393,8 @@ function Library:AddContextMenu(
             BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             CanvasSize = UDim2.fromOffset(0, 0),
             ScrollBarImageColor3 = "OutlineColor",
-            ScrollBarThickness = List == 2 and 2 or 0,
+            ScrollBarThickness = math.ceil((List == 2 and 3 or 0) * Library.DPIScale),
+            ScrollingEnabled = true,
             Size = typeof(Size) == "function" and Size() or Size,
             TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             Visible = false,
@@ -2395,6 +2403,7 @@ function Library:AddContextMenu(
 
             DPIExclude = {
                 Position = true,
+                ScrollBarThickness = false,
             },
         })
     else
@@ -2501,6 +2510,10 @@ function Library:AddContextMenu(
                     end
                 end
 
+                -- Final clamp to ensure dropdown never goes outside main window bounds
+                desiredX = math.clamp(desiredX, mainX, math.max(mainX, mainX + mainW - menuW))
+                desiredY = math.clamp(desiredY, mainY, math.max(mainY, mainY + mainH - menuH))
+
                 Menu.Position = UDim2.fromOffset(math.floor(desiredX), math.floor(desiredY))
             end
         end)
@@ -2547,6 +2560,25 @@ function Library:AddContextMenu(
                     else
                         desiredX = math.clamp(desiredX, mainX, mainX + mainW - menuW)
                     end
+
+                    -- Vertical placement while tracking: prefer below, flip above if needed
+                    if menuH <= spaceBelow then
+                        if desiredY < holderBottom then desiredY = holderBottom end
+                    elseif menuH <= spaceAbove then
+                        desiredY = Holder.AbsolutePosition.Y - menuH
+                    else
+                        if menuH > mainH then
+                            desiredY = mainY
+                        else
+                            desiredY = math.clamp(desiredY, mainY, mainY + mainH - menuH)
+                        end
+                    end
+
+                    -- Final clamp for tracking update
+                    desiredX = math.clamp(desiredX, mainX, math.max(mainX, mainX + mainW - menuW))
+                    desiredY = math.clamp(desiredY, mainY, math.max(mainY, mainY + mainH - menuH))
+
+                    Menu.Position = UDim2.fromOffset(math.floor(desiredX), math.floor(desiredY))
 
                     if menuH <= spaceBelow then
                         if desiredY < holderBottom then desiredY = holderBottom end
@@ -5973,6 +6005,7 @@ do
         Library:UpdateDPI(MenuTable.Menu, {
             Position = false,
             Size = false,
+            ScrollBarThickness = 3,
         })
 
         function Dropdown:RecalculateListSize(Count)
@@ -7610,7 +7643,7 @@ function Library:Notify(...)
             Position = UDim2.fromOffset(0, 0),
             ZIndex = 10,
             ScaleType = Enum.ScaleType.Crop,
-            Visible = true,
+            Visible = false, -- Start invisible until notification slides in
         })
         -- store reference
         Data._icon = Img
@@ -7703,7 +7736,14 @@ function Library:Notify(...)
         Position = UDim2.fromOffset(0, 0),
     })
     showTween:Play()
-    -- icon is shown immediately (no delayed reveal)
+    -- Show icon after notification slides in
+    if Data._icon then
+        showTween.Completed:Connect(function()
+            if Data._icon and Data._icon.Parent then
+                Data._icon.Visible = true
+            end
+        end)
+    end
 
     task.delay(Library.NotifyTweenInfo.Time, function()
         if Data.Persist then
@@ -8641,7 +8681,11 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
-                ScrollBarThickness = 0,
+                ScrollBarThickness = math.ceil(3 * Library.DPIScale),
+                ScrollBarImageColor3 = "OutlineColor",
+                ScrollingEnabled = true,
+                BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+                TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
                 Parent = TabContainer,
             })
             New("UIListLayout", {
@@ -8668,11 +8712,17 @@ function Library:CreateWindow(WindowInfo)
                 })
 
                 TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
+                Library:UpdateDPI(TabLeft, { 
+                    Size = TabLeft.Size,
+                    ScrollBarThickness = 3,
+                })
 
                 TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
                     TabLeft.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                    Library:UpdateDPI(TabLeft, { Size = TabLeft.Size })
+                    Library:UpdateDPI(TabLeft, { 
+                        Size = TabLeft.Size,
+                        ScrollBarThickness = 3,
+                    })
                 end)
             end
 
@@ -8682,7 +8732,11 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
                 Position = UDim2.fromScale(1, 0),
-                ScrollBarThickness = 0,
+                ScrollBarThickness = math.ceil(3 * Library.DPIScale),
+                ScrollBarImageColor3 = "OutlineColor",
+                ScrollingEnabled = true,
+                BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+                TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
                 Parent = TabContainer,
             })
             New("UIListLayout", {
@@ -8709,11 +8763,17 @@ function Library:CreateWindow(WindowInfo)
                 })
 
                 TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                Library:UpdateDPI(TabRight, { Size = TabRight.Size })
+                Library:UpdateDPI(TabRight, { 
+                    Size = TabRight.Size,
+                    ScrollBarThickness = 3,
+                })
 
                 TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
                     TabRight.Size = UDim2.new(0, math.floor(TabContainer.AbsoluteSize.X / 2) - 3, 1, 0)
-                    Library:UpdateDPI(TabRight, { Size = TabRight.Size })
+                    Library:UpdateDPI(TabRight, { 
+                        Size = TabRight.Size,
+                        ScrollBarThickness = 3,
+                    })
                 end)
             end
 		end
@@ -8962,7 +9022,7 @@ function Library:CreateWindow(WindowInfo)
 
             do
                 GroupboxHolder = New("Frame", {
-                    BackgroundColor3 = "BackgroundColor",
+                    BackgroundColor3 = Library.Scheme.BackgroundColor,
                     BackgroundTransparency = 0,
                     Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale)),
                     Parent = BoxHolder,
@@ -8971,6 +9031,8 @@ function Library:CreateWindow(WindowInfo)
                         Size = true,
                     },
                 })
+                -- Register for theme updates IMMEDIATELY to ensure background is visible
+                Library:AddToRegistry(GroupboxHolder, { BackgroundColor3 = "BackgroundColor" })
                 -- Ensure no leftover DPI registry Size entry overrides this holder
                 pcall(function()
                     if Library.DPIRegistry and Library.DPIRegistry[GroupboxHolder] then
@@ -8985,7 +9047,7 @@ function Library:CreateWindow(WindowInfo)
                 -- Store connection to prevent garbage collection
                 Library:GiveSignal(transparencyConnection)
                 -- Explicitly ensure transparency is 0 after signal connection
-                GroupboxHolder.BackgroundTransparency = 0
+                task.defer(function() GroupboxHolder.BackgroundTransparency = 0 end)
                 -- Prevent accidental collapse of groupbox holder size
                 do
                     local _sizeGuard = false
@@ -9009,9 +9071,6 @@ function Library:CreateWindow(WindowInfo)
                 Library:UpdateDPI(GroupboxHolder, {
                     Size = false,
                 })
-                -- Ensure groupbox holder is registered for theme updates so its background appears immediately
-                Library:AddToRegistry(GroupboxHolder, { BackgroundColor3 = "BackgroundColor" })
-                Library:UpdateColorsUsingRegistry()
 
                 Library:MakeLine(GroupboxHolder, {
                     Position = UDim2.fromOffset(0, 34),
