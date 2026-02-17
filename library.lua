@@ -7439,7 +7439,39 @@ function Library:Notify(...)
         Holder.BackgroundColor3 = Library.Scheme[notifyColorName]
     end
 
-    -- iconData is used later once the Holder has been sized
+    -- Decide icon for the notification (allow override via Info.Icon or Info.IconName)
+    local iconData = nil
+    do
+        local iconName = nil
+        if Info.IconName then
+            iconName = Info.IconName
+        elseif Info.Icon then
+            iconName = Info.Icon
+        else
+            local t = Data.Type and tostring(Data.Type):lower() or "info"
+            local TypeIconMap = {
+                info = "bell",
+                notice = "bell",
+                success = "check-circle",
+                ok = "check-circle",
+                error = "x-circle",
+                fail = "x-circle",
+                warning = "alert-triangle",
+                warn = "alert-triangle",
+            }
+            iconName = TypeIconMap[t] or "bell"
+        end
+
+        if iconName then
+            -- prefer custom URL if provided; otherwise try lucide asset
+            local ok, data = pcall(function() return Library:GetCustomIcon(iconName) end)
+            if ok and data then
+                iconData = data
+            else
+                pcall(function() iconData = Library:GetIcon(iconName) end)
+            end
+        end
+    end
 
     local Title
     local Desc
