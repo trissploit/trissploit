@@ -686,7 +686,9 @@ function Library:UpdateKeybindFrame()
         end
     end
 
-    Library.KeybindFrame.Size = UDim2.fromOffset((XSize + 18) * Library.DPIScale, 0)
+    -- Set displayed size (scaled) and register the unscaled size for DPI updates
+    Library.KeybindFrame.Size = UDim2.fromOffset(math.ceil((XSize + 18) * Library.DPIScale), 0)
+    Library:UpdateDPI(Library.KeybindFrame, { Size = UDim2.fromOffset(XSize + 18, 0) })
 end
 
 function Library:CreateMobileButton(Toggle)
@@ -1292,6 +1294,36 @@ function Library:UpdateColorsUsingRegistry()
             end)
         end
     end
+
+    -- Recompute sizes for groupboxes and dependent containers that are computed from content
+    -- This ensures groupboxes update correctly when DPIScale changes even if they were
+    -- using AutomaticSize or excluded from DPIRegistry.
+    task.defer(function()
+        for _, Tab in pairs(Library.Tabs) do
+            if Tab.IsKeyTab then
+                continue
+            end
+
+            for _, Groupbox in pairs(Tab.Groupboxes) do
+                pcall(function()
+                    if Groupbox and Groupbox.Container and Groupbox.Holder then
+                        local list = Groupbox.Container:FindFirstChildOfClass("UIListLayout")
+                        if list then
+                            local contentH = list.AbsoluteContentSize.Y or 0
+                            if Groupbox.ExpandedState and Groupbox.ExpandedState.value then
+                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil((contentH + 53) * Library.DPIScale))
+                            else
+                                Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                            end
+                        end
+                        if Groupbox.Holder.BackgroundTransparency ~= 0 then
+                            Groupbox.Holder.BackgroundTransparency = 0
+                        end
+                    end
+                end)
+            end
+        end
+    end)
     
     -- Ensure dependency boxes remain visible
     for _, Dep in pairs(Library.DependencyBoxes or {}) do
