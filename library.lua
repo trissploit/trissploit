@@ -3983,8 +3983,8 @@ do
                 AutoButtonColor = false,
                 Parent = DotsContainer,
             })
-            -- make dots square (no corner radius)
-            New("UICorner", { CornerRadius = UDim.new(0, 0), Parent = Dot })
+            -- apply library corner radius to dots so they follow theme rounding
+            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Dot })
             -- small persistent dark outline for visibility
             local SmallStroke = New("UIStroke", { Color = "Dark", Thickness = 1, Transparency = 0, Parent = Dot })
             Library.Registry[SmallStroke] = { Color = "Dark" }
