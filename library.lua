@@ -613,6 +613,35 @@ local function GetLighterColor(Color)
 end
 
 function Library:GetAccentGradientSequence()
+    -- Prefer full gradient stops if available (set by ThemeManager / ColorPicker)
+    local g = self.Scheme and self.Scheme.AccentGradient
+    if type(g) == "table" and type(g.Stops) == "table" and #g.Stops > 0 then
+        local keypoints = {}
+        for _, s in ipairs(g.Stops) do
+            local pos = tonumber((s and s.pos) or 0) or 0
+            local col = s and s.color
+            if typeof(col) == "string" then
+                local ok, c = pcall(Color3.fromHex, col:gsub("#", ""))
+                if ok and typeof(c) == "Color3" then
+                    col = c
+                else
+                    col = nil
+                end
+            end
+            if typeof(col) ~= "Color3" then
+                col = self.Scheme and self.Scheme.AccentColor or Color3.fromRGB(255,255,255)
+            end
+            table.insert(keypoints, ColorSequenceKeypoint.new(math.clamp(pos, 0, 1), col))
+        end
+
+        -- ensure at least two keypoints for ColorSequence
+        if #keypoints == 1 then
+            table.insert(keypoints, ColorSequenceKeypoint.new(1, keypoints[1].Value))
+        end
+        return ColorSequence.new(keypoints)
+    end
+
+    -- fallback to legacy start/end values (backwards compatible)
     local s = self.Scheme.AccentGradientStart
     local e = self.Scheme.AccentGradientEnd
 
@@ -646,6 +675,25 @@ function Library:GetAccentGradientSequence()
         ColorSequenceKeypoint.new(0, s),
         ColorSequenceKeypoint.new(1, e),
     })
+end
+
+function Library:GetAccentGradientTransparencySequence()
+    local g = self.Scheme and self.Scheme.AccentGradient
+    if type(g) == "table" and type(g.Stops) == "table" and #g.Stops > 0 then
+        local keypoints = {}
+        for _, s in ipairs(g.Stops) do
+            local pos = tonumber((s and s.pos) or 0) or 0
+            local transp = tonumber((s and s.transparency) or 0) or 0
+            table.insert(keypoints, NumberSequenceKeypoint.new(math.clamp(pos, 0, 1), math.clamp(transp, 0, 1)))
+        end
+        if #keypoints == 1 then
+            table.insert(keypoints, NumberSequenceKeypoint.new(1, keypoints[1].Value))
+        end
+        return NumberSequence.new(keypoints)
+    end
+
+    -- legacy fallback: no transparency information available
+    return NumberSequence.new(0)
 end
 
 function Library:GetAccentSolidSequence()
@@ -1653,11 +1701,15 @@ local function New(ClassName: string, Properties: { [string]: any }): any
 
             pcall(function()
                 grad.Color = Library:GetAccentGradientSequence()
+                grad.Transparency = Library:GetAccentGradientTransparencySequence()
             end)
 
             Library.Registry[grad] = {
                 Color = function()
                     return Library:GetAccentGradientSequence()
+                end,
+                Transparency = function()
+                    return Library:GetAccentGradientTransparencySequence()
                 end,
             }
         end
@@ -4125,8 +4177,18 @@ do
                     if not g then
                         g = New("UIGradient", { Name = "LucideAccentGradient", Parent = PlusButton })
                     end
-                    pcall(function() g.Color = Library:GetAccentGradientSequence() end)
-                    Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
+                    pcall(function()
+                        g.Color = Library:GetAccentGradientSequence()
+                        g.Transparency = Library:GetAccentGradientTransparencySequence()
+                    end)
+                    Library.Registry[g] = {
+                        Color = function()
+                            return Library:GetAccentGradientSequence()
+                        end,
+                        Transparency = function()
+                            return Library:GetAccentGradientTransparencySequence()
+                        end,
+                    }
                 end
             end
             local MinusIcon = Library:GetIcon("minus")
@@ -4139,17 +4201,18 @@ do
                     if not g2 then
                         g2 = New("UIGradient", { Name = "LucideAccentGradient", Parent = MinusButton })
                     end
-                    pcall(function() g2.Color = Library:GetAccentGradientSequence() end)
-                    Library.Registry[g2] = { Color = function() return Library:GetAccentGradientSequence() end }
-                end
-            end
-
-            PlusButton.MouseButton1Click:Connect(function()
-                pcall(function()
-                    AddGradientStop(0.5)
-                end)
-            end)
-
+                    pcall(function()
+                        g2.Color = Library:GetAccentGradientSequence()
+                        g2.Transparency = Library:GetAccentGradientTransparencySequence()
+                    end)
+                    Library.Registry[g2] = {
+                        Color = function()
+                            return Library:GetAccentGradientSequence()
+                        end,
+                        Transparency = function()
+                            return Library:GetAccentGradientTransparencySequence()
+                        end,
+                    }
             MinusButton.MouseButton1Click:Connect(function()
                 pcall(function()
                     if not SelectedStop then return end
@@ -4259,6 +4322,51 @@ do
             ColorPicker.Transparency = Info.Transparency and Transparency or 0
             ColorPicker:SetHSVFromRGB(Color)
             ColorPicker:Update()
+        end
+
+        -- Expose gradient stop API so external callers (ThemeManager, savers) can
+        -- read and populate the full gradient (pos, color, transparency).
+        function ColorPicker:GetGradientStops()
+            local out = {}
+            for i, s in ipairs(GradientStops) do
+                table.insert(out, { pos = tonumber(s.pos) or 0, color = s.color, transparency = tonumber(s.transparency) or 0 })
+            end
+            return out
+        end
+
+        function ColorPicker:SetGradientStops(stops)
+            -- destroy existing dots
+            for _, s in ipairs(GradientStops) do
+                if s and s.dot and s.dot.Parent then
+                    pcall(function() s.dot:Destroy() end)
+                end
+            end
+
+            GradientStops = {}
+            SelectedStop = nil
+
+            if type(stops) == "table" then
+                for _, s in ipairs(stops) do
+                    local pos = tonumber((s and s.pos) or 0) or 0
+                    local col = s and s.color
+                    if typeof(col) == "string" and col:match("^#?%x%x%x%x%x%x$") then
+                        local ok, c = pcall(Color3.fromHex, col:gsub("#", ""))
+                        if ok and typeof(c) == "Color3" then
+                            col = c
+                        end
+                    end
+                    local transp = tonumber((s and s.transparency) or 0) or 0
+                    AddGradientStop(pos, col, transp)
+                end
+            end
+
+            -- if we have at least one stop, make the first stop the selected value
+            if #GradientStops > 0 and GradientStops[1] then
+                SelectedStop = GradientStops[1]
+                ColorPicker:SetValueRGB(SelectedStop.color or Color3.new(1,1,1), SelectedStop.transparency or 0)
+            end
+
+            UpdateGradientRender()
         end
 
         Holder.MouseButton1Click:Connect(ColorMenu.Toggle)
@@ -4973,6 +5081,7 @@ do
 
         local CheckboxGradient = New("UIGradient", {
             Color = Library:GetAccentGradientSequence(),
+            Transparency = Library:GetAccentGradientTransparencySequence(),
             Rotation = 60,
             Enabled = false,
             Parent = Checkbox,
@@ -4980,6 +5089,9 @@ do
         Library.Registry[CheckboxGradient] = {
             Color = function()
                 return Library:GetAccentGradientSequence()
+            end,
+            Transparency = function()
+                return Library:GetAccentGradientTransparencySequence()
             end,
         }
 
@@ -5021,6 +5133,7 @@ do
 
             -- Enable gradient only when checked, restore accent gradient colors
             CheckboxGradient.Color = Library:GetAccentGradientSequence()
+            CheckboxGradient.Transparency = Library:GetAccentGradientTransparencySequence()
             CheckboxGradient.Enabled = Toggle.Value
 
             -- Fill the checkbox with gradient start color when checked, main color when unchecked
@@ -5630,12 +5743,16 @@ do
         })
         local FillGradient = New("UIGradient", {
             Color = Library:GetAccentGradientSequence(),
+            Transparency = Library:GetAccentGradientTransparencySequence(),
             Rotation = 90,
             Parent = Fill,
         })
         Library.Registry[FillGradient] = {
             Color = function()
                 return Library:GetAccentGradientSequence()
+            end,
+            Transparency = function()
+                return Library:GetAccentGradientTransparencySequence()
             end,
         }
 
@@ -6216,6 +6333,7 @@ do
                 })
                 local ButtonGradient = New("UIGradient", {
                     Color = Library:GetAccentGradientSequence(),
+                    Transparency = Library:GetAccentGradientTransparencySequence(),
                     Rotation = 90,
                     Enabled = false,
                     Parent = Button,
@@ -6223,6 +6341,9 @@ do
                 Library.Registry[ButtonGradient] = {
                     Color = function()
                         return Library:GetAccentGradientSequence()
+                    end,
+                    Transparency = function()
+                        return Library:GetAccentGradientTransparencySequence()
                     end,
                 }
                 New("UIPadding", {
@@ -7678,8 +7799,14 @@ function Library:Notify(...)
             if not g then
                 g = New("UIGradient", { Name = "LucideAccentGradient", Parent = Img })
             end
-            pcall(function() g.Color = Library:GetAccentGradientSequence() end)
-            Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
+            pcall(function()
+                g.Color = Library:GetAccentGradientSequence()
+                g.Transparency = Library:GetAccentGradientTransparencySequence()
+            end)
+            Library.Registry[g] = {
+                Color = function() return Library:GetAccentGradientSequence() end,
+                Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
+            }
         end
     end
 
@@ -9396,8 +9523,11 @@ function Library:CreateWindow(WindowInfo)
                 DPIExclude = { Size = true },
             })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Fill })
-            local FillGradient = New("UIGradient", { Color = Library:GetAccentGradientSequence(), Rotation = 90, Parent = Fill })
-            Library.Registry[FillGradient] = { Color = function() return Library:GetAccentGradientSequence() end }
+            local FillGradient = New("UIGradient", { Color = Library:GetAccentGradientSequence(), Transparency = Library:GetAccentGradientTransparencySequence(), Rotation = 90, Parent = Fill })
+            Library.Registry[FillGradient] = {
+                Color = function() return Library:GetAccentGradientSequence() end,
+                Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
+            }
 
             -- Slider interaction (reusing library slider behavior)
             local SliderMin, SliderMax, SliderRounding = 0, 100, 0
