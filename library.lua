@@ -7587,16 +7587,19 @@ function Library:Notify(...)
     -- Create icon inside the Holder after sizing so it moves with the notification
     if iconData then
         local Img = New("ImageLabel", {
-            Size = UDim2.fromOffset(18 * Library.DPIScale, 18 * Library.DPIScale),
+            Size = UDim2.fromOffset(14 * Library.DPIScale, 14 * Library.DPIScale),
             BackgroundTransparency = 1,
             Image = iconData.Url,
-            Parent = FakeBackground, -- place as sibling to Holder so UIListLayout won't move it
+            Parent = Holder, -- attach to the notification box so it moves with it
             AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -8, 0, 8), -- top-right inset relative to FakeBackground
+            Position = UDim2.new(1, -8, 0, 8), -- top-right inset relative to Holder
             ZIndex = 8,
             ScaleType = Enum.ScaleType.Crop,
+            Visible = false, -- hide until the notification show animation finishes
         })
-        if iconData.ImageRectOffset then
+        -- store reference so show tween can reveal it
+        Data._icon = Img
+            if iconData.ImageRectOffset then
             pcall(function() Img.ImageRectOffset = iconData.ImageRectOffset end)
         end
         if iconData.ImageRectSize then
@@ -7659,9 +7662,18 @@ function Library:Notify(...)
     Library.Notifications[FakeBackground] = Data
 
     FakeBackground.Visible = true
-    TweenService:Create(Holder, Library.NotifyTweenInfo, {
+    local showTween = TweenService:Create(Holder, Library.NotifyTweenInfo, {
         Position = UDim2.fromOffset(0, 0),
-    }):Play()
+    })
+    showTween:Play()
+    -- reveal the icon when the show animation completes
+    pcall(function()
+        showTween.Completed:Connect(function()
+            if FakeBackground and FakeBackground.Parent and Data and Data._icon then
+                pcall(function() Data._icon.Visible = true end)
+            end
+        end)
+    end)
 
     task.delay(Library.NotifyTweenInfo.Time, function()
         if Data.Persist then
