@@ -9,6 +9,7 @@ local UserInputService = cloneref(game:GetService("UserInputService"))
 local TextService = cloneref(game:GetService("TextService"))
 local Teams = cloneref(game:GetService("Teams"))
 local TweenService = cloneref(game:GetService("TweenService"))
+local HttpService = cloneref(game:GetService("HttpService"))
 
 local getgenv = getgenv or function()
     return shared
@@ -127,7 +128,7 @@ do
         end
 
         local success, errorMessage = pcall(function()
-            writefile(AssetData.Path, game:HttpGet(AssetData.URL))
+            writefile(AssetData.Path, HttpService:GetAsync(AssetData.URL))
         end)
 
         return success, errorMessage
@@ -225,6 +226,10 @@ local Library = {
     
     ImageManager = CustomImageManager,
 }
+
+Library.Notify = function(self, message)
+    warn("Library Notify:", message)
+end
 
     -- Watch for changes to ScrollingDropdown and disable scrolling for existing dropdowns when toggled
     do
@@ -1546,7 +1551,7 @@ type IconModule = {
 
 local FetchIcons, Icons = pcall(function()
     return (loadstring(
-        game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
+        HttpService:GetAsync("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
     ) :: () -> IconModule)()
 end)
 
@@ -2516,7 +2521,7 @@ function Library:AddContextMenu(
 
         -- Ensure menu stays inside the main window bounds (clamp if necessary)
         pcall(function()
-            local MF = Library.MainFrame or MainFrame
+            local MF = Library.MainFrame
             if MF and MF.Parent then
                 local menuSize = Menu.Size
                 -- resolve size in pixels (fall back to AbsoluteSize if needed)
@@ -2587,7 +2592,7 @@ function Library:AddContextMenu(
             end
             -- also clamp while tracking holder movement
             pcall(function()
-                local MF2 = Library.MainFrame or MainFrame
+                local MF2 = Library.MainFrame
                 if MF2 and MF2.Parent then
                     local menuSize = Menu.Size
                     local menuW = (menuSize and menuSize.X and menuSize.X.Offset) or Menu.AbsoluteSize.X
