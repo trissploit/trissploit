@@ -4213,6 +4213,7 @@ do
                             return Library:GetAccentGradientTransparencySequence()
                         end,
                     }
+                end
             MinusButton.MouseButton1Click:Connect(function()
                 pcall(function()
                     if not SelectedStop then return end
