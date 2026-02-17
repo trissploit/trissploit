@@ -7590,14 +7590,14 @@ function Library:Notify(...)
             Size = UDim2.fromOffset(14 * Library.DPIScale, 14 * Library.DPIScale),
             BackgroundTransparency = 1,
             Image = iconData.Url,
-            Parent = Holder, -- attach to the notification box so it moves with it
+            Parent = FakeBackground, -- place as sibling to Holder so it overlays top-right
             AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -8, 0, 8), -- top-right inset relative to Holder
-            ZIndex = 8,
+            Position = UDim2.new(1, -8, 0, 8), -- top-right inset relative to FakeBackground
+            ZIndex = 10,
             ScaleType = Enum.ScaleType.Crop,
             Visible = true,
         })
-        -- store reference so show tween can reveal it
+        -- store reference
         Data._icon = Img
             if iconData.ImageRectOffset then
             pcall(function() Img.ImageRectOffset = iconData.ImageRectOffset end)
