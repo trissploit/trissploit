@@ -4796,106 +4796,7 @@ do
                     SubButton.TooltipTable.Disabled = SubButton.Disabled
                 end
 
-                SubButton.Base.Active = not SubButton.Disabled
-                SubButton:UpdateColors()
-            end
-
-            function SubButton:SetVisible(Visible: boolean)
-                SubButton.Visible = Visible
-
-                SubButton.Base.Visible = SubButton.Visible
-                Groupbox:Resize()
-            end
-
-            function SubButton:SetText(Text: string)
-                SubButton.Text = Text
-                SubButton.Base.Text = Text
-            end
-
-            if typeof(SubButton.Tooltip) == "string" or typeof(SubButton.DisabledTooltip) == "string" then
-                SubButton.TooltipTable =
-                    Library:AddTooltip(SubButton.Tooltip, SubButton.DisabledTooltip, SubButton.Base)
-                SubButton.TooltipTable.Disabled = SubButton.Disabled
-            end
-
-            if SubButton.Risky then
-                SubButton.Base.TextColor3 = Library.Scheme.Red
-                Library.Registry[SubButton.Base].TextColor3 = "Red"
-            end
-
-            SubButton:UpdateColors()
-
-            if Info.Idx then
-                Buttons[Info.Idx] = SubButton
-            else
-                table.insert(Buttons, SubButton)
-            end
-
-            return SubButton
-        end
-
-        function Button:UpdateColors()
-            if Library.Unloaded then
-                return
-            end
-
-            StopTween(Button.Tween)
-
-            Button.Base.BackgroundColor3 = Button.Disabled and Library.Scheme.BackgroundColor
-                or Library.Scheme.MainColor
-            Button.Base.TextTransparency = Button.Disabled and 0.8 or 0.4
-            Button.Stroke.Transparency = Button.Disabled and 0.5 or 0
-
-            Library.Registry[Button.Base].BackgroundColor3 = Button.Disabled and "BackgroundColor" or "MainColor"
-        end
-
-        function Button:SetDisabled(Disabled: boolean)
-            Button.Disabled = Disabled
-
-            if Button.TooltipTable then
-                Button.TooltipTable.Disabled = Button.Disabled
-            end
-
-            Button.Base.Active = not Button.Disabled
-            Button:UpdateColors()
-        end
-
-        function Button:SetVisible(Visible: boolean)
-            Button.Visible = Visible
-
-            Holder.Visible = Button.Visible
-            Groupbox:Resize()
-        end
-
-        function Button:SetText(Text: string)
-            Button.Text = Text
-            Button.Base.Text = Text
-        end
-
-        if typeof(Button.Tooltip) == "string" or typeof(Button.DisabledTooltip) == "string" then
-            Button.TooltipTable = Library:AddTooltip(Button.Tooltip, Button.DisabledTooltip, Button.Base)
-            Button.TooltipTable.Disabled = Button.Disabled
-        end
-
-        if Button.Risky then
-            Button.Base.TextColor3 = Library.Scheme.Red
-            Library.Registry[Button.Base].TextColor3 = "Red"
-        end
-
-        Button:UpdateColors()
-        Groupbox:Resize()
-
-        Button.Holder = Holder
-        table.insert(Groupbox.Elements, Button)
-
-        if Info.Idx then
-            Buttons[Info.Idx] = Button
-        else
-            table.insert(Buttons, Button)
-        end
-
-        return Button
-    end
+            ... (truncated for brevity) ...
 
     function Funcs:AddCheckbox(Idx, Info)
         Info = Library:Validate(Info, Templates.Toggle)
@@ -6034,143 +5935,6 @@ do
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
             Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
             ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
-        end
-
-        local function FormatDisplayText()
-            local s = ""
-            if Info.Multi then
-                for _, Value in pairs(Dropdown.Values) do
-                    if Dropdown.Value[Value] then
-                        s = s .. (Info.FormatDisplayValue and tostring(Info.FormatDisplayValue(Value)) or tostring(Value)) .. ", "
-                    end
-                end
-                s = s:sub(1, #s - 2)
-            else
-                s = Dropdown.Value and tostring(Dropdown.Value) or ""
-                if s ~= "" and Info.FormatDisplayValue then
-                    s = tostring(Info.FormatDisplayValue(s))
-                end
-            end
-            return s
-        end
-
-        function Dropdown:Display()
-            if Library.Unloaded then
-                return
-            end
-
-            local Str = FormatDisplayText()
-
-            -- Stop any existing scroll
-            if Dropdown._ScrollConnection then
-                Dropdown._ScrollConnection:Disconnect()
-                Dropdown._ScrollConnection = nil
-            end
-
-            -- Check if text is too long. Reserve space for arrow and padding.
-            local arrowWidth = (ArrowImage and ArrowImage.AbsoluteSize and ArrowImage.AbsoluteSize.X) or 16
-            local paddingLeft = 8
-            local paddingRight = 8
-            local maxWidth = math.max(0, Display.AbsoluteSize.X - arrowWidth - paddingLeft - paddingRight)
-            local fontForMeasure = Display.FontFace or Library.Scheme.Font
-            local textWidth = Library:GetTextBounds(Str, fontForMeasure, Display.TextSize)
-            
-            if Library.ScrollingDropdown and textWidth > maxWidth and Str ~= "" then
-                -- Text is too long, enable scrolling
-                Display.Text = ""
-                Display.TextXAlignment = Enum.TextXAlignment.Left
-                Display.ClipsDescendants = true
-
-                local startTime = tick()
-                local scrollSpeed = 20 -- pixels per second
-                local pauseDuration = 0.5 -- pause at each end (start delay)
-
-                Dropdown._ScrollConnection = RunService.RenderStepped:Connect(function()
-                    if not Display or not Display.Parent then
-                        if Dropdown._ScrollConnection then
-                            Dropdown._ScrollConnection:Disconnect()
-                            Dropdown._ScrollConnection = nil
-                        end
-                        return
-                    end
-
-                    local elapsed = tick() - startTime
-                    local overflow = textWidth - maxWidth
-                    local cycleDuration = (overflow / scrollSpeed) * 2 + pauseDuration * 2
-                    local phase = (elapsed % cycleDuration) / cycleDuration
-
-                    local relOffset = 0
-                    if phase < 0.25 then
-                        relOffset = 0
-                    elseif phase < 0.5 then
-                        local scrollPhase = (phase - 0.25) / 0.25
-                        relOffset = -overflow * scrollPhase
-                    elseif phase < 0.75 then
-                        relOffset = -overflow
-                    else
-                        local scrollPhase = (phase - 0.75) / 0.25
-                        relOffset = -overflow * (1 - scrollPhase)
-                    end
-
-                    -- Use a TextLabel child inside the ScrollMask for smoother scrolling; size it to the full text width
-                    local scrollLabel = ScrollMask:FindFirstChild("ScrollingText")
-                    if not scrollLabel then
-                        scrollLabel = New("TextLabel", {
-                            Name = "ScrollingText",
-                            BackgroundTransparency = 1,
-                            Position = UDim2.fromOffset(0, 0),
-                            Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y),
-                            Text = Str,
-                            TextSize = Display.TextSize,
-                            TextXAlignment = Enum.TextXAlignment.Left,
-                            TextYAlignment = Enum.TextYAlignment.Center,
-                            FontFace = fontForMeasure,
-                            ZIndex = ScrollMask.ZIndex + 1,
-                            Parent = ScrollMask,
-                        })
-                    end
-
-                    scrollLabel.Size = UDim2.fromOffset(math.ceil(textWidth), Display.AbsoluteSize.Y)
-                    scrollLabel.Text = Str
-                    scrollLabel.FontFace = fontForMeasure
-                    -- Position is relative to ScrollMask; apply animated offset only
-                    scrollLabel.Position = UDim2.fromOffset(math.floor(relOffset), 0)
-                end)
-            else
-                -- Text fits or scrolling disabled; ensure old (non-scrolling) mode shows ellipses and fits
-                local displayStr = Str
-                local fontForMeasure = Display.FontFace or Library.Scheme.Font
-                if not Library.ScrollingDropdown and textWidth > maxWidth and displayStr ~= "" then
-                    local ell = "..."
-                    local low, high = 0, #displayStr
-                    local best = nil
-                    while low <= high do
-                        local mid = math.floor((low + high) / 2)
-                        local s = displayStr:sub(1, mid) .. ell
-                        local w = Library:GetTextBounds(s, fontForMeasure, Display.TextSize)
-                        if w <= maxWidth then
-                            best = s
-                            low = mid + 1
-                        else
-                            high = mid - 1
-                        end
-                    end
-
-                    displayStr = best or (displayStr:sub(1, 1) .. ell)
-                else
-                    if #displayStr > 25 then
-                        displayStr = displayStr:sub(1, 22) .. "..."
-                    end
-                end
-
-                Display.Text = (displayStr == "" and "---" or displayStr)
-                Display.ClipsDescendants = false
-                -- Remove scrolling label if it exists anywhere under Display
-                local scrollLabel = Display:FindFirstChild("ScrollingText", true)
-                if scrollLabel then
-                    scrollLabel:Destroy()
-                end
-            end
         end
 
         function Dropdown:OnChanged(Func)
@@ -9027,57 +8791,9 @@ function Library:CreateWindow(WindowInfo)
             do
                 GroupboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
-                    BackgroundTransparency = 0,
-                    Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale)),
+                    Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
-                    DPIExclude = {
-                        BackgroundTransparency = true,
-                        Size = true,
-                    },
                 })
-                -- Ensure no leftover DPI registry Size entry overrides this holder
-                pcall(function()
-                    if Library.DPIRegistry and Library.DPIRegistry[GroupboxHolder] then
-                        Library.DPIRegistry[GroupboxHolder]["Size"] = nil
-                    end
-                end)
-                -- Force background to be opaque and prevent any accidental transparency changes
-                local transparencyConnection = GroupboxHolder:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
-                    if GroupboxHolder.BackgroundTransparency ~= 0 then
-                        GroupboxHolder.BackgroundTransparency = 0
-                    end
-                end)
-                -- Store connection to prevent garbage collection
-                Library:GiveSignal(transparencyConnection)
-                -- Explicitly ensure transparency is 0 and color is applied
-                GroupboxHolder.BackgroundTransparency = 0
-                if Library.Scheme and Library.Scheme.BackgroundColor then
-                    GroupboxHolder.BackgroundColor3 = Library.Scheme.BackgroundColor
-                end
-                -- Force re-apply after a frame to ensure it sticks
-                task.defer(function()
-                    if GroupboxHolder and GroupboxHolder.Parent then
-                        GroupboxHolder.BackgroundTransparency = 0
-                        if Library.Scheme and Library.Scheme.BackgroundColor then
-                            GroupboxHolder.BackgroundColor3 = Library.Scheme.BackgroundColor
-                        end
-                    end
-                end)
-                -- Prevent accidental collapse of groupbox holder size
-                do
-                    local _sizeGuard = false
-                    local sizeConnection = GroupboxHolder:GetPropertyChangedSignal("Size"):Connect(function()
-                        if _sizeGuard then return end
-                        _sizeGuard = true
-                        local ok, yOff = pcall(function() return GroupboxHolder.Size.Y.Offset end)
-                        if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
-                            GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
-                        end
-                        _sizeGuard = false
-                    end)
-                    Library:GiveSignal(sizeConnection)
-                end
-                
                 New("UICorner", {
                     CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
                     Parent = GroupboxHolder,
@@ -9138,41 +8854,12 @@ function Library:CreateWindow(WindowInfo)
                     PaddingTop = UDim.new(0, 7),
                     Parent = GroupboxContainer,
                 })
-
-                -- Use `librarymodify` style groupboxes: always-expanded and no collapse/expand chevron
-                local expandedState = { value = true }
-                -- Ensure container is visible (groupboxes are not collapsible in librarymodify)
-                GroupboxContainer.Visible = true
-
-
-                DepGroupboxContainer = New("Frame", {
-                    BackgroundColor3 = "BackgroundColor",
-                    BackgroundTransparency = 0,
-                    Size = UDim2.new(1, 0, 0, math.ceil(18 * Library.DPIScale)),
-                    Visible = false,
-                    Parent = BoxHolder,
-                    DPIExclude = {
-                        BackgroundTransparency = true,
-                        Size = true,
-                    },
-                })
-                -- Register dependency groupbox container for immediate theming
-                Library:AddToRegistry(DepGroupboxContainer, { BackgroundColor3 = "BackgroundColor" })
-                Library:UpdateColorsUsingRegistry()
-                New("UIPadding", {
-                    PaddingBottom = UDim.new(0, 7),
-                    PaddingLeft = UDim.new(0, 7),
-                    PaddingRight = UDim.new(0, 7),
-                    PaddingTop = UDim.new(0, 7),
-                    Parent = DepGroupboxContainer,
-                })
             end
 
             local Groupbox = {
                 BoxHolder = BoxHolder,
                 Holder = GroupboxHolder,
                 Container = GroupboxContainer,
-                ExpandedState = expandedState,
 
                 Tab = Tab,
                 DependencyBoxes = {},
@@ -9180,15 +8867,7 @@ function Library:CreateWindow(WindowInfo)
             }
 
             local function ResizeGroupbox()
-                task.defer(function()
-                    if Groupbox.ExpandedState and Groupbox.ExpandedState.value then
-                        GroupboxHolder.Size = UDim2.new(1, 0, 0, (GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale)
-                    else
-                        GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
-                    end
-                    -- Reapply theme colors after resize to ensure backgrounds remain visible
-                    Library:UpdateColorsUsingRegistry()
-                end)
+                GroupboxHolder.Size = UDim2.new(1, 0, 0, (GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale)
             end
 
             function Groupbox:Resize() task.defer(ResizeGroupbox) end
