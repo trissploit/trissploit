@@ -7569,6 +7569,21 @@ function Library:Notify(...)
         if DeleteConnection then
             DeleteConnection:Disconnect()
         end
+        -- cleanup icon and its connections if present
+        if Data._icon_conns then
+            pcall(function()
+                for _, c in pairs(Data._icon_conns) do
+                    if c and c.Connected then
+                        c:Disconnect()
+                    end
+                end
+            end)
+            Data._icon_conns = nil
+        end
+        if Data._icon then
+            pcall(function() Data._icon:Destroy() end)
+            Data._icon = nil
+        end
 
         TweenService
             :Create(Holder, Library.NotifyTweenInfo, {
@@ -7590,15 +7605,37 @@ function Library:Notify(...)
             Size = UDim2.fromOffset(14 * Library.DPIScale, 14 * Library.DPIScale),
             BackgroundTransparency = 1,
             Image = iconData.Url,
-            Parent = FakeBackground, -- place as sibling to Holder so it overlays top-right
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -8, 0, 8), -- top-right inset relative to FakeBackground
+            Parent = ScreenGui, -- use absolute positioning relative to screen
+            AnchorPoint = Vector2.new(0, 0),
+            Position = UDim2.fromOffset(0, 0),
             ZIndex = 10,
             ScaleType = Enum.ScaleType.Crop,
             Visible = true,
         })
         -- store reference
         Data._icon = Img
+
+        -- Reposition the icon to top-right of the FakeBackground using absolute coordinates
+        local function UpdateIconPosition()
+            pcall(function()
+                if not (FakeBackground and FakeBackground.Parent and Img and Img.Parent) then return end
+                local fbPos = FakeBackground.AbsolutePosition
+                local fbSize = FakeBackground.AbsoluteSize
+                local imgSizeX = Img.AbsoluteSize.X
+                local padding = math.floor(8 * Library.DPIScale)
+                local x = fbPos.X + fbSize.X - padding - imgSizeX
+                local y = fbPos.Y + padding
+                Img.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
+            end)
+        end
+
+        -- Connect updates and run once
+        local conn1 = FakeBackground:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateIconPosition)
+        local conn2 = FakeBackground:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateIconPosition)
+        local conn3 = Img:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateIconPosition)
+        UpdateIconPosition()
+        -- Store connections so they can be cleaned up when notification is destroyed
+        Data._icon_conns = { conn1, conn2, conn3 }
             if iconData.ImageRectOffset then
             pcall(function() Img.ImageRectOffset = iconData.ImageRectOffset end)
         end
