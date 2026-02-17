@@ -2472,7 +2472,8 @@ function Library:AddContextMenu(
 
         -- Ensure menu stays inside the main window bounds (clamp if necessary)
         pcall(function()
-            if MainFrame and MainFrame.Parent then
+            local MF = Library.MainFrame or MainFrame
+            if MF and MF.Parent then
                 local menuSize = Menu.Size
                 -- resolve size in pixels (fall back to AbsoluteSize if needed)
                 local menuW = (menuSize and menuSize.X and menuSize.X.Offset) or Menu.AbsoluteSize.X
@@ -2481,10 +2482,10 @@ function Library:AddContextMenu(
                 local desiredX = Menu.Position.X.Offset or 0
                 local desiredY = Menu.Position.Y.Offset or 0
 
-                local mainX = MainFrame.AbsolutePosition.X
-                local mainY = MainFrame.AbsolutePosition.Y
-                local mainW = MainFrame.AbsoluteSize.X
-                local mainH = MainFrame.AbsoluteSize.Y
+                local mainX = MF.AbsolutePosition.X
+                local mainY = MF.AbsolutePosition.Y
+                local mainW = MF.AbsoluteSize.X
+                local mainH = MF.AbsoluteSize.Y
 
                 -- smart-placement: prefer opening below holder, flip above if not enough space
                 local holderBottom = Holder.AbsolutePosition.Y + Holder.AbsoluteSize.Y
@@ -2542,7 +2543,8 @@ function Library:AddContextMenu(
             end
             -- also clamp while tracking holder movement
             pcall(function()
-                if MainFrame and MainFrame.Parent then
+                local MF2 = Library.MainFrame or MainFrame
+                if MF2 and MF2.Parent then
                     local menuSize = Menu.Size
                     local menuW = (menuSize and menuSize.X and menuSize.X.Offset) or Menu.AbsoluteSize.X
                     local menuH = (menuSize and menuSize.Y and menuSize.Y.Offset) or Menu.AbsoluteSize.Y
@@ -2550,10 +2552,10 @@ function Library:AddContextMenu(
                     local desiredX = Menu.Position.X.Offset or 0
                     local desiredY = Menu.Position.Y.Offset or 0
 
-                    local mainX = MainFrame.AbsolutePosition.X
-                    local mainY = MainFrame.AbsolutePosition.Y
-                    local mainW = MainFrame.AbsoluteSize.X
-                    local mainH = MainFrame.AbsoluteSize.Y
+                    local mainX = MF2.AbsolutePosition.X
+                    local mainY = MF2.AbsolutePosition.Y
+                    local mainW = MF2.AbsoluteSize.X
+                    local mainH = MF2.AbsoluteSize.Y
 
                     -- smart-placement while tracking: prefer below, flip above if needed
                     local holderBottom = Holder.AbsolutePosition.Y + Holder.AbsoluteSize.Y
@@ -8079,6 +8081,8 @@ function Library:CreateWindow(WindowInfo)
                 Position = true,
             },
         })
+        -- Store MainFrame on Library so AddContextMenu can access it for dropdown clamping
+        Library.MainFrame = MainFrame
         New("UICorner", {
             CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
             Parent = MainFrame,
