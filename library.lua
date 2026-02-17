@@ -7595,7 +7595,7 @@ function Library:Notify(...)
             Position = UDim2.new(1, -8, 0, 8), -- top-right inset relative to Holder
             ZIndex = 8,
             ScaleType = Enum.ScaleType.Crop,
-            Visible = false, -- hide until the notification show animation finishes
+            Visible = true,
         })
         -- store reference so show tween can reveal it
         Data._icon = Img
@@ -7666,14 +7666,7 @@ function Library:Notify(...)
         Position = UDim2.fromOffset(0, 0),
     })
     showTween:Play()
-    -- reveal the icon when the show animation completes
-    pcall(function()
-        showTween.Completed:Connect(function()
-            if FakeBackground and FakeBackground.Parent and Data and Data._icon then
-                pcall(function() Data._icon.Visible = true end)
-            end
-        end)
-    end)
+    -- icon is shown immediately (no delayed reveal)
 
     task.delay(Library.NotifyTweenInfo.Time, function()
         if Data.Persist then
