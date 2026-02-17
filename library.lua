@@ -631,14 +631,20 @@ function Library:GetAccentGradientSequence()
             table.insert(stops, { pos = pos, color = col })
         end
 
+        -- Safety check: if no stops after processing, fall back to default
+        if #stops == 0 then
+            local c = defaultColor
+            return ColorSequence.new({ ColorSequenceKeypoint.new(0, c), ColorSequenceKeypoint.new(1, c) })
+        end
+
         table.sort(stops, function(a, b) return a.pos < b.pos end)
 
         -- Ensure endpoint at 0.0
-        if stops[1].pos > 0 then
+        if #stops > 0 and stops[1].pos > 0 then
             table.insert(stops, 1, { pos = 0, color = stops[1].color })
         end
         -- Ensure endpoint at 1.0
-        if stops[#stops].pos < 1 then
+        if #stops > 0 and stops[#stops].pos < 1 then
             table.insert(stops, { pos = 1, color = stops[#stops].color })
         end
 
@@ -648,7 +654,10 @@ function Library:GetAccentGradientSequence()
         end
 
         -- Guarantee at least two keypoints
-        if #keypoints == 1 then
+        if #keypoints == 0 then
+            local c = defaultColor
+            return ColorSequence.new({ ColorSequenceKeypoint.new(0, c), ColorSequenceKeypoint.new(1, c) })
+        elseif #keypoints == 1 then
             table.insert(keypoints, ColorSequenceKeypoint.new(1, keypoints[1].Value))
         end
 
@@ -671,12 +680,17 @@ function Library:GetAccentGradientTransparencySequence()
             table.insert(stops, { pos = pos, transp = transp })
         end
 
+        -- Safety check: if no stops after processing, fall back to default
+        if #stops == 0 then
+            return NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0) })
+        end
+
         table.sort(stops, function(a, b) return a.pos < b.pos end)
 
-        if stops[1].pos > 0 then
+        if #stops > 0 and stops[1].pos > 0 then
             table.insert(stops, 1, { pos = 0, transp = stops[1].transp })
         end
-        if stops[#stops].pos < 1 then
+        if #stops > 0 and stops[#stops].pos < 1 then
             table.insert(stops, { pos = 1, transp = stops[#stops].transp })
         end
 
@@ -685,7 +699,9 @@ function Library:GetAccentGradientTransparencySequence()
             table.insert(keypoints, NumberSequenceKeypoint.new(s.pos, s.transp))
         end
 
-        if #keypoints == 1 then
+        if #keypoints == 0 then
+            return NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0) })
+        elseif #keypoints == 1 then
             table.insert(keypoints, NumberSequenceKeypoint.new(1, keypoints[1].Value))
         end
         return NumberSequence.new(keypoints)
@@ -1326,8 +1342,9 @@ function Library:UpdateColorsUsingRegistry()
                 end
                 if Groupbox.Holder and Groupbox.Holder.Size then
                     local ok, yOff = pcall(function() return Groupbox.Holder.Size.Y.Offset end)
-                    if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
-                        Groupbox.Holder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                    local minSize = math.ceil(34 * Library.DPIScale)
+                    if ok and tonumber(yOff) and yOff < minSize then
+                        Groupbox.Holder.Size = UDim2.new(1, 0, 0, minSize)
                     end
                 end
             end)
@@ -2253,32 +2270,71 @@ do
         WM.Holder = New("Frame", {
             BackgroundColor3 = "BackgroundColor",
             BorderColor3 = "OutlineColor",
-            BorderSizePixel = 1,
+            BorderSizePixel = 0,
             AnchorPoint = Vector2.new(0, 0),
             Position = UDim2.fromOffset(6, 6),
-            Size = UDim2.fromOffset(200, 20),
+            Size = UDim2.fromOffset(200, 24),
             ZIndex = 999,
             Parent = ScreenGui,
+            DPIExclude = {
+                Position = true,
+            },
         })
         WM.Corner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
-        local WMStroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, Parent = WM.Holder })
+        
+        -- Add accent gradient at the bottom for better look
+        local WMAccentBar = New("Frame", {
+            BackgroundColor3 = "AccentColor",
+            BorderSizePixel = 0,
+            Position = UDim2.new(0, 0, 1, -3),
+            Size = UDim2.new(1, 0, 0, 3),
+            ZIndex = 1000,
+            Parent = WM.Holder,
+        })
+        New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WMAccentBar })
+        local WMGradient = New("UIGradient", {
+            Color = function() return Library:GetAccentGradientSequence() end,
+            Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
+            Rotation = 0,
+            Parent = WMAccentBar,
+        })
+        
+        local WMStroke = New("UIStroke", {
+            Color = "OutlineColor",
+            Thickness = 1,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+            Parent = WM.Holder,
+        })
+
+        -- Add padding for better text spacing
+        local WMPadding = New("UIPadding", {
+            PaddingLeft = UDim.new(0, 10),
+            PaddingRight = UDim.new(0, 10),
+            PaddingTop = UDim.new(0, 4),
+            PaddingBottom = UDim.new(0, 4),
+            Parent = WM.Holder,
+        })
 
         WM.Label = New("TextLabel", {
             BackgroundTransparency = 1,
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromScale(1, 1),
+            Position = UDim2.fromScale(0, 0),
+            Size = UDim2.new(1, 0, 1, -3),
             Text = "",
             TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Center,
+            TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Center,
-            ZIndex = 1000,
+            ZIndex = 1001,
             Parent = WM.Holder,
         })
 
         Library.Registry[WM.Holder] = { BackgroundColor3 = "BackgroundColor", BorderColor3 = "OutlineColor" }
         Library.Registry[WM.Label] = { TextColor3 = "FontColor", FontFace = "Font" }
         Library.Registry[WMStroke] = { Color = "OutlineColor" }
+        Library.Registry[WMAccentBar] = { BackgroundColor3 = "AccentColor" }
+        Library.Registry[WMGradient] = {
+            Color = function() return Library:GetAccentGradientSequence() end,
+            Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
+        }
 
         -- make watermark draggable (only when main UI is open)
         Library:MakeDraggable(WM.Holder, WM.Holder, false)
@@ -2336,8 +2392,11 @@ do
 
             -- adjust size automatically using library font to ensure correct measurement
             local X, Y = Library:GetTextBounds(WM.Label.Text, Library.Scheme.Font, WM.Label.TextSize)
-            WM.Holder.Size = UDim2.fromOffset((X + 16) * Library.DPIScale, (Y + 8) * Library.DPIScale)
-            Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(X + 16, Y + 8) })
+            -- Add padding to account for UIPadding (20px horizontal + 8px vertical) and accent bar (3px)
+            local targetWidth = X + 20
+            local targetHeight = Y + 11
+            WM.Holder.Size = UDim2.fromOffset(math.ceil(targetWidth * Library.DPIScale), math.ceil(targetHeight * Library.DPIScale))
+            Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(targetWidth, targetHeight) })
         end)
 
         WM.Holder.Visible = false
@@ -9249,8 +9308,9 @@ function Library:CreateWindow(WindowInfo)
                         if _sizeGuard then return end
                         _sizeGuard = true
                         local ok, yOff = pcall(function() return GroupboxHolder.Size.Y.Offset end)
-                        if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
-                            GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                        local minSize = math.ceil(34 * Library.DPIScale)
+                        if ok and tonumber(yOff) and yOff < minSize then
+                            GroupboxHolder.Size = UDim2.new(1, 0, 0, minSize)
                         end
                         _sizeGuard = false
                     end)
@@ -9353,7 +9413,10 @@ function Library:CreateWindow(WindowInfo)
 
             local function ResizeGroupbox()
                 task.defer(function()
-                    GroupboxHolder.Size = UDim2.new(1, 0, 0, (GroupboxList.AbsoluteContentSize.Y + 53) * Library.DPIScale)
+                    if not GroupboxList or not GroupboxHolder then return end
+                    local contentH = GroupboxList.AbsoluteContentSize.Y or 0
+                    local newHeight = math.ceil((contentH + 53) * Library.DPIScale)
+                    GroupboxHolder.Size = UDim2.new(1, 0, 0, newHeight)
                     -- Reapply theme colors after resize to ensure backgrounds remain visible
                     Library:UpdateColorsUsingRegistry()
                 end)
@@ -9427,8 +9490,9 @@ function Library:CreateWindow(WindowInfo)
                     if _aimSizeGuard then return end
                     _aimSizeGuard = true
                     local ok, yOff = pcall(function() return GroupboxHolder.Size.Y.Offset end)
-                    if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
-                        GroupboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                    local minSize = math.ceil(34 * Library.DPIScale)
+                    if ok and tonumber(yOff) and yOff < minSize then
+                        GroupboxHolder.Size = UDim2.new(1, 0, 0, minSize)
                     end
                     _aimSizeGuard = false
                 end)
@@ -9939,8 +10003,9 @@ function Library:CreateWindow(WindowInfo)
                         if _tabSizeGuard then return end
                         _tabSizeGuard = true
                         local ok, yOff = pcall(function() return TabboxHolder.Size.Y.Offset end)
-                        if ok and tonumber(yOff) and yOff < math.ceil(34 * Library.DPIScale) then
-                            TabboxHolder.Size = UDim2.new(1, 0, 0, math.ceil(34 * Library.DPIScale))
+                        local minSize = math.ceil(34 * Library.DPIScale)
+                        if ok and tonumber(yOff) and yOff < minSize then
+                            TabboxHolder.Size = UDim2.new(1, 0, 0, minSize)
                         end
                         _tabSizeGuard = false
                     end)
