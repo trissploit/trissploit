@@ -3673,6 +3673,8 @@ do
             Text = "",
             Parent = ToggleLabel,
         })
+        -- make the small holder respect the library corner radius
+        New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Holder })
 
         local _transImg = (CustomImageManager and CustomImageManager.GetAsset) and CustomImageManager.GetAsset("TransparencyTexture") or ""
         local HolderTransparency = New("ImageLabel", {
@@ -3744,8 +3746,9 @@ do
             Size = UDim2.fromOffset(6, 6),
             Parent = SatVipMap,
         })
+        -- respect library corner radius for the sat/vib cursor instead of forcing a full circle
         New("UICorner", {
-            CornerRadius = UDim.new(1, 0),
+            CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = SatVibCursor,
         })
         New("UIStroke", {
