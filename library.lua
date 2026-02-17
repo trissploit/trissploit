@@ -1398,6 +1398,28 @@ function Library:UpdateColorsUsingRegistry()
     end
 end
 
+-- Force-refresh UIGradient instances using accent gradient helpers (works around engines that may cache sequences)
+function Library:RefreshAccentGradients()
+    for Instance, Properties in pairs(Library.Registry) do
+        if typeof(Instance) == "Instance" and Instance:IsA and Instance:IsA("UIGradient") then
+            local colProp = Properties["Color"]
+            local transpProp = Properties["Transparency"]
+            if typeof(colProp) == "function" then
+                local ok, val = pcall(colProp)
+                if ok and val then
+                    pcall(function() Instance.Color = val end)
+                end
+            end
+            if typeof(transpProp) == "function" then
+                local ok2, val2 = pcall(transpProp)
+                if ok2 and val2 then
+                    pcall(function() Instance.Transparency = val2 end)
+                end
+            end
+        end
+    end
+end
+
 function Library:UpdateDPI(Instance, Properties)
     if not Library.DPIRegistry[Instance] then
         return
@@ -1716,8 +1738,8 @@ local function New(ClassName: string, Properties: { [string]: any }): any
             end
 
             pcall(function()
-                grad.Color = Library:GetAccentGradientSequence()
-                grad.Transparency = Library:GetAccentGradientTransparencySequence()
+                grad.Color = function() return Library:GetAccentGradientSequence() end
+                grad.Transparency = function() return Library:GetAccentGradientTransparencySequence() end
             end)
 
             Library.Registry[grad] = {
@@ -4287,8 +4309,8 @@ do
                         g = New("UIGradient", { Name = "LucideAccentGradient", Parent = PlusButton })
                     end
                     pcall(function()
-                        g.Color = Library:GetAccentGradientSequence()
-                        g.Transparency = Library:GetAccentGradientTransparencySequence()
+                        g.Color = function() return Library:GetAccentGradientSequence() end
+                        g.Transparency = function() return Library:GetAccentGradientTransparencySequence() end
                     end)
                     Library.Registry[g] = {
                         Color = function()
@@ -4311,8 +4333,8 @@ do
                         g2 = New("UIGradient", { Name = "LucideAccentGradient", Parent = MinusButton })
                     end
                     pcall(function()
-                        g2.Color = Library:GetAccentGradientSequence()
-                        g2.Transparency = Library:GetAccentGradientTransparencySequence()
+                        g2.Color = function() return Library:GetAccentGradientSequence() end
+                        g2.Transparency = function() return Library:GetAccentGradientTransparencySequence() end
                     end)
                     Library.Registry[g2] = {
                         Color = function()
@@ -5199,8 +5221,8 @@ do
         end)
 
         local CheckboxGradient = New("UIGradient", {
-            Color = Library:GetAccentGradientSequence(),
-            Transparency = Library:GetAccentGradientTransparencySequence(),
+            Color = function() return Library:GetAccentGradientSequence() end,
+            Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
             Rotation = 60,
             Enabled = false,
             Parent = Checkbox,
@@ -5251,8 +5273,8 @@ do
             }):Play()
 
             -- Enable gradient only when checked, restore accent gradient colors
-            CheckboxGradient.Color = Library:GetAccentGradientSequence()
-            CheckboxGradient.Transparency = Library:GetAccentGradientTransparencySequence()
+            CheckboxGradient.Color = function() return Library:GetAccentGradientSequence() end
+            CheckboxGradient.Transparency = function() return Library:GetAccentGradientTransparencySequence() end
             CheckboxGradient.Enabled = Toggle.Value
 
             -- Fill the checkbox with gradient start color when checked, main color when unchecked
@@ -5861,8 +5883,8 @@ do
             Parent = Fill,
         })
         local FillGradient = New("UIGradient", {
-            Color = Library:GetAccentGradientSequence(),
-            Transparency = Library:GetAccentGradientTransparencySequence(),
+            Color = function() return Library:GetAccentGradientSequence() end,
+            Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
             Rotation = 90,
             Parent = Fill,
         })
@@ -6451,8 +6473,8 @@ do
                     Parent = MenuTable.Menu,
                 })
                 local ButtonGradient = New("UIGradient", {
-                    Color = Library:GetAccentGradientSequence(),
-                    Transparency = Library:GetAccentGradientTransparencySequence(),
+                    Color = function() return Library:GetAccentGradientSequence() end,
+                    Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
                     Rotation = 90,
                     Enabled = false,
                     Parent = Button,
@@ -7919,8 +7941,8 @@ function Library:Notify(...)
                 g = New("UIGradient", { Name = "LucideAccentGradient", Parent = Img })
             end
             pcall(function()
-                g.Color = Library:GetAccentGradientSequence()
-                g.Transparency = Library:GetAccentGradientTransparencySequence()
+                g.Color = function() return Library:GetAccentGradientSequence() end
+                g.Transparency = function() return Library:GetAccentGradientTransparencySequence() end
             end)
             Library.Registry[g] = {
                 Color = function() return Library:GetAccentGradientSequence() end,
@@ -9647,7 +9669,7 @@ function Library:CreateWindow(WindowInfo)
                 DPIExclude = { Size = true },
             })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Fill })
-            local FillGradient = New("UIGradient", { Color = Library:GetAccentGradientSequence(), Transparency = Library:GetAccentGradientTransparencySequence(), Rotation = 90, Parent = Fill })
+            local FillGradient = New("UIGradient", { Color = function() return Library:GetAccentGradientSequence() end, Transparency = function() return Library:GetAccentGradientTransparencySequence() end, Rotation = 90, Parent = Fill })
             Library.Registry[FillGradient] = {
                 Color = function() return Library:GetAccentGradientSequence() end,
                 Transparency = function() return Library:GetAccentGradientTransparencySequence() end,
