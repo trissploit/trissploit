@@ -4785,27 +4785,7 @@ do
                     SubButton.TooltipTable.Disabled = SubButton.Disabled
                 end
 
-            end
-
-            function SubButton:SetVisible(Visible)
-                SubButton.Visible = Visible
-                if SubButton.Base then
-                    SubButton.Base.Visible = SubButton.Visible
-                end
-                Groupbox:Resize()
-            end
-
-            function SubButton:SetText(Text)
-                SubButton.Text = Text
-                if SubButton.Base then
-                    SubButton.Base.Text = Text
-                end
-            end
-
-            SubButton:UpdateColors()
-
-            return SubButton
-        end
+        
 
     function Funcs:AddCheckbox(Idx, Info)
         Info = Library:Validate(Info, Templates.Toggle)
@@ -10124,5 +10104,6 @@ Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 getgenv().Library = Library
 end
+
 
 return Library
