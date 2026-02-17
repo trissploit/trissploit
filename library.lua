@@ -2412,6 +2412,55 @@ function Library:AddContextMenu(
         else
             Menu.Size = ApplyDPIScale(Table.Size)
         end
+
+        -- Ensure menu stays inside the main window bounds (clamp if necessary)
+        pcall(function()
+            if MainFrame and MainFrame.Parent then
+                local menuSize = Menu.Size
+                -- resolve size in pixels (fall back to AbsoluteSize if needed)
+                local menuW = (menuSize and menuSize.X and menuSize.X.Offset) or Menu.AbsoluteSize.X
+                local menuH = (menuSize and menuSize.Y and menuSize.Y.Offset) or Menu.AbsoluteSize.Y
+
+                local desiredX = Menu.Position.X.Offset or 0
+                local desiredY = Menu.Position.Y.Offset or 0
+
+                local mainX = MainFrame.AbsolutePosition.X
+                local mainY = MainFrame.AbsolutePosition.Y
+                local mainW = MainFrame.AbsoluteSize.X
+                local mainH = MainFrame.AbsoluteSize.Y
+
+                -- smart-placement: prefer opening below holder, flip above if not enough space
+                local holderBottom = Holder.AbsolutePosition.Y + Holder.AbsoluteSize.Y
+                local spaceBelow = (mainY + mainH) - holderBottom
+                local spaceAbove = Holder.AbsolutePosition.Y - mainY
+
+                -- X clamp first
+                if menuW > mainW then
+                    desiredX = mainX
+                else
+                    desiredX = math.clamp(desiredX, mainX, mainX + mainW - menuW)
+                end
+
+                -- Vertical placement: try below, else above, else clamp
+                if menuH <= spaceBelow then
+                    -- keep as-is (below)
+                    -- desiredY already set from Offset; ensure it's at least holderBottom
+                    if desiredY < holderBottom then desiredY = holderBottom end
+                elseif menuH <= spaceAbove then
+                    -- place above the holder
+                    desiredY = Holder.AbsolutePosition.Y - menuH
+                else
+                    -- clamp within main window
+                    if menuH > mainH then
+                        desiredY = mainY
+                    else
+                        desiredY = math.clamp(desiredY, mainY, mainY + mainH - menuH)
+                    end
+                end
+
+                Menu.Position = UDim2.fromOffset(math.floor(desiredX), math.floor(desiredY))
+            end
+        end)
         if typeof(ActiveCallback) == "function" then
             Library:SafeCallback(ActiveCallback, true)
         end
@@ -2430,6 +2479,47 @@ function Library:AddContextMenu(
                     math.floor(Holder.AbsolutePosition.Y + Offset[2])
                 )
             end
+            -- also clamp while tracking holder movement
+            pcall(function()
+                if MainFrame and MainFrame.Parent then
+                    local menuSize = Menu.Size
+                    local menuW = (menuSize and menuSize.X and menuSize.X.Offset) or Menu.AbsoluteSize.X
+                    local menuH = (menuSize and menuSize.Y and menuSize.Y.Offset) or Menu.AbsoluteSize.Y
+
+                    local desiredX = Menu.Position.X.Offset or 0
+                    local desiredY = Menu.Position.Y.Offset or 0
+
+                    local mainX = MainFrame.AbsolutePosition.X
+                    local mainY = MainFrame.AbsolutePosition.Y
+                    local mainW = MainFrame.AbsoluteSize.X
+                    local mainH = MainFrame.AbsoluteSize.Y
+
+                    -- smart-placement while tracking: prefer below, flip above if needed
+                    local holderBottom = Holder.AbsolutePosition.Y + Holder.AbsoluteSize.Y
+                    local spaceBelow = (mainY + mainH) - holderBottom
+                    local spaceAbove = Holder.AbsolutePosition.Y - mainY
+
+                    if menuW > mainW then
+                        desiredX = mainX
+                    else
+                        desiredX = math.clamp(desiredX, mainX, mainX + mainW - menuW)
+                    end
+
+                    if menuH <= spaceBelow then
+                        if desiredY < holderBottom then desiredY = holderBottom end
+                    elseif menuH <= spaceAbove then
+                        desiredY = Holder.AbsolutePosition.Y - menuH
+                    else
+                        if menuH > mainH then
+                            desiredY = mainY
+                        else
+                            desiredY = math.clamp(desiredY, mainY, mainY + mainH - menuH)
+                        end
+                    end
+
+                    Menu.Position = UDim2.fromOffset(math.floor(desiredX), math.floor(desiredY))
+                end
+            end)
         end)
     end
 
@@ -7831,55 +7921,7 @@ function Library:CreateWindow(WindowInfo)
         })
         Library:AddOutline(MainFrame)
 
-        -- rotating outline helper (thin divider-like frames that rotate their UIGradient)
-        do
-            Library._RotatingGradients = Library._RotatingGradients or {}
-            Library.AddRotatingOutline = Library.AddRotatingOutline or function(ParentFrame)
-                local thickness = math.clamp(math.max(1, math.floor(2 * Library.DPIScale)), 1, 3)
-                local segFrac = 0.15 -- fraction of edge to cover
-                local parentZ = 1
-                pcall(function() parentZ = ParentFrame.ZIndex or 1 end)
-                local z = parentZ + 1
-
-                -- top segment centered horizontally
-                local top = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(segFrac, 0, 0, thickness), Position = UDim2.new(0.5 - segFrac/2, 0, 0, 0), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
-                -- right segment centered vertically
-                local right = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, segFrac, 0), Position = UDim2.new(1, -thickness, 0.5 - segFrac/2, 0), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
-                -- bottom segment centered horizontally
-                local bottom = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(segFrac, 0, 0, thickness), Position = UDim2.new(0.5 - segFrac/2, 0, 1, -thickness), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
-                -- left segment centered vertically
-                local left = New("Frame", { BackgroundTransparency = 0, BackgroundColor3 = "White", Size = UDim2.new(0, thickness, segFrac, 0), Position = UDim2.new(0, 0, 0.5 - segFrac/2, 0), AnchorPoint = Vector2.new(0,0), Parent = ParentFrame, ZIndex = z })
-
-                local function makeGrad(Part)
-                    local g = New("UIGradient", { Parent = Part })
-                    g.Color = Library:GetAccentGradientSequence()
-                    g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0) })
-                    g.Rotation = 0
-                    table.insert(Library._RotatingGradients, g)
-                    Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
-                end
-
-                pcall(makeGrad, top)
-                pcall(makeGrad, right)
-                pcall(makeGrad, bottom)
-                pcall(makeGrad, left)
-            end
-
-            -- start a single render loop to rotate all registered gradients
-            if not Library._RotConn then
-                Library._RotConn = RunService.RenderStepped:Connect(function(dt)
-                    for _, g in ipairs(Library._RotatingGradients) do
-                        if g and g.Parent then
-                            local r = (g.Rotation or 0) + dt * 20
-                            g.Rotation = r % 360
-                        end
-                    end
-                end)
-            end
-
-            -- attach to main frame
-            pcall(function() Library.AddRotatingOutline(MainFrame) end)
-        end
+        -- rotating outline removed
 
         local InitialTitleWidth = math.max(
             LayoutState.CompactWidth,
@@ -8257,8 +8299,7 @@ function Library:CreateWindow(WindowInfo)
         LayoutRefs.TabsFrame = Tabs
         LayoutRefs.TabsList = TabsList
 
-        -- attach rotating outline to tab island
-        pcall(function() if Library.AddRotatingOutline then Library.AddRotatingOutline(Tabs) end end)
+        -- rotating outline removed
 
         -- Update tab bar window size when tabs change
         local function UpdateTabBarSize()
