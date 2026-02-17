@@ -9,7 +9,6 @@ local UserInputService = cloneref(game:GetService("UserInputService"))
 local TextService = cloneref(game:GetService("TextService"))
 local Teams = cloneref(game:GetService("Teams"))
 local TweenService = cloneref(game:GetService("TweenService"))
-local HttpService = cloneref(game:GetService("HttpService"))
 
 local getgenv = getgenv or function()
     return shared
@@ -128,7 +127,7 @@ do
         end
 
         local success, errorMessage = pcall(function()
-            writefile(AssetData.Path, HttpService:GetAsync(AssetData.URL))
+            writefile(AssetData.Path, game:HttpGet(AssetData.URL))
         end)
 
         return success, errorMessage
@@ -226,10 +225,6 @@ local Library = {
     
     ImageManager = CustomImageManager,
 }
-
-Library.Notify = function(self, message)
-    warn("Library Notify:", message)
-end
 
     -- Watch for changes to ScrollingDropdown and disable scrolling for existing dropdowns when toggled
     do
@@ -622,59 +617,44 @@ function Library:GetAccentGradientSequence()
     local g = self.Scheme and self.Scheme.AccentGradient
     if type(g) == "table" and type(g.Stops) == "table" and #g.Stops > 0 then
         local keypoints = {}
+        local defaultColor = self.Scheme and self.Scheme.AccentColor or Color3.fromRGB(255, 255, 255)
+        
         for _, s in ipairs(g.Stops) do
-            local pos = tonumber((s and s.pos) or 0) or 0
+            local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
             local col = s and s.color
-            if typeof(col) == "string" then
+            
+            -- Parse hex string to Color3 if needed
+            if typeof(col) == "string" and col:match("^#?%x%x%x%x%x%x$") then
                 local ok, c = pcall(Color3.fromHex, col:gsub("#", ""))
-                if ok and typeof(c) == "Color3" then
-                    col = c
-                else
-                    col = nil
-                end
+                col = (ok and typeof(c) == "Color3") and c or defaultColor
+            elseif typeof(col) ~= "Color3" then
+                col = defaultColor
             end
-            if typeof(col) ~= "Color3" then
-                col = self.Scheme and self.Scheme.AccentColor or Color3.fromRGB(255,255,255)
-            end
-            table.insert(keypoints, ColorSequenceKeypoint.new(math.clamp(pos, 0, 1), col))
+            
+            table.insert(keypoints, ColorSequenceKeypoint.new(pos, col))
         end
 
-        -- ensure at least two keypoints for ColorSequence
+        -- Ensure at least two keypoints for ColorSequence
         if #keypoints == 1 then
             table.insert(keypoints, ColorSequenceKeypoint.new(1, keypoints[1].Value))
         end
         return ColorSequence.new(keypoints)
     end
 
-    -- fallback to legacy start/end values (backwards compatible)
-    local s = self.Scheme.AccentGradientStart
-    local e = self.Scheme.AccentGradientEnd
-
-    if typeof(s) ~= "Color3" then
-        if typeof(s) == "string" and s ~= "" then
-            local ok, c = pcall(function() return Color3.fromHex(s) end)
-            if ok and typeof(c) == "Color3" then
-                s = c
-            else
-                s = self.Scheme.AccentColor
-            end
-        else
-            s = self.Scheme.AccentColor
+    -- Fallback to legacy start/end values (backwards compatible)
+    local defaultColor = self.Scheme.AccentColor
+    local function parseColor(col)
+        if typeof(col) == "Color3" then
+            return col
+        elseif typeof(col) == "string" and col ~= "" then
+            local ok, c = pcall(Color3.fromHex, col)
+            return (ok and typeof(c) == "Color3") and c or defaultColor
         end
+        return defaultColor
     end
 
-    if typeof(e) ~= "Color3" then
-        if typeof(e) == "string" and e ~= "" then
-            local ok, c = pcall(function() return Color3.fromHex(e) end)
-            if ok and typeof(c) == "Color3" then
-                e = c
-            else
-                e = self.Scheme.AccentColor
-            end
-        else
-            e = self.Scheme.AccentColor
-        end
-    end
+    local s = parseColor(self.Scheme.AccentGradientStart)
+    local e = parseColor(self.Scheme.AccentGradientEnd)
 
     return ColorSequence.new({
         ColorSequenceKeypoint.new(0, s),
@@ -687,17 +667,19 @@ function Library:GetAccentGradientTransparencySequence()
     if type(g) == "table" and type(g.Stops) == "table" and #g.Stops > 0 then
         local keypoints = {}
         for _, s in ipairs(g.Stops) do
-            local pos = tonumber((s and s.pos) or 0) or 0
-            local transp = tonumber((s and s.transparency) or 0) or 0
-            table.insert(keypoints, NumberSequenceKeypoint.new(math.clamp(pos, 0, 1), math.clamp(transp, 0, 1)))
+            local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
+            local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
+            table.insert(keypoints, NumberSequenceKeypoint.new(pos, transp))
         end
+        
+        -- Ensure at least two keypoints for NumberSequence
         if #keypoints == 1 then
             table.insert(keypoints, NumberSequenceKeypoint.new(1, keypoints[1].Value))
         end
         return NumberSequence.new(keypoints)
     end
 
-    -- legacy fallback: no transparency information available
+    -- Legacy fallback: no transparency information available
     return NumberSequence.new(0)
 end
 
@@ -1551,7 +1533,7 @@ type IconModule = {
 
 local FetchIcons, Icons = pcall(function()
     return (loadstring(
-        HttpService:GetAsync("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
+        game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
     ) :: () -> IconModule)()
 end)
 
@@ -2521,7 +2503,7 @@ function Library:AddContextMenu(
 
         -- Ensure menu stays inside the main window bounds (clamp if necessary)
         pcall(function()
-            local MF = Library.MainFrame
+            local MF = Library.MainFrame or MainFrame
             if MF and MF.Parent then
                 local menuSize = Menu.Size
                 -- resolve size in pixels (fall back to AbsoluteSize if needed)
@@ -2592,7 +2574,7 @@ function Library:AddContextMenu(
             end
             -- also clamp while tracking holder movement
             pcall(function()
-                local MF2 = Library.MainFrame
+                local MF2 = Library.MainFrame or MainFrame
                 if MF2 and MF2.Parent then
                     local menuSize = Menu.Size
                     local menuW = (menuSize and menuSize.X and menuSize.X.Offset) or Menu.AbsoluteSize.X
@@ -3992,128 +3974,172 @@ do
                 return
             end
 
-            table.sort(GradientStops, function(a, b) return (tonumber(a and a.pos) or 0) < (tonumber(b and b.pos) or 0) end)
-
-            -- Build primitive stop list first (pos, color, transparency)
-            local stops = {}
-            for i, s in ipairs(GradientStops) do
-                local pos = math.clamp(tonumber(s and s.pos) or 0, 0, 1)
-                local color = (s and s.color) or Color3.new(1, 1, 1)
-                local transp = math.clamp(tonumber(s and s.transparency) or 0, 0, 1)
-                table.insert(stops, { pos = pos, color = color, transp = transp })
-            end
-
-            -- Ensure at least two stops and endpoints at 0 and 1
-            if #stops == 0 then
-                stops = { { pos = 0, color = Color3.new(1,1,1), transp = 0 }, { pos = 1, color = Color3.new(1,1,1), transp = 0 } }
-            elseif #stops == 1 then
-                local s = stops[1]
-                stops = { { pos = 0, color = s.color, transp = s.transp }, { pos = 1, color = s.color, transp = s.transp } }
-            else
-                -- If first stop isn't at 0, prepend duplicate of first at 0
-                if stops[1].pos > 0 then
-                    table.insert(stops, 1, { pos = 0, color = stops[1].color, transp = stops[1].transp })
-                end
-                -- If last stop isn't at 1, append duplicate of last at 1
-                if stops[#stops].pos < 1 then
-                    table.insert(stops, { pos = 1, color = stops[#stops].color, transp = stops[#stops].transp })
-                end
-            end
-
-            local keypoints = {}
-            local tpoints = {}
-            for _, s in ipairs(stops) do
-                table.insert(keypoints, ColorSequenceKeypoint.new(s.pos, s.color))
-                table.insert(tpoints, NumberSequenceKeypoint.new(s.pos, s.transp))
-            end
-
-            GradientUI.Color = ColorSequence.new(keypoints)
-            GradientUI.Transparency = NumberSequence.new(tpoints)
-            -- update preview gradient if present
-            pcall(function()
-                if HolderGradient and HolderGradient.Parent then
-                    HolderGradient.Color = ColorSequence.new(keypoints)
-                    HolderGradient.Transparency = NumberSequence.new(tpoints)
-                end
+            -- Sort gradient stops by position once
+            table.sort(GradientStops, function(a, b) 
+                return (tonumber(a and a.pos) or 0) < (tonumber(b and b.pos) or 0) 
             end)
 
-            -- reposition interactive dots if present and update visual state
+            -- Build color and transparency sequences directly
+            local keypoints, tpoints = {}, {}
+            local numStops = #GradientStops
+            
+            if numStops == 0 then
+                -- Default: white gradient with no transparency
+                local defaultColor = Color3.new(1, 1, 1)
+                keypoints = { ColorSequenceKeypoint.new(0, defaultColor), ColorSequenceKeypoint.new(1, defaultColor) }
+                tpoints = { NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0) }
+            elseif numStops == 1 then
+                -- Single stop: duplicate at both ends
+                local s = GradientStops[1]
+                local color = s.color or Color3.new(1, 1, 1)
+                local transp = math.clamp(tonumber(s.transparency) or 0, 0, 1)
+                keypoints = { ColorSequenceKeypoint.new(0, color), ColorSequenceKeypoint.new(1, color) }
+                tpoints = { NumberSequenceKeypoint.new(0, transp), NumberSequenceKeypoint.new(1, transp) }
+            else
+                -- Multiple stops: ensure endpoints at 0 and 1, build sequences
+                local firstStop = GradientStops[1]
+                local lastStop = GradientStops[numStops]
+                
+                -- Add first stop at 0 if needed
+                if (tonumber(firstStop.pos) or 0) > 0 then
+                    local color = firstStop.color or Color3.new(1, 1, 1)
+                    local transp = math.clamp(tonumber(firstStop.transparency) or 0, 0, 1)
+                    table.insert(keypoints, ColorSequenceKeypoint.new(0, color))
+                    table.insert(tpoints, NumberSequenceKeypoint.new(0, transp))
+                end
+                
+                -- Add all stops
+                for _, s in ipairs(GradientStops) do
+                    local pos = math.clamp(tonumber(s.pos) or 0, 0, 1)
+                    local color = s.color or Color3.new(1, 1, 1)
+                    local transp = math.clamp(tonumber(s.transparency) or 0, 0, 1)
+                    table.insert(keypoints, ColorSequenceKeypoint.new(pos, color))
+                    table.insert(tpoints, NumberSequenceKeypoint.new(pos, transp))
+                end
+                
+                -- Add last stop at 1 if needed
+                if (tonumber(lastStop.pos) or 0) < 1 then
+                    local color = lastStop.color or Color3.new(1, 1, 1)
+                    local transp = math.clamp(tonumber(lastStop.transparency) or 0, 0, 1)
+                    table.insert(keypoints, ColorSequenceKeypoint.new(1, color))
+                    table.insert(tpoints, NumberSequenceKeypoint.new(1, transp))
+                end
+            end
+
+            -- Update gradient UI with new sequences
+            local colorSeq = ColorSequence.new(keypoints)
+            local transpSeq = NumberSequence.new(tpoints)
+            GradientUI.Color = colorSeq
+            GradientUI.Transparency = transpSeq
+            
+            -- Update preview gradient on holder if present
+            if HolderGradient and HolderGradient.Parent then
+                pcall(function()
+                    HolderGradient.Color = colorSeq
+                    HolderGradient.Transparency = transpSeq
+                end)
+            end
+
+            -- Update dot positions and selection state
             for _, s in ipairs(GradientStops) do
-                if s and s.dot then
-                    local okPos = math.clamp(tonumber(s.pos) or 0, 0, 1)
-                    if s.dot.Parent then
-                        pcall(function()
-                            s.dot.Position = UDim2.new(okPos, 0, 0.5, 0)
-                            -- update dot color/border
-                            if s.color then
-                                s.dot.BackgroundColor3 = s.color
-                                s.dot.BorderColor3 = Library:GetDarkerColor(s.color)
-                            end
-                            -- update outline visibility if present
-                            if s.outline then
-                                s.outline.Transparency = (s == SelectedStop) and 0 or 1
-                            else
-                                local stroke = s.dot:FindFirstChildOfClass("UIStroke")
-                                if stroke then
-                                    stroke.Transparency = (s == SelectedStop) and 0 or 1
-                                end
-                            end
-                        end)
+                if s.dot and s.dot.Parent then
+                    local pos = math.clamp(tonumber(s.pos) or 0, 0, 1)
+                    s.dot.Position = UDim2.new(pos, 0, 0.5, 0)
+                    
+                    -- Update dot appearance
+                    if s.color then
+                        s.dot.BackgroundColor3 = s.color
+                        s.dot.BorderColor3 = Library:GetDarkerColor(s.color)
+                    end
+                    
+                    -- Update selection outline (use outline if available, otherwise find UIStroke)
+                    local isSelected = (s == SelectedStop)
+                    if s.outline then
+                        s.outline.Transparency = isSelected and 0 or 1
+                    else
+                        local stroke = s.dot:FindFirstChildOfClass("UIStroke")
+                        if stroke and stroke.Name == "AccentOutline" then
+                            stroke.Transparency = isSelected and 0 or 1
+                        end
                     end
                 end
             end
         end
 
         local function CreateDot(stop)
+            local pos = math.clamp(tonumber(stop and stop.pos) or 0, 0, 1)
+            local color = (stop and stop.color) or Color3.new(1, 1, 1)
+            
             local Dot = New("ImageButton", {
                 Size = UDim2.fromOffset(14, 14),
                 AnchorPoint = Vector2.new(0.5, 0.5),
-                BackgroundColor3 = stop and stop.color or Color3.new(1,1,1),
-                BorderColor3 = Library:GetDarkerColor((stop and stop.color) or Color3.new(1,1,1)),
-                Position = UDim2.new(math.clamp(tonumber(stop and stop.pos) or 0, 0, 1), 0, 0.5, 0),
+                BackgroundColor3 = color,
+                BorderColor3 = Library:GetDarkerColor(color),
+                Position = UDim2.new(pos, 0, 0.5, 0),
                 AutoButtonColor = false,
                 Parent = DotsContainer,
             })
-            -- apply library corner radius to dots so they follow theme rounding
+            
+            -- Apply library corner radius to dots
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Dot })
-            -- small persistent dark outline for visibility
-            local SmallStroke = New("UIStroke", { Color = "Dark", Thickness = 1, Transparency = 0, Parent = Dot })
+            
+            -- Small persistent dark outline for visibility
+            local SmallStroke = New("UIStroke", { 
+                Name = "DarkOutline",
+                Color = "Dark", 
+                Thickness = 1, 
+                Transparency = 0, 
+                Parent = Dot 
+            })
             Library.Registry[SmallStroke] = { Color = "Dark" }
-            -- accent outline shown only for selected dot
-            local OutlineStroke = New("UIStroke", { Color = "AccentColor", Thickness = 2, Transparency = 1, Parent = Dot })
+            
+            -- Accent outline shown only for selected dot
+            local OutlineStroke = New("UIStroke", { 
+                Name = "AccentOutline",
+                Color = "AccentColor", 
+                Thickness = 2, 
+                Transparency = 1, 
+                Parent = Dot 
+            })
             Library.Registry[OutlineStroke] = { Color = "AccentColor" }
 
             stop.dot = Dot
             stop.outline = OutlineStroke
 
+            -- Click to select this stop
             Dot.MouseButton1Click:Connect(function()
-                pcall(function()
-                    SelectedStop = stop
-                    -- reveal outline for this dot, hide others in UpdateGradientRender
-                    if ColorPicker and type(ColorPicker.SetValueRGB) == "function" then
-                        ColorPicker:SetValueRGB(stop.color or Color3.new(1,1,1), stop.transparency or 0)
-                    end
-                    UpdateGradientRender()
-                    -- open the color menu so user can edit the selected stop immediately
-                    pcall(function()
-                        if ColorMenu and type(ColorMenu.Open) == "function" then
-                            ColorMenu:Open()
-                        end
-                    end)
-                end)
+                SelectedStop = stop
+                if ColorPicker and type(ColorPicker.SetValueRGB) == "function" then
+                    ColorPicker:SetValueRGB(color, tonumber(stop.transparency) or 0)
+                end
+                UpdateGradientRender()
+                -- Open color menu for immediate editing
+                if ColorMenu and type(ColorMenu.Open) == "function" then
+                    pcall(function() ColorMenu:Open() end)
+                end
             end)
 
+            -- Drag to move stop along gradient bar
             Dot.InputBegan:Connect(function(Input)
-                pcall(function()
+                if not IsDragInput(Input) or not GradientBar then return end
+                
+                local function updatePosition()
+                    local minX = GradientBar.AbsolutePosition.X
+                    local maxX = minX + GradientBar.AbsoluteSize.X
+                    local width = maxX - minX
+                    if width <= 0 then return false end
+                    
+                    local mouseX = Mouse.X or 0
+                    local posX = math.clamp(mouseX, minX, maxX)
+                    stop.pos = (posX - minX) / width
+                    return true
+                end
+                
+                task.spawn(function()
                     while IsDragInput(Input) do
-                        if not GradientBar then break end
-                        local MinX = GradientBar.AbsolutePosition.X
-                        local MaxX = MinX + GradientBar.AbsoluteSize.X
-                        if MaxX - MinX <= 0 then break end
-                        local mouseX = (Mouse and Mouse.X) and Mouse.X or 0
-                        local PosX = math.clamp(mouseX, MinX, MaxX)
-                        stop.pos = (PosX - MinX) / (MaxX - MinX)
-                        UpdateGradientRender()
+                        if updatePosition() then
+                            UpdateGradientRender()
+                        end
                         RunService.RenderStepped:Wait()
                     end
                 end)
@@ -4124,18 +4150,25 @@ do
 
         local function AddGradientStop(pos, color, transparency)
             local p = math.clamp(tonumber(pos) or 0.5, 0, 1)
-            local col = color or (ColorPicker and ColorPicker.Value) or Color3.new(1,1,1)
-            local transp = math.clamp(tonumber(transparency) or (ColorPicker and tonumber(ColorPicker.Transparency) or 0) or 0, 0, 1)
+            local col = color or (ColorPicker and ColorPicker.Value) or Color3.new(1, 1, 1)
+            local transp = math.clamp(tonumber(transparency) or (ColorPicker and tonumber(ColorPicker.Transparency)) or 0, 0, 1)
+            
             local stop = { pos = p, color = col, transparency = transp }
             table.insert(GradientStops, stop)
-            if not DotsContainer and GradientBar then
-                DotsContainer = New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = GradientBar })
-            end
+            
             if DotsContainer then
-                pcall(function() CreateDot(stop) end)
+                CreateDot(stop)
+            elseif GradientBar then
+                DotsContainer = New("Frame", { 
+                    BackgroundTransparency = 1, 
+                    Size = UDim2.fromScale(1, 1), 
+                    Parent = GradientBar 
+                })
+                CreateDot(stop)
             end
-            UpdateGradientRender()
+            
             SelectedStop = stop
+            UpdateGradientRender()
             Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
         end
 
@@ -4219,6 +4252,15 @@ do
                         end,
                     }
                 end
+            end -- end MinusIcon block
+
+            -- Plus button adds a new gradient stop at cursor position or middle
+            PlusButton.MouseButton1Click:Connect(function()
+                pcall(function()
+                    AddGradientStop(0.5)
+                end)
+            end)
+
             MinusButton.MouseButton1Click:Connect(function()
                 pcall(function()
                     if not SelectedStop then return end
