@@ -40,7 +40,7 @@ end
 
 local ThemeManager = {}
 do
-    local ThemeFields = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor", "AccentGradientStart", "AccentGradientEnd" }
+    local ThemeFields = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor", "AccentGradient" }
     ThemeManager.Folder = "ObsidianLibSettings"
     -- if not isfolder(ThemeManager.Folder) then makefolder(ThemeManager.Folder) end
 
@@ -184,6 +184,58 @@ do
                 if self.Library.Options[idx] then
                     self.Library.Options[idx]:SetValue(val)
                 end
+
+            elseif idx == "AccentGradient" then
+                -- accept either a serialized gradient (table of stops) or a single color string
+                if type(val) == "table" then
+                    local stopsSrc = val.Stops or val
+                    local parsed = {}
+                    for _, s in ipairs(stopsSrc) do
+                        local pos = tonumber((s and s.pos) or 0) or 0
+                        local color = s and s.color
+                        if typeof(color) == "string" then
+                            pcall(function() color = Color3.fromHex(color:gsub("#", "")) end)
+                        end
+                        if typeof(color) ~= "Color3" then
+                            color = Color3.fromRGB(255, 255, 255)
+                        end
+                        local transp = tonumber((s and s.transparency) or 0) or 0
+                        table.insert(parsed, { pos = pos, color = color, transparency = transp })
+                    end
+
+                    self.Library.Scheme.AccentGradient = { Stops = parsed }
+                    if parsed[1] and parsed[#parsed] then
+                        self.Library.Scheme.AccentGradientStart = parsed[1].color
+                        self.Library.Scheme.AccentGradientEnd = parsed[#parsed].color
+                    end
+
+                    if self.Library.Options["AccentGradient"] then
+                        local opt = self.Library.Options["AccentGradient"]
+                        if type(opt.SetGradientStops) == "function" then
+                            opt:SetGradientStops(parsed)
+                        end
+                        if type(opt.SetValueRGB) == "function" and parsed[1] then
+                            opt:SetValueRGB(parsed[1].color, parsed[1].transparency or 0)
+                        end
+                    end
+
+                elseif typeof(val) == "string" or typeof(val) == "Color3" then
+                    local c = typeof(val) == "string" and Color3.fromHex(val) or val
+                    self.Library.Scheme.AccentGradient = { Stops = { { pos = 0, color = c, transparency = 0 }, { pos = 1, color = c, transparency = 0 } } }
+                    self.Library.Scheme.AccentGradientStart = c
+                    self.Library.Scheme.AccentGradientEnd = c
+
+                    if self.Library.Options["AccentGradient"] then
+                        local opt = self.Library.Options["AccentGradient"]
+                        if type(opt.SetGradientStops) == "function" then
+                            opt:SetGradientStops(self.Library.Scheme.AccentGradient.Stops)
+                        end
+                        if type(opt.SetValueRGB) == "function" then
+                            opt:SetValueRGB(c, 0)
+                        end
+                    end
+                end
+
             else
                 self.Library.Scheme[idx] = Color3.fromHex(val)
 
@@ -198,8 +250,28 @@ do
 
     function ThemeManager:ThemeUpdate()
         for i, field in ThemeFields do
-            if self.Library.Options and self.Library.Options[field] then
-                self.Library.Scheme[field] = self.Library.Options[field].Value
+            if not (self.Library and self.Library.Options) then break end
+
+            if field == "AccentGradient" then
+                local opt = self.Library.Options["AccentGradient"]
+                if opt and type(opt.GetGradientStops) == "function" then
+                    local stops = opt:GetGradientStops()
+                    self.Library.Scheme.AccentGradient = { Stops = stops }
+                    if stops[1] and stops[#stops] then
+                        self.Library.Scheme.AccentGradientStart = stops[1].color
+                        self.Library.Scheme.AccentGradientEnd = stops[#stops].color
+                    end
+                else
+                    -- fallback to single-color value if gradient API not available
+                    if self.Library.Options["AccentGradient"] then
+                        self.Library.Scheme.AccentGradientStart = self.Library.Options["AccentGradient"].Value
+                        self.Library.Scheme.AccentGradientEnd = self.Library.Options["AccentGradient"].Value
+                    end
+                end
+            else
+                if self.Library.Options and self.Library.Options[field] then
+                    self.Library.Scheme[field] = self.Library.Options[field].Value
+                end
             end
         end
 
@@ -257,17 +329,68 @@ do
         local FinalTheme = {}
         local LibraryScheme = {}
         for _, field in ThemeFields do
-            if typeof(theme[field]) == "Color3" then
-                FinalTheme[field] = "#" .. theme[field]:ToHex()
-                LibraryScheme[field] = theme[field]
+            if field == "AccentGradient" then
+                -- accept explicit serialized gradient (table) or fall back to start/end values
+                if type(theme[field]) == "table" then
+                    local stops = theme[field].Stops or theme[field]
+                    local parsed = {}
+                    for _, s in ipairs(stops) do
+                        local pos = tonumber((s and s.pos) or 0) or 0
+                        local col = s and s.color
+                        if typeof(col) == "string" then
+                            pcall(function() col = Color3.fromHex(col:gsub("#", "")) end)
+                        end
+                        if typeof(col) ~= "Color3" then
+                            col = Color3.fromRGB(255,255,255)
+                        end
+                        local transp = tonumber((s and s.transparency) or 0) or 0
+                        table.insert(parsed, { pos = pos, color = col, transparency = transp })
+                    end
 
-            elseif typeof(theme[field]) == "string" then
-                FinalTheme[field] = if theme[field]:sub(1, 1) == "#" then theme[field] else ("#" .. theme[field])
-                LibraryScheme[field] = Color3.fromHex(theme[field])
+                    FinalTheme[field] = { Stops = {} }
+                    for _, s in ipairs(parsed) do
+                        table.insert(FinalTheme[field].Stops, { pos = s.pos, color = "#" .. s.color:ToHex(), transparency = s.transparency })
+                    end
+
+                    LibraryScheme.AccentGradient = { Stops = parsed }
+                    if parsed[1] and parsed[#parsed] then
+                        LibraryScheme.AccentGradientStart = parsed[1].color
+                        LibraryScheme.AccentGradientEnd = parsed[#parsed].color
+                    end
+
+                elseif typeof(theme["AccentGradientStart"]) == "string" or typeof(theme["AccentGradientStart"]) == "Color3" then
+                    local s = typeof(theme["AccentGradientStart"]) == "string" and Color3.fromHex(theme["AccentGradientStart"]) or theme["AccentGradientStart"]
+                    local e = typeof(theme["AccentGradientEnd"]) == "string" and Color3.fromHex(theme["AccentGradientEnd"]) or theme["AccentGradientEnd"]
+                    FinalTheme["AccentGradientStart"] = "#" .. (s and s:ToHex() or "ffffff")
+                    FinalTheme["AccentGradientEnd"] = "#" .. (e and e:ToHex() or "ffffff")
+                    LibraryScheme.AccentGradientStart = s
+                    LibraryScheme.AccentGradientEnd = e
+                    LibraryScheme.AccentGradient = { Stops = { { pos = 0, color = s or Color3.new(1,1,1), transparency = 0 }, { pos = 1, color = e or Color3.new(1,1,1), transparency = 0 } } }
+                else
+                    FinalTheme[field] = ThemeManager.BuiltInThemes["Default"][2][field]
+                    -- default fallback uses built-in start/end
+                    local sHex = ThemeManager.BuiltInThemes["Default"][2]["AccentGradientStart"]
+                    local eHex = ThemeManager.BuiltInThemes["Default"][2]["AccentGradientEnd"]
+                    local s = sHex and Color3.fromHex(sHex) or Color3.new(1,1,1)
+                    local e = eHex and Color3.fromHex(eHex) or Color3.new(1,1,1)
+                    LibraryScheme.AccentGradient = { Stops = { { pos = 0, color = s, transparency = 0 }, { pos = 1, color = e, transparency = 0 } } }
+                    LibraryScheme.AccentGradientStart = s
+                    LibraryScheme.AccentGradientEnd = e
+                end
 
             else
-                FinalTheme[field] = ThemeManager.BuiltInThemes["Default"][2][field]
-                LibraryScheme[field] = Color3.fromHex(ThemeManager.BuiltInThemes["Default"][2][field])
+                if typeof(theme[field]) == "Color3" then
+                    FinalTheme[field] = "#" .. theme[field]:ToHex()
+                    LibraryScheme[field] = theme[field]
+
+                elseif typeof(theme[field]) == "string" then
+                    FinalTheme[field] = if theme[field]:sub(1, 1) == "#" then theme[field] else ("#" .. theme[field])
+                    LibraryScheme[field] = Color3.fromHex(theme[field])
+
+                else
+                    FinalTheme[field] = ThemeManager.BuiltInThemes["Default"][2][field]
+                    LibraryScheme[field] = Color3.fromHex(ThemeManager.BuiltInThemes["Default"][2][field])
+                end
             end
         end
 
@@ -302,7 +425,26 @@ do
 
         local theme = {}
         for _, field in ThemeFields do
-            theme[field] = self.Library.Options[field].Value:ToHex()
+            if field == "AccentGradient" then
+                local opt = self.Library.Options["AccentGradient"]
+                if opt and type(opt.GetGradientStops) == "function" then
+                    local stops = opt:GetGradientStops()
+                    local ser = {}
+                    for _, s in ipairs(stops) do
+                        table.insert(ser, { pos = tonumber(s.pos) or 0, color = "#" .. (s.color and s.color:ToHex() or "ffffff"), transparency = tonumber(s.transparency) or 0 })
+                    end
+                    theme["AccentGradient"] = { Stops = ser }
+                    -- keep legacy start/end for compatibility (stored without leading '#')
+                    if #ser > 0 then
+                        theme["AccentGradientStart"] = ser[1].color:gsub("#", "")
+                        theme["AccentGradientEnd"] = ser[#ser].color:gsub("#", "")
+                    end
+                else
+                    theme[field] = tostring(self.Library.Options[field].Value:ToHex())
+                end
+            else
+                theme[field] = tostring(self.Library.Options[field].Value:ToHex())
+            end
         end
         theme["FontFace"] = self.Library.Options["FontFace"].Value
 
@@ -366,11 +508,20 @@ do
             :AddColorPicker("OutlineColor", { Default = self.Library.Scheme.OutlineColor })
         groupbox:AddLabel("Font color"):AddColorPicker("FontColor", { Default = self.Library.Scheme.FontColor })
         groupbox
-            :AddLabel("Gradient start")
-            :AddColorPicker("AccentGradientStart", { Default = self.Library.Scheme.AccentGradientStart })
-        groupbox
-            :AddLabel("Gradient end")
-            :AddColorPicker("AccentGradientEnd", { Default = self.Library.Scheme.AccentGradientEnd })
+            :AddLabel("Accent gradient")
+            :AddColorPicker("AccentGradient", { Default = self.Library.Scheme.AccentGradientStart, Gradient = true })
+        -- if the library already has a stored multi-stop gradient, populate the picker with it
+        if self.Library.Scheme and type(self.Library.Scheme.AccentGradient) == "table" and self.Library.Scheme.AccentGradient.Stops then
+            local opt = self.Library.Options and self.Library.Options["AccentGradient"]
+            if opt and type(opt.SetGradientStops) == "function" then
+                opt:SetGradientStops(self.Library.Scheme.AccentGradient.Stops)
+                -- also set the visible color to the first stop
+                if self.Library.Scheme.AccentGradient.Stops[1] and type(opt.SetValueRGB) == "function" then
+                    local s = self.Library.Scheme.AccentGradient.Stops[1]
+                    opt:SetValueRGB(s.color, s.transparency or 0)
+                end
+            end
+        end
         groupbox:AddDropdown("FontFace", {
             Text = "Font Face",
             Default = "Code",
@@ -513,12 +664,25 @@ do
         self.Library.Options.AccentColor:OnChanged(UpdateTheme)
         self.Library.Options.OutlineColor:OnChanged(UpdateTheme)
         self.Library.Options.FontColor:OnChanged(UpdateTheme)
-        -- Update when gradient pickers change
-        if self.Library.Options.AccentGradientStart then
-            self.Library.Options.AccentGradientStart:OnChanged(UpdateTheme)
-        end
-        if self.Library.Options.AccentGradientEnd then
-            self.Library.Options.AccentGradientEnd:OnChanged(UpdateTheme)
+        -- Update when gradient picker changes
+        if self.Library.Options.AccentGradient then
+            self.Library.Options.AccentGradient:OnChanged(function(Value)
+                if type(Value) == "table" and Value.Stops then
+                    local stops = Value.Stops
+                    local first = stops[1]
+                    local last = stops[#stops]
+                    if first and first.color then
+                        self.Library.Scheme.AccentGradientStart = first.color
+                    end
+                    if last and last.color then
+                        self.Library.Scheme.AccentGradientEnd = last.color
+                    end
+                elseif typeof(Value) == "Color3" then
+                    self.Library.Scheme.AccentGradientStart = Value
+                    self.Library.Scheme.AccentGradientEnd = Value
+                end
+                self.Library:UpdateColorsUsingRegistry()
+            end)
         end
         self.Library.Options.FontFace:OnChanged(function(Value)
             self.Library:SetFont(Enum.Font[Value])
