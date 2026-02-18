@@ -158,6 +158,7 @@ local Library = {
     KeybindFrame = nil,
     KeybindContainer = nil,
     KeybindToggles = {},
+    ButtonKeybinds = {},
 
     MobileButtonFrame = nil,
     MobileButtonContainer = nil,
@@ -4735,6 +4736,134 @@ do
                 end
 
                 Library:SafeCallback(Button.Func)
+            end)
+
+            -- Right-click to set a keybind for this button
+            Button.Base.MouseButton2Click:Connect(function()
+                if Button.Disabled then
+                    return
+                end
+
+                local originalText = Button.Base.Text
+                Button.Base.Text = ". . ."
+
+                local picked = false
+                local pickConn
+
+                local MouseMap = {
+                    [Enum.UserInputType.MouseButton1] = "MB1",
+                    [Enum.UserInputType.MouseButton2] = "MB2",
+                    [Enum.UserInputType.MouseButton3] = "MB3",
+                }
+
+                pickConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                    if gameProcessed then
+                        return
+                    end
+                    if UserInputService:GetFocusedTextBox() then
+                        return
+                    end
+
+                    local display = nil
+                    if MouseMap[input.UserInputType] then
+                        display = MouseMap[input.UserInputType]
+                    elseif input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode then
+                        if input.KeyCode == Enum.KeyCode.Escape then
+                            -- cancel
+                            Button.Base.Text = originalText
+                            picked = true
+                            pickConn:Disconnect()
+                            return
+                        end
+                        display = input.KeyCode.Name
+                    end
+
+                    if not display then
+                        return
+                    end
+
+                    -- collect modifiers
+                    local modKeys = {}
+                    for _, kc in ipairs({
+                        Enum.KeyCode.LeftControl,
+                        Enum.KeyCode.RightControl,
+                        Enum.KeyCode.LeftShift,
+                        Enum.KeyCode.RightShift,
+                        Enum.KeyCode.LeftAlt,
+                        Enum.KeyCode.RightAlt,
+                    }) do
+                        if UserInputService:IsKeyDown(kc) then
+                            table.insert(modKeys, kc)
+                        end
+                    end
+
+                    -- store binding
+                    local binding = {
+                        UserInputType = input.UserInputType,
+                        KeyCode = input.KeyCode,
+                        Display = display,
+                        Modifiers = modKeys,
+                        Button = Button,
+                    }
+
+                    Library.ButtonKeybinds[Button] = binding
+
+                    -- ensure global handler exists
+                    if not Library._ButtonKeybindConn then
+                        Library._ButtonKeybindConn = UserInputService.InputBegan:Connect(function(inp, gp)
+                            if Library.Unloaded then
+                                return
+                            end
+                            if gp or UserInputService:GetFocusedTextBox() then
+                                return
+                            end
+
+                            for btn, bnd in pairs(Library.ButtonKeybinds) do
+                                if not btn or not btn.Base or not bnd then
+                                    continue
+                                end
+
+                                -- check modifiers
+                                local okMods = true
+                                for _, mk in ipairs(bnd.Modifiers or {}) do
+                                    if not UserInputService:IsKeyDown(mk) then
+                                        okMods = false
+                                        break
+                                    end
+                                end
+                                if not okMods then
+                                    continue
+                                end
+
+                                if bnd.UserInputType == Enum.UserInputType.Keyboard then
+                                    if inp.UserInputType == Enum.UserInputType.Keyboard and inp.KeyCode == bnd.KeyCode then
+                                        Library:SafeCallback(btn.Func)
+                                    end
+                                else
+                                    if inp.UserInputType == bnd.UserInputType then
+                                        Library:SafeCallback(btn.Func)
+                                    end
+                                end
+                            end
+                        end)
+                        Library:GiveSignal(Library._ButtonKeybindConn)
+                    end
+
+                    -- briefly show the assigned key on the button then restore
+                    spawn(function()
+                        pcall(function()
+                            Button.Base.Text = binding.Display
+                            task.wait(1)
+                            if Button and Button.Base then
+                                Button.Base.Text = originalText
+                            end
+                        end)
+                    end)
+
+                    picked = true
+                    pickConn:Disconnect()
+                end)
+                Library:GiveSignal(pickConn)
             end)
         end
 
