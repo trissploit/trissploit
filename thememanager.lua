@@ -536,11 +536,18 @@ do
         return box
     end
 
+    -- Combined factory: create both theme groupbox and misc groupbox in one call
+    function ThemeManager:CreateThemePanels(tab)
+        assert(self.Library, "Must set ThemeManager.Library first!")
+        local left = self:CreateGroupBox(tab)
+        self:CreateThemeManager(left)
+        local right = self:CreateMiscBox(tab)
+        return left, right
+    end
+
     function ThemeManager:ApplyToTab(tab)
         assert(self.Library, "Must set ThemeManager.Library first!")
-        local groupbox = self:CreateGroupBox(tab)
-        self:CreateThemeManager(groupbox)
-        self:CreateMiscBox(tab)
+        self:CreateThemePanels(tab)
     end
 
     function ThemeManager:ApplyToGroupbox(groupbox)
