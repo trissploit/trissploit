@@ -1352,7 +1352,7 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         end
     end
 
-    return Instance
+    return inst
 end
 
 --// Main Instances \\-
