@@ -1288,16 +1288,16 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
 end
 
 local function New(ClassName: string, Properties: { [string]: any }): any
-    local Instance = Instance.new(ClassName)
+    local inst = Instance.new(ClassName)
 
     if Templates[ClassName] then
-        FillInstance(Templates[ClassName], Instance)
+        FillInstance(Templates[ClassName], inst)
     end
-    FillInstance(Properties, Instance)
+    FillInstance(Properties, inst)
 
     if Properties["Parent"] and not Properties["ZIndex"] then
         pcall(function()
-            Instance.ZIndex = Properties.Parent.ZIndex
+            inst.ZIndex = Properties.Parent.ZIndex
         end)
     end
 
@@ -1305,13 +1305,13 @@ local function New(ClassName: string, Properties: { [string]: any }): any
     if ClassName == "UIStroke" then
         local clr = Properties.Color
         if clr ~= "Dark" then
-            local parent = Properties.Parent or Instance.Parent
+            local parent = Properties.Parent or inst.Parent
             if parent then
                 local outer = Instance.new("UIStroke")
                 outer.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
-                outer.Thickness = (Instance.Thickness or 1) + 1.5
+                outer.Thickness = (inst.Thickness or 1) + 1.5
                 outer.Transparency = 0.5
-                outer.ZIndex = (Instance.ZIndex or 1) - 1
+                outer.ZIndex = (inst.ZIndex or 1) - 1
                 outer.LineJoinMode = Enum.LineJoinMode.Miter
                 outer.Parent = parent
                 Library.Registry[outer] = { Color = "Dark" }
@@ -1322,10 +1322,10 @@ local function New(ClassName: string, Properties: { [string]: any }): any
     -- Track UICorner instances created through New so we can update their CornerRadius
     if ClassName == "UICorner" then
         Library._ManagedUICorners = Library._ManagedUICorners or {}
-        table.insert(Library._ManagedUICorners, Instance)
+        table.insert(Library._ManagedUICorners, inst)
         -- initialize to current library corner radius if not explicitly provided
         if not Properties["CornerRadius"] then
-            Instance.CornerRadius = UDim.new(0, Library.CornerRadius)
+            inst.CornerRadius = UDim.new(0, Library.CornerRadius)
         end
     end
 
@@ -1333,9 +1333,9 @@ local function New(ClassName: string, Properties: { [string]: any }): any
     if (ClassName == "ImageLabel" or ClassName == "ImageButton") and Properties and Properties.Image and Properties.Image ~= "" then
         local hasRect = Properties.ImageRectSize or Properties.ImageRectOffset
         if hasRect then
-            local grad = Instance:FindFirstChild("LucideAccentGradient") or Instance:FindFirstChildOfClass("UIGradient")
+            local grad = inst:FindFirstChild("LucideAccentGradient") or inst:FindFirstChildOfClass("UIGradient")
             if not grad then
-                grad = New("UIGradient", { Name = "LucideAccentGradient", Parent = Instance })
+                grad = New("UIGradient", { Name = "LucideAccentGradient", Parent = inst })
             end
 
             pcall(function()
@@ -1350,7 +1350,7 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         end
     end
 
-    return Instance
+    return inst
 end
 
 --// Main Instances \\-
