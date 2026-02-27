@@ -1288,6 +1288,7 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
 end
 
 local function New(ClassName: string, Properties: { [string]: any }): any
+    -- avoid shadowing the global Instance constructor by using a different name
     local inst = Instance.new(ClassName)
 
     if Templates[ClassName] then
@@ -1307,6 +1308,7 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         if clr ~= "Dark" then
             local parent = Properties.Parent or inst.Parent
             if parent then
+                -- use the global Instance.new here explicitly
                 local outer = Instance.new("UIStroke")
                 outer.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
                 outer.Thickness = (inst.Thickness or 1) + 1.5
@@ -1350,7 +1352,7 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         end
     end
 
-    return inst
+    return Instance
 end
 
 --// Main Instances \\-
