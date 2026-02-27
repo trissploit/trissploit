@@ -580,8 +580,14 @@ local function GetLighterColor(Color)
 end
 
 function Library:GetAccentGradientSequence()
+    -- accent color should normally come from Scheme.AccentColor, but
+    -- fall back to MainColor when the accent field is missing or nil. This
+    -- ensures toggles, dropdowns, etc. update when the main color changes.
     local accent = self.Scheme.AccentColor
-    local s = typeof(accent) == "Color3" and accent or Color3.new(1, 1, 1)
+    if typeof(accent) ~= "Color3" then
+        accent = self.Scheme.MainColor or Color3.new(1, 1, 1)
+    end
+    local s = accent
     local e = self:GetDarkerColor(s)
     return ColorSequence.new({
         ColorSequenceKeypoint.new(0, s),
@@ -1018,6 +1024,13 @@ function Library:RemoveFromRegistry(Instance)
 end
 
 function Library:UpdateColorsUsingRegistry()
+    -- keep accent follow main automatically; prevents UI elements that depend on
+    -- the accent gradient from appearing out-of-sync when only MainColor is
+    -- modified via themes or scripts.
+    if typeof(Library.Scheme.MainColor) == "Color3" then
+        Library.Scheme.AccentColor = Library.Scheme.MainColor
+    end
+
     for Instance, Properties in pairs(Library.Registry) do
         for Property, ColorIdx in pairs(Properties) do
             local val = nil
@@ -1642,12 +1655,14 @@ function Library:AddOutline(Frame: GuiObject)
         Color = "OutlineColor",
         Thickness = 1,
         ZIndex = 3,
+        LineJoin = Enum.LineJoin.Miter,
         Parent = Frame,
     })
     local ShadowStroke = New("UIStroke", {
         Color = "Dark",
         Thickness = 2,
         ZIndex = 2,
+        LineJoin = Enum.LineJoin.Miter,
         Parent = Frame,
     })
     local OuterBlackStroke = New("UIStroke", {
@@ -1655,6 +1670,7 @@ function Library:AddOutline(Frame: GuiObject)
         Thickness = 2.5,
         Transparency = 0.5,
         ZIndex = 1,
+        LineJoin = Enum.LineJoin.Miter,
         Parent = Frame,
     })
     return OutlineStroke, ShadowStroke, OuterBlackStroke
@@ -4583,9 +4599,9 @@ do
             CheckboxGradient.Color = Library:GetAccentGradientSequence()
             CheckboxGradient.Enabled = Toggle.Value
 
-            -- Fill the checkbox with gradient start color when checked, main color when unchecked
-            Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentGradientStart or Library.Scheme.MainColor
-            Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentGradientStart" or "MainColor"
+            -- Fill the checkbox with accent or main color; gradient overlay handles the rest
+            Checkbox.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
+            Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
         end
 
         return FinishToggleSetup(Toggle, Button, Label, Groupbox, Idx)
@@ -4947,7 +4963,7 @@ do
         New("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual, Color = "Dark", LineJoinMode = Enum.LineJoinMode.Miter, Parent = DisplayLabel })
 
         local Fill = New("Frame", {
-            BackgroundColor3 = "AccentGradientStart",
+            BackgroundColor3 = "AccentColor",
             Size = UDim2.fromScale(0.5, 1),
             Parent = Bar,
 
@@ -4978,8 +4994,8 @@ do
             DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or 0
 
             FillGradient.Enabled = not Slider.Disabled
-            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentGradientStart
-            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentGradientStart"
+            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentColor
+            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentColor"
         end
 
         function Slider:Display()
@@ -8384,7 +8400,7 @@ function Library:CreateWindow(WindowInfo)
             New("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual, Color = "Dark", LineJoinMode = Enum.LineJoinMode.Miter, Parent = DisplayLabel })
 
             local Fill = New("Frame", {
-                BackgroundColor3 = "AccentGradientStart",
+                BackgroundColor3 = "AccentColor",
                 Size = UDim2.fromScale(1, 1),
                 Parent = Bar,
                 DPIExclude = { Size = true },
