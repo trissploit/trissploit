@@ -1301,6 +1301,24 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         end)
     end
 
+    -- automatically add a faint black stroke behind every library-created UIStroke
+    if ClassName == "UIStroke" then
+        local clr = Properties.Color
+        if clr ~= "Dark" then
+            local parent = Properties.Parent or Instance.Parent
+            if parent then
+                local outer = Instance.new("UIStroke")
+                outer.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
+                outer.Thickness = (Instance.Thickness or 1) + 1.5
+                outer.Transparency = 0.5
+                outer.ZIndex = (Instance.ZIndex or 1) - 1
+                outer.LineJoinMode = Enum.LineJoinMode.Miter
+                outer.Parent = parent
+                Library.Registry[outer] = { Color = "Dark" }
+            end
+        end
+    end
+
     -- Track UICorner instances created through New so we can update their CornerRadius
     if ClassName == "UICorner" then
         Library._ManagedUICorners = Library._ManagedUICorners or {}
@@ -1655,14 +1673,14 @@ function Library:AddOutline(Frame: GuiObject)
         Color = "OutlineColor",
         Thickness = 1,
         ZIndex = 3,
-        LineJoin = Enum.LineJoin.Miter,
+        LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
     local ShadowStroke = New("UIStroke", {
         Color = "Dark",
         Thickness = 2,
         ZIndex = 2,
-        LineJoin = Enum.LineJoin.Miter,
+        LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
     local OuterBlackStroke = New("UIStroke", {
@@ -1670,7 +1688,7 @@ function Library:AddOutline(Frame: GuiObject)
         Thickness = 2.5,
         Transparency = 0.5,
         ZIndex = 1,
-        LineJoin = Enum.LineJoin.Miter,
+        LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
     return OutlineStroke, ShadowStroke, OuterBlackStroke
