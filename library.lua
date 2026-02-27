@@ -8068,6 +8068,8 @@ function Library:CreateWindow(WindowInfo)
                 Visible = false,
                 Parent = Container,
             })
+            -- allow dragging the window by clicking anywhere in the tab container as well
+            Library:MakeDraggable(MainFrame, TabContainer, false, true)
 
             TabLeft = New("ScrollingFrame", {
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
