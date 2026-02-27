@@ -583,7 +583,8 @@ function Library:GetAccentGradientSequence()
     local accent = self.Scheme.AccentColor
     if typeof(accent) ~= "Color3" then accent = Color3.fromRGB(255, 255, 255) end
     local H, S, V = accent:ToHSV()
-    local darker = Color3.fromHSV(H, math.min(1, S + 0.1), math.max(0, V - 0.25))
+    -- keep saturation the same so white/gray accents don't tint
+    local darker = Color3.fromHSV(H, S, math.max(0, V - 0.25))
     return ColorSequence.new({
         ColorSequenceKeypoint.new(0, accent),
         ColorSequenceKeypoint.new(1, darker),
@@ -4154,6 +4155,7 @@ do
             local X, _ = Library:GetTextBounds(Text, TextLabel.FontFace, TextLabel.TextSize, TextLabel.AbsoluteSize.X)
             local SizeX = X//2 + 10
 
+            -- simpler solid divider lines (no gradient fade)
             local LeftLine = New("Frame", {
                 AnchorPoint = Vector2.new(0, 0.5),
                 BackgroundColor3 = "AccentColor",
@@ -4162,19 +4164,6 @@ do
                 Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
             })
-            local LeftGrad = New("UIGradient", {
-                Color = Library:GetAccentSolidSequence(),
-                Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(1, 0),
-                }),
-                Parent = LeftLine,
-            })
-            Library.Registry[LeftGrad] = {
-                Color = function()
-                    return Library:GetAccentSolidSequence()
-                end,
-            }
 
             local RightLine = New("Frame", {
                 AnchorPoint = Vector2.new(1, 0.5),
@@ -4184,19 +4173,6 @@ do
                 Size = UDim2.new(0.5, -SizeX, 0, 1),
                 Parent = Holder,
             })
-            local RightGrad = New("UIGradient", {
-                Color = Library:GetAccentSolidSequence(),
-                Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0),
-                    NumberSequenceKeypoint.new(1, 1),
-                }),
-                Parent = RightLine,
-            })
-            Library.Registry[RightGrad] = {
-                Color = function()
-                    return Library:GetAccentSolidSequence()
-                end,
-            }
         else
             local Line = New("Frame", {
                 AnchorPoint = Vector2.new(0.5, 0.5),
@@ -4206,20 +4182,6 @@ do
                 Size = UDim2.new(1, 0, 0, 1),
                 Parent = Holder,
             })
-            local LineGrad = New("UIGradient", {
-                Color = Library:GetAccentSolidSequence(),
-                Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(0.5, 0),
-                    NumberSequenceKeypoint.new(1, 1),
-                }),
-                Parent = Line,
-            })
-            Library.Registry[LineGrad] = {
-                Color = function()
-                    return Library:GetAccentSolidSequence()
-                end,
-            }
         end
 
         Groupbox:Resize()
