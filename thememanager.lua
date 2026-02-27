@@ -380,6 +380,16 @@ do
                 getgenv().watermark = v
             end
         end })
+        -- keybind list toggle added per request
+        groupbox:AddToggle("ShowKeybindList", { Text = "Keybind list", Default = (self.Library.KeybindFrame and self.Library.KeybindFrame.Visible) or false, Callback = function(v)
+            if self.Library.ToggleKeybindList then
+                if self.Library.KeybindFrame and self.Library.KeybindFrame.Visible ~= v then
+                    self.Library:ToggleKeybindList()
+                end
+            else
+                self.Library.KeybindFrame.Visible = v
+            end
+        end })
         groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Settings", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
             local fields = { Name = false, FPS = false, Ping = false, Executor = false }
             if typeof(v) == "table" then
