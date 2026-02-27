@@ -1855,6 +1855,14 @@ do
         })
         WM.Corner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
 
+        -- restore outlines for watermark
+        WM.OutlineStroke, WM.ShadowStroke, WM.OuterBlackStroke = Library:AddOutline(WM.Holder)
+
+        -- optional icon support
+        WM.IconName = nil
+        WM.IconSize = 14
+        WM.IconLabel = nil
+
         -- Accent gradient line at top of watermark
         WM.AccentLine = New("Frame", {
             BackgroundColor3 = "AccentColor",
@@ -1868,9 +1876,9 @@ do
 
         WM.Label = New("TextLabel", {
             BackgroundTransparency = 1,
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromScale(1, 1),
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.fromOffset(8, 12),
+            Size = UDim2.fromOffset(1, 1),
             Text = "",
             TextSize = WM.TextSize,
             TextXAlignment = Enum.TextXAlignment.Center,
@@ -1928,8 +1936,50 @@ do
             WM.Label.TextSize = WM.TextSize
 
             local X, Y = Library:GetTextBounds(WM.Label.Text, Library.Scheme.Font, WM.TextSize)
-            WM.Holder.Size = UDim2.fromOffset((X + 16) * Library.DPIScale, (Y + 8) * Library.DPIScale)
-            Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(X + 16, Y + 8) })
+            local iconOffset = 0
+            if WM.IconName then
+                iconOffset = WM.IconSize + 6
+            end
+
+            WM.Holder.Size = UDim2.fromOffset((X + 16 + iconOffset) * Library.DPIScale, (Y + 8) * Library.DPIScale)
+            Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(X + 16 + iconOffset, Y + 8) })
+
+            -- position label and optional icon
+            local holderHeight = (Y + 8)
+            WM.Label.Position = UDim2.fromOffset(8 + (WM.IconName and (WM.IconSize + 6) or 0), holderHeight / 2)
+            WM.Label.Size = UDim2.fromOffset(X, Y)
+
+            if WM.IconName then
+                if not WM.IconLabel then
+                    WM.IconLabel = New("ImageLabel", {
+                        BackgroundTransparency = 1,
+                        AnchorPoint = Vector2.new(0, 0.5),
+                        Position = UDim2.fromOffset(8, holderHeight / 2),
+                        Size = UDim2.fromOffset(WM.IconSize, WM.IconSize),
+                        ZIndex = 1000,
+                        Parent = WM.Holder,
+                    })
+                end
+
+                -- try to resolve icon (custom or built-in)
+                local ok, iconData = pcall(function() return Library:GetCustomIcon(WM.IconName) end)
+                if not ok or not iconData then
+                    ok, iconData = pcall(function() return Library:GetIcon(WM.IconName) end)
+                end
+
+                if iconData then
+                    WM.IconLabel.Image = iconData.Url or ""
+                    if iconData.ImageRectOffset and iconData.ImageRectSize then
+                        WM.IconLabel.ImageRectOffset = iconData.ImageRectOffset
+                        WM.IconLabel.ImageRectSize = iconData.ImageRectSize
+                    end
+                else
+                    WM.IconLabel.Image = ""
+                end
+            elseif WM.IconLabel then
+                WM.IconLabel:Destroy()
+                WM.IconLabel = nil
+            end
         end)
 
         WM.Holder.Visible = false
@@ -1978,6 +2028,42 @@ do
     function Library:SetWatermarkAccentLine(Show)
         WM.ShowAccentLine = Show and true or false
         if WM.AccentLine then WM.AccentLine.Visible = WM.ShowAccentLine end
+    end
+
+    function Library:SetWatermarkIcon(IconName)
+        WM.IconName = IconName and tostring(IconName) or nil
+        if not WM.Holder then return end
+
+        if WM.IconName then
+            if not WM.IconLabel then
+                WM.IconLabel = New("ImageLabel", {
+                    BackgroundTransparency = 1,
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = UDim2.fromOffset(8, 12),
+                    Size = UDim2.fromOffset(WM.IconSize, WM.IconSize),
+                    ZIndex = 1000,
+                    Parent = WM.Holder,
+                })
+            end
+
+            local ok, iconData = pcall(function() return Library:GetCustomIcon(WM.IconName) end)
+            if not ok or not iconData then
+                ok, iconData = pcall(function() return Library:GetIcon(WM.IconName) end)
+            end
+
+            if iconData then
+                WM.IconLabel.Image = iconData.Url or ""
+                if iconData.ImageRectOffset and iconData.ImageRectSize then
+                    WM.IconLabel.ImageRectOffset = iconData.ImageRectOffset
+                    WM.IconLabel.ImageRectSize = iconData.ImageRectSize
+                end
+            else
+                WM.IconLabel.Image = ""
+            end
+        elseif WM.IconLabel then
+            WM.IconLabel:Destroy()
+            WM.IconLabel = nil
+        end
     end
 
     function Library:AddWatermarkField(FieldOrFunc)
@@ -7175,6 +7261,10 @@ function Library:CreateWindow(WindowInfo)
     Library.Scheme.Font = WindowInfo.Font
     if typeof(Library.SetWatermarkName) == "function" then
         Library:SetWatermarkName(WindowInfo.Title)
+        -- choose an icon matching the UI library/window; default to "box" if none provided
+        if typeof(Library.SetWatermarkIcon) == "function" then
+            Library:SetWatermarkIcon(WindowInfo.Icon or "box")
+        end
     end
     Library.CurrentWindowTitle = WindowInfo.Title
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
