@@ -1457,7 +1457,7 @@ end
 
 function Library:GetDarkerColor(Color: Color3): Color3
     local H, S, V = Color:ToHSV()
-    return Color3.fromHSV(H, S, V / 2)
+    return Color3.fromHSV(H, S, math.max(V * 0.7, 0))
 end
 
 function Library:GetKeyString(KeyCode: Enum.KeyCode)
@@ -1640,41 +1640,33 @@ function Library:MakeLine(Frame: GuiObject, Info)
     return Line
 end
 
-function Library:AddHoverEffect(button, stroke, element)
+function Library:AddHoverEffect(button, darkStroke, element)
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
+        TweenService:Create(darkStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
         if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
+        TweenService:Create(darkStroke, Library.TweenInfo, { Color = Library.Scheme.Dark }):Play()
     end)
 end
 
 function Library:AddOutline(Frame: GuiObject)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
-        Thickness = 1,
+        Thickness = 0.3,
         ZIndex = 3,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
     local ShadowStroke = New("UIStroke", {
         Color = "Dark",
-        Thickness = 2,
+        Thickness = 0.3,
         ZIndex = 2,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    local OuterBlackStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 2.5,
-        Transparency = 0.5,
-        ZIndex = 1,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    return OutlineStroke, ShadowStroke, OuterBlackStroke
+    return OutlineStroke, ShadowStroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -1856,7 +1848,7 @@ do
         WM.Corner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
 
         -- restore outlines for watermark
-        WM.OutlineStroke, WM.ShadowStroke, WM.OuterBlackStroke = Library:AddOutline(WM.Holder)
+        WM.OutlineStroke, WM.ShadowStroke = Library:AddOutline(WM.Holder)
 
         -- optional icon support
         WM.IconName = nil
@@ -4336,14 +4328,13 @@ do
                 Parent = Base,
             })
 
-            local OutlineStroke, ShadowStroke, OuterStroke = Library:AddOutline(Base)
+            local OutlineStroke, ShadowStroke = Library:AddOutline(Base)
             if Button.Disabled then
                 OutlineStroke.Transparency = 0.5
                 ShadowStroke.Transparency = 0.5
-                OuterStroke.Transparency = 0.75
             end
 
-            return Base, OutlineStroke
+            return Base, OutlineStroke, ShadowStroke
         end
 
         local function InitEvents(Button)
@@ -4356,7 +4347,7 @@ do
                     TextTransparency = 0,
                 })
                 Button.Tween:Play()
-                TweenService:Create(Button.Stroke, Library.TweenInfo, {
+                TweenService:Create(Button.ShadowStroke, Library.TweenInfo, {
                     Color = Library.Scheme.AccentColor,
                 }):Play()
             end)
@@ -4369,8 +4360,8 @@ do
                     TextTransparency = 0.4,
                 })
                 Button.Tween:Play()
-                TweenService:Create(Button.Stroke, Library.TweenInfo, {
-                    Color = Library.Scheme.OutlineColor,
+                TweenService:Create(Button.ShadowStroke, Library.TweenInfo, {
+                    Color = Library.Scheme.Dark,
                 }):Play()
             end)
 
@@ -4405,7 +4396,7 @@ do
             end)
         end
 
-        Button.Base, Button.Stroke = CreateButton(Button)
+        Button.Base, Button.Stroke, Button.ShadowStroke = CreateButton(Button)
         InitEvents(Button)
 
         function Button:AddButton(...)
@@ -4429,7 +4420,7 @@ do
             }
 
             Button.SubButton = SubButton
-            SubButton.Base, SubButton.Stroke = CreateButton(SubButton)
+            SubButton.Base, SubButton.Stroke, SubButton.ShadowStroke = CreateButton(SubButton)
             InitEvents(SubButton)
 
             function SubButton:UpdateColors()
@@ -4701,9 +4692,9 @@ do
             Parent = Checkbox,
         })
 
-        local CheckboxStroke = select(1, Library:AddOutline(Checkbox))
+        local CheckboxOutline, CheckboxShadow = Library:AddOutline(Checkbox)
 
-        Library:AddHoverEffect(Button, CheckboxStroke, Toggle)
+        Library:AddHoverEffect(Button, CheckboxShadow, Toggle)
 
         local CheckboxGradient = New("UIGradient", {
             Color = Library:GetAccentGradientSequence(),
@@ -4738,7 +4729,8 @@ do
                 return
             end
 
-            CheckboxStroke.Transparency = Toggle.Disabled and 0.5 or 0
+            CheckboxOutline.Transparency = Toggle.Disabled and 0.5 or 0
+            CheckboxShadow.Transparency = Toggle.Disabled and 0.5 or 0
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
@@ -4752,6 +4744,9 @@ do
             TweenService:Create(Label, Library.TweenInfo, {
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
+
+            -- When toggled on: hide the main outline, only show the black one
+            CheckboxOutline.Transparency = Toggle.Value and 1 or 0
 
             -- Enable gradient only when checked, restore accent gradient colors
             CheckboxGradient.Color = Library:GetAccentGradientSequence()
@@ -4838,7 +4833,8 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
-        local SwitchStroke = select(1, Library:AddOutline(Switch))
+        local SwitchOutline, SwitchShadow = Library:AddOutline(Switch)
+        Library:AddHoverEffect(Switch, SwitchShadow)
 
         local Ball = New("Frame", {
             BackgroundColor3 = "FontColor",
@@ -4863,13 +4859,19 @@ do
             local Offset = Toggle.Value and 1 or 0
 
             Switch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
-            SwitchStroke.Transparency = Toggle.Disabled and 0.75 or 0
+            SwitchOutline.Transparency = Toggle.Disabled and 0.75 or 0
+            SwitchShadow.Transparency = Toggle.Disabled and 0.75 or 0
 
             Switch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
-            SwitchStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
+            SwitchOutline.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
 
             Library.Registry[Switch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
-            Library.Registry[SwitchStroke].Color = Toggle.Value and "AccentColor" or "OutlineColor"
+            Library.Registry[SwitchOutline].Color = Toggle.Value and "AccentColor" or "OutlineColor"
+
+            -- When toggled on: hide the main outline, only show the black one
+            if not Toggle.Disabled then
+                SwitchOutline.Transparency = Toggle.Value and 1 or 0
+            end
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
@@ -5762,12 +5764,14 @@ do
                         Selected = Dropdown.Value == Value
                     end
 
-                    Button.BackgroundTransparency = Selected and 0 or 1
-                    -- White background so UIGradient shows pure accent colors without MainColor tinting
-                    Button.BackgroundColor3 = Selected and Color3.new(1, 1, 1) or Library.Scheme.MainColor
-                    Library.Registry[Button].BackgroundColor3 = Selected and function() return Color3.new(1, 1, 1) end or "MainColor"
+                    -- Selected items use accent text color instead of gradient background
+                    Button.BackgroundTransparency = 1
+                    Button.BackgroundColor3 = Library.Scheme.MainColor
+                    Library.Registry[Button].BackgroundColor3 = "MainColor"
+                    Button.TextColor3 = Selected and Library.Scheme.AccentColor or Library.Scheme.FontColor
+                    Library.Registry[Button].TextColor3 = Selected and "AccentColor" or "FontColor"
                     Button.TextTransparency = IsDisabled and 0.8 or Selected and 0 or 0.5
-                    ButtonGradient.Enabled = Selected and not IsDisabled
+                    ButtonGradient.Enabled = false
                 end
 
                 if not IsDisabled then
@@ -7262,6 +7266,7 @@ function Library:CreateWindow(WindowInfo)
         end
     end
     Library.CurrentWindowTitle = WindowInfo.Title
+    Library.Icon = WindowInfo.Icon
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
     Library.GlobalSearch = WindowInfo.GlobalSearch
 
@@ -7498,6 +7503,15 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.AnchorPoint = Vector2.new(0, 0.5)
         Library.KeybindFrame.Position = UDim2.new(0, 6, 0.5, 0)
         Library.KeybindFrame.Visible = false
+
+        -- Accent line on top of keybind list (like watermark, but plain accent, no gradient)
+        local KbAccentLine = Instance.new("Frame")
+        KbAccentLine.BackgroundColor3 = Library.Scheme.AccentColor
+        KbAccentLine.Size = UDim2.new(1, 0, 0, 1)
+        KbAccentLine.ZIndex = Library.KeybindFrame.ZIndex + 1
+        KbAccentLine.BorderSizePixel = 0
+        KbAccentLine.Parent = Library.KeybindFrame
+        Library:AddToRegistry(KbAccentLine, { BackgroundColor3 = "AccentColor" })
 
         MainFrame = New("TextButton", {
             BackgroundColor3 = function()
@@ -9905,7 +9919,7 @@ do
         Holder.AutomaticSize = Enum.AutomaticSize.Y
         Holder.BackgroundColor3 = Library.Scheme.BackgroundColor
         Holder.Position = UDim2.fromOffset(200, 200)
-        Holder.Size = UDim2.fromOffset(320, 0)
+        Holder.Size = UDim2.fromOffset(280, 0)
         Holder.ZIndex = 15
         Holder.Visible = false
         Holder.Parent = ScreenGui
@@ -9917,28 +9931,91 @@ do
 
         Library:AddOutline(Holder)
 
+        -- Accent line on top (like watermark, plain accent, no gradient)
+        local AccentLine = Instance.new("Frame")
+        AccentLine.BackgroundColor3 = Library.Scheme.AccentColor
+        AccentLine.Size = UDim2.new(1, 0, 0, 1)
+        AccentLine.ZIndex = Holder.ZIndex + 2
+        AccentLine.BorderSizePixel = 0
+        AccentLine.Parent = Holder
+        Library:AddToRegistry(AccentLine, { BackgroundColor3 = "AccentColor" })
+
         -- Title bar
         local TitleBar = Instance.new("Frame")
         TitleBar.BackgroundTransparency = 1
-        TitleBar.Size = UDim2.new(1, 0, 0, 34)
+        TitleBar.Size = UDim2.new(1, 0, 0, 30)
         TitleBar.Parent = Holder
 
         local TitleLabel = Instance.new("TextLabel")
         TitleLabel.BackgroundTransparency = 1
-        TitleLabel.Size = UDim2.new(1, -24, 1, 0)
-        TitleLabel.Position = UDim2.fromOffset(12, 0)
+        TitleLabel.Size = UDim2.new(1, -60, 1, 0)
+        TitleLabel.Position = UDim2.fromOffset(10, 0)
         TitleLabel.Text = "Lua Scripts"
-        TitleLabel.TextSize = 15
+        TitleLabel.TextSize = 14
         TitleLabel.TextColor3 = Library.Scheme.FontColor
         TitleLabel.FontFace = Library.Scheme.Font
         TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
         TitleLabel.Parent = TitleBar
         Library:AddToRegistry(TitleLabel, { TextColor3 = "FontColor" })
 
+        -- Refresh button in title bar
+        local RefreshBtn = Instance.new("TextButton")
+        RefreshBtn.BackgroundColor3 = Library.Scheme.MainColor
+        RefreshBtn.Size = UDim2.fromOffset(24, 18)
+        RefreshBtn.AnchorPoint = Vector2.new(1, 0.5)
+        RefreshBtn.Position = UDim2.new(1, -8, 0.5, 0)
+        RefreshBtn.Text = ""
+        RefreshBtn.AutoButtonColor = false
+        RefreshBtn.ZIndex = Holder.ZIndex + 1
+        RefreshBtn.Parent = TitleBar
+        Library:AddToRegistry(RefreshBtn, { BackgroundColor3 = "MainColor" })
+
+        local RefreshCorner = Instance.new("UICorner")
+        RefreshCorner.CornerRadius = UDim.new(0, 4)
+        RefreshCorner.Parent = RefreshBtn
+
+        -- Refresh icon (rotate-cw from lucide)
+        local RefreshIcon = Library:GetIcon("rotate-cw")
+        if RefreshIcon then
+            local RefreshImg = Instance.new("ImageLabel")
+            RefreshImg.BackgroundTransparency = 1
+            RefreshImg.Size = UDim2.fromOffset(14, 14)
+            RefreshImg.AnchorPoint = Vector2.new(0.5, 0.5)
+            RefreshImg.Position = UDim2.fromScale(0.5, 0.5)
+            RefreshImg.Image = RefreshIcon.Url or ""
+            RefreshImg.ImageRectOffset = RefreshIcon.ImageRectOffset or Vector2.zero
+            RefreshImg.ImageRectSize = RefreshIcon.ImageRectSize or Vector2.zero
+            RefreshImg.ImageColor3 = Library.Scheme.FontColor
+            RefreshImg.ZIndex = RefreshBtn.ZIndex + 1
+            RefreshImg.Parent = RefreshBtn
+            Library:AddToRegistry(RefreshImg, { ImageColor3 = "FontColor" })
+        else
+            RefreshBtn.Text = "↻"
+            RefreshBtn.TextSize = 14
+            RefreshBtn.TextColor3 = Library.Scheme.FontColor
+            Library:AddToRegistry(RefreshBtn, { TextColor3 = "FontColor" })
+        end
+
+        RefreshBtn.MouseEnter:Connect(function()
+            TweenService:Create(RefreshBtn, Library.TweenInfo, {
+                BackgroundColor3 = Library.Scheme.AccentColor
+            }):Play()
+        end)
+        RefreshBtn.MouseLeave:Connect(function()
+            TweenService:Create(RefreshBtn, Library.TweenInfo, {
+                BackgroundColor3 = Library.Scheme.MainColor
+            }):Play()
+        end)
+        RefreshBtn.MouseButton1Click:Connect(function()
+            Library:LoadLuaConfig()
+            Library:PopulateLuaWindow()
+            Library:Notify("Lua scripts refreshed", 2)
+        end)
+
         -- Divider
         local Divider = Instance.new("Frame")
         Divider.BackgroundColor3 = Library.Scheme.OutlineColor
-        Divider.Position = UDim2.fromOffset(0, 34)
+        Divider.Position = UDim2.fromOffset(0, 30)
         Divider.Size = UDim2.new(1, 0, 0, 1)
         Divider.BorderSizePixel = 0
         Divider.Parent = Holder
@@ -9948,17 +10025,17 @@ do
         local Content = Instance.new("ScrollingFrame")
         Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
         Content.BackgroundTransparency = 1
-        Content.Position = UDim2.fromOffset(0, 36)
-        Content.Size = UDim2.new(1, 0, 0, 300)
+        Content.Position = UDim2.fromOffset(0, 32)
+        Content.Size = UDim2.new(1, 0, 0, 250)
         Content.CanvasSize = UDim2.fromScale(0, 0)
-        Content.ScrollBarThickness = 3
+        Content.ScrollBarThickness = 2
         Content.ScrollBarImageColor3 = Library.Scheme.AccentColor
         Content.BorderSizePixel = 0
         Content.Parent = Holder
         Library:AddToRegistry(Content, { ScrollBarImageColor3 = "AccentColor" })
 
         local ListLayout = Instance.new("UIListLayout")
-        ListLayout.Padding = UDim.new(0, 6)
+        ListLayout.Padding = UDim.new(0, 4)
         ListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
         ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
         ListLayout.Parent = Content
@@ -9966,8 +10043,8 @@ do
         local ContentPadding = Instance.new("UIPadding")
         ContentPadding.PaddingTop = UDim.new(0, 6)
         ContentPadding.PaddingBottom = UDim.new(0, 6)
-        ContentPadding.PaddingLeft = UDim.new(0, 8)
-        ContentPadding.PaddingRight = UDim.new(0, 8)
+        ContentPadding.PaddingLeft = UDim.new(0, 6)
+        ContentPadding.PaddingRight = UDim.new(0, 6)
         ContentPadding.Parent = Content
 
         -- Make draggable
@@ -9984,33 +10061,23 @@ do
     function Library:PopulateLuaWindow()
         if not Library.LuaWindowContainer then return end
 
-        -- Clear existing children
+        -- Clear existing children (keep UIListLayout and UIPadding)
         for _, child in Library.LuaWindowContainer:GetChildren() do
-            if child:IsA("GuiObject") then
+            if child:IsA("GuiObject") and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
                 child:Destroy()
             end
         end
 
-        -- Re-add layout
-        local existingLayout = Library.LuaWindowContainer:FindFirstChildOfClass("UIListLayout")
-        if not existingLayout then
-            local ll = Instance.new("UIListLayout")
-            ll.Padding = UDim.new(0, 6)
-            ll.HorizontalAlignment = Enum.HorizontalAlignment.Center
-            ll.SortOrder = Enum.SortOrder.LayoutOrder
-            ll.Parent = Library.LuaWindowContainer
-        end
-
         if not Library.LuaScriptsEnabled then
-            -- Show "not supported" message
             local NoSupport = Instance.new("TextLabel")
             NoSupport.BackgroundTransparency = 1
             NoSupport.Size = UDim2.new(1, 0, 0, 40)
             NoSupport.Text = "This script doesn't support lua."
-            NoSupport.TextSize = 14
+            NoSupport.TextSize = 13
             NoSupport.TextColor3 = Library.Scheme.FontColor
             NoSupport.FontFace = Library.Scheme.Font
             NoSupport.TextWrapped = true
+            NoSupport.TextTransparency = 0.3
             NoSupport.Parent = Library.LuaWindowContainer
             Library:AddToRegistry(NoSupport, { TextColor3 = "FontColor" })
             return
@@ -10021,102 +10088,112 @@ do
             EmptyLabel.BackgroundTransparency = 1
             EmptyLabel.Size = UDim2.new(1, 0, 0, 30)
             EmptyLabel.Text = "No lua scripts configured."
-            EmptyLabel.TextSize = 14
+            EmptyLabel.TextSize = 13
             EmptyLabel.TextColor3 = Library.Scheme.FontColor
             EmptyLabel.FontFace = Library.Scheme.Font
             EmptyLabel.TextWrapped = true
+            EmptyLabel.TextTransparency = 0.3
             EmptyLabel.Parent = Library.LuaWindowContainer
             Library:AddToRegistry(EmptyLabel, { TextColor3 = "FontColor" })
             return
         end
 
         for i, script in ipairs(Library.LuaScripts) do
-            local Card = Instance.new("TextButton")
-            Card.AutoButtonColor = false
-            Card.BackgroundColor3 = Library.Scheme.MainColor
-            Card.Size = UDim2.new(1, 0, 0, 80)
-            Card.Text = ""
-            Card.BorderSizePixel = 0
-            Card.LayoutOrder = i
-            Card.Parent = Library.LuaWindowContainer
-            Library:AddToRegistry(Card, { BackgroundColor3 = "MainColor" })
+            -- Script row: title + description on left, load button on right
+            local Row = Instance.new("Frame")
+            Row.BackgroundColor3 = Library.Scheme.MainColor
+            Row.Size = UDim2.new(1, 0, 0, 40)
+            Row.LayoutOrder = i
+            Row.BorderSizePixel = 0
+            Row.Parent = Library.LuaWindowContainer
+            Library:AddToRegistry(Row, { BackgroundColor3 = "MainColor" })
 
-            local CardCorner = Instance.new("UICorner")
-            CardCorner.CornerRadius = UDim.new(0, Library.CornerRadius)
-            CardCorner.Parent = Card
+            local RowCorner = Instance.new("UICorner")
+            RowCorner.CornerRadius = UDim.new(0, 4)
+            RowCorner.Parent = Row
 
-            Library:AddOutline(Card)
-
-            -- Background image
-            if typeof(script.image) == "string" and script.image ~= "" then
-                local BgImage = Instance.new("ImageLabel")
-                BgImage.Image = script.image
-                BgImage.BackgroundTransparency = 1
-                BgImage.Size = UDim2.fromScale(1, 1)
-                BgImage.ImageTransparency = 0.7
-                BgImage.ScaleType = Enum.ScaleType.Crop
-                BgImage.ZIndex = Card.ZIndex + 1
-                BgImage.Parent = Card
-
-                local ImgCorner = Instance.new("UICorner")
-                ImgCorner.CornerRadius = UDim.new(0, Library.CornerRadius)
-                ImgCorner.Parent = BgImage
-            end
+            Library:AddOutline(Row)
 
             -- Title
             local Title = Instance.new("TextLabel")
             Title.BackgroundTransparency = 1
-            Title.Position = UDim2.fromOffset(10, 8)
-            Title.Size = UDim2.new(1, -20, 0, 20)
+            Title.Position = UDim2.fromOffset(8, 4)
+            Title.Size = UDim2.new(1, -60, 0, 16)
             Title.Text = typeof(script.title) == "string" and script.title or "Untitled"
-            Title.TextSize = 16
+            Title.TextSize = 13
             Title.TextColor3 = Library.Scheme.FontColor
             Title.FontFace = Library.Scheme.Font
             Title.TextXAlignment = Enum.TextXAlignment.Left
-            Title.ZIndex = Card.ZIndex + 2
-            Title.Parent = Card
+            Title.TextTruncate = Enum.TextTruncate.AtEnd
+            Title.ZIndex = Row.ZIndex + 1
+            Title.Parent = Row
             Library:AddToRegistry(Title, { TextColor3 = "FontColor" })
 
             -- Description
             local Desc = Instance.new("TextLabel")
             Desc.BackgroundTransparency = 1
-            Desc.Position = UDim2.fromOffset(10, 30)
-            Desc.Size = UDim2.new(1, -20, 0, 40)
+            Desc.Position = UDim2.fromOffset(8, 20)
+            Desc.Size = UDim2.new(1, -60, 0, 16)
             Desc.Text = typeof(script.description) == "string" and script.description or ""
-            Desc.TextSize = 13
+            Desc.TextSize = 11
             Desc.TextColor3 = Library.Scheme.FontColor
             Desc.FontFace = Library.Scheme.Font
             Desc.TextXAlignment = Enum.TextXAlignment.Left
-            Desc.TextYAlignment = Enum.TextYAlignment.Top
-            Desc.TextWrapped = true
-            Desc.TextTransparency = 0.3
-            Desc.ZIndex = Card.ZIndex + 2
-            Desc.Parent = Card
+            Desc.TextTruncate = Enum.TextTruncate.AtEnd
+            Desc.TextTransparency = 0.4
+            Desc.ZIndex = Row.ZIndex + 1
+            Desc.Parent = Row
             Library:AddToRegistry(Desc, { TextColor3 = "FontColor" })
 
-            -- Hover effect
-            Card.MouseEnter:Connect(function()
-                TweenService:Create(Card, Library.TweenInfo, {
-                    BackgroundColor3 = GetLighterColor(Library.Scheme.MainColor)
+            -- Load button
+            local LoadBtn = Instance.new("TextButton")
+            LoadBtn.BackgroundColor3 = Library.Scheme.BackgroundColor
+            LoadBtn.Size = UDim2.fromOffset(42, 22)
+            LoadBtn.AnchorPoint = Vector2.new(1, 0.5)
+            LoadBtn.Position = UDim2.new(1, -6, 0.5, 0)
+            LoadBtn.Text = "Load"
+            LoadBtn.TextSize = 12
+            LoadBtn.TextColor3 = Library.Scheme.FontColor
+            LoadBtn.FontFace = Library.Scheme.Font
+            LoadBtn.AutoButtonColor = false
+            LoadBtn.ZIndex = Row.ZIndex + 1
+            LoadBtn.Parent = Row
+            Library:AddToRegistry(LoadBtn, { BackgroundColor3 = "BackgroundColor", TextColor3 = "FontColor" })
+
+            local LoadBtnCorner = Instance.new("UICorner")
+            LoadBtnCorner.CornerRadius = UDim.new(0, 4)
+            LoadBtnCorner.Parent = LoadBtn
+
+            -- Hover effect on load button
+            LoadBtn.MouseEnter:Connect(function()
+                TweenService:Create(LoadBtn, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.AccentColor
                 }):Play()
             end)
-            Card.MouseLeave:Connect(function()
-                TweenService:Create(Card, Library.TweenInfo, {
-                    BackgroundColor3 = Library.Scheme.MainColor
+            LoadBtn.MouseLeave:Connect(function()
+                TweenService:Create(LoadBtn, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.BackgroundColor
                 }):Play()
             end)
 
-            -- Click to load script
-            Card.MouseButton1Click:Connect(function()
+            LoadBtn.MouseButton1Click:Connect(function()
                 if typeof(script.url) == "string" and script.url ~= "" then
+                    LoadBtn.Text = "..."
                     local success, err = pcall(function()
                         loadstring(game:HttpGet(script.url))()
                     end)
                     if success then
+                        LoadBtn.Text = "✓"
                         Library:Notify("Loaded: " .. (script.title or "Script"), 3)
                     else
-                        Library:Notify("Failed to load: " .. tostring(err), 5)
+                        LoadBtn.Text = "✗"
+                        Library:Notify("Failed: " .. tostring(err), 5)
                     end
+                    task.delay(2, function()
+                        if LoadBtn and LoadBtn.Parent then
+                            LoadBtn.Text = "Load"
+                        end
+                    end)
                 else
                     Library:Notify("No URL configured for this script", 3)
                 end
