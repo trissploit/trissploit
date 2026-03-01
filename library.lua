@@ -4331,14 +4331,19 @@ do
                 Visible = Button.Visible,
                 Parent = Holder,
             })
-
-            local Stroke = New("UIStroke", {
-                Color = "OutlineColor",
-                Transparency = Button.Disabled and 0.5 or 0,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius),
                 Parent = Base,
             })
 
-            return Base, Stroke
+            local OutlineStroke, ShadowStroke, OuterStroke = Library:AddOutline(Base)
+            if Button.Disabled then
+                OutlineStroke.Transparency = 0.5
+                ShadowStroke.Transparency = 0.5
+                OuterStroke.Transparency = 0.75
+            end
+
+            return Base, OutlineStroke
         end
 
         local function InitEvents(Button)
@@ -4696,10 +4701,7 @@ do
             Parent = Checkbox,
         })
 
-        local CheckboxStroke = New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = Checkbox,
-        })
+        local CheckboxStroke = select(1, Library:AddOutline(Checkbox))
 
         Library:AddHoverEffect(Button, CheckboxStroke, Toggle)
 
@@ -4836,10 +4838,7 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
-        local SwitchStroke = New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = Switch,
-        })
+        local SwitchStroke = select(1, Library:AddOutline(Switch))
 
         local Ball = New("Frame", {
             BackgroundColor3 = "FontColor",
@@ -4949,8 +4948,7 @@ do
         local Box = New("TextBox", {
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = "MainColor",
-            BorderColor3 = "OutlineColor",
-            BorderSizePixel = 1,
+            BorderSizePixel = 0,
             ClearTextOnFocus = not Input.Disabled and Input.ClearTextOnFocus,
             PlaceholderText = Input.Placeholder,
             Position = UDim2.fromScale(0, 1),
@@ -4961,6 +4959,11 @@ do
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Holder,
         })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Box,
+        })
+        Library:AddOutline(Box)
 
         New("UIPadding", {
             PaddingBottom = UDim.new(0, 3),
@@ -5116,8 +5119,7 @@ do
             Active = not Slider.Disabled,
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = "MainColor",
-            BorderColor3 = "OutlineColor",
-            BorderSizePixel = 1,
+            BorderSizePixel = 0,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 13),
             Text = "",
@@ -5127,10 +5129,7 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Bar,
         })
-        local BarStroke = New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = Bar,
-        })
+        local BarStroke = select(1, Library:AddOutline(Bar))
 
         Library:AddHoverEffect(Bar, BarStroke, Slider)
 
@@ -5408,8 +5407,7 @@ do
             Active = not Dropdown.Disabled,
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = "MainColor",
-            BorderColor3 = "OutlineColor",
-            BorderSizePixel = 1,
+            BorderSizePixel = 0,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 21),
             Text = "---",
@@ -5422,10 +5420,7 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Display,
         })
-        local DisplayStroke = New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = Display,
-        })
+        local DisplayStroke = select(1, Library:AddOutline(Display))
 
         Library:AddHoverEffect(Display, DisplayStroke, Dropdown)
 
@@ -7863,7 +7858,7 @@ function Library:CreateWindow(WindowInfo)
                 end)
             end
             KeybindBtn.MouseButton1Click:Connect(function()
-                Library:ToggleKeybindList()
+                Library:ToggleLuaWindow()
             end)
         end
 
@@ -8775,15 +8770,14 @@ function Library:CreateWindow(WindowInfo)
                 Active = true,
                 AnchorPoint = Vector2.new(0, 0),
                 BackgroundColor3 = "MainColor",
-                BorderColor3 = "OutlineColor",
-                BorderSizePixel = 1,
+                BorderSizePixel = 0,
                 Position = UDim2.fromOffset(6, 26),
                 Size = UDim2.new(1, -12, 0, 20),
                 Text = "",
                 Parent = SliderFrame,
             })
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Bar })
-            local BarStroke = New("UIStroke", { Color = "OutlineColor", Parent = Bar })
+            local BarStroke = select(1, Library:AddOutline(Bar))
 
             local DisplayLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
@@ -9785,12 +9779,6 @@ function Library:CreateWindow(WindowInfo)
         then
             Library.Toggle()
         end
-
-        -- Toggle keybind list panel (default RightShift, configurable via Library.KeybindListKey)
-        local kbKey = Library.KeybindListKey or Enum.KeyCode.RightShift
-        if Input.KeyCode == kbKey then
-            Library:ToggleKeybindList()
-        end
     end))
 
     Library:GiveSignal(UserInputService.WindowFocused:Connect(function()
@@ -9834,6 +9822,342 @@ Library:GiveSignal(Players.PlayerRemoving:Connect(OnPlayerChange))
 
 Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
+
+--// Lua Window System \\--
+-- Configurable via a JSON file at Obsidian/luas.json
+-- Format:
+-- {
+--   "enabled": true,                          -- set to false to show "This script doesn't support lua."
+--   "scripts": [
+--     {
+--       "title": "Script Name",
+--       "description": "What it does",
+--       "image": "rbxassetid://123456",       -- background image URL or asset id
+--       "url": "https://example.com/script.lua"  -- loadstring URL
+--     }
+--   ]
+-- }
+do
+    Library.LuaWindowFrame = nil
+    Library.LuaWindowContainer = nil
+    Library.LuaWindowVisible = false
+    Library.LuaScriptsEnabled = true
+    Library.LuaScripts = {}
+    Library.LuaConfigPath = "Obsidian/luas.json"
+
+    function Library:LoadLuaConfig()
+        if not isfile or not readfile then
+            return
+        end
+
+        local path = Library.LuaConfigPath
+        if not isfile(path) then
+            -- Create default config
+            if writefile and makefolder and isfolder then
+                local segments = path:split("/")
+                local dir = ""
+                for i = 1, #segments - 1 do
+                    dir = dir .. (i > 1 and "/" or "") .. segments[i]
+                    if not isfolder(dir) then
+                        pcall(makefolder, dir)
+                    end
+                end
+                local default = {
+                    enabled = true,
+                    scripts = {
+                        {
+                            title = "Example Script",
+                            description = "An example lua script entry",
+                            image = "",
+                            url = ""
+                        }
+                    }
+                }
+                local HttpService = cloneref(game:GetService("HttpService"))
+                pcall(writefile, path, HttpService:JSONEncode(default))
+            end
+            return
+        end
+
+        local success, data = pcall(function()
+            local HttpService = cloneref(game:GetService("HttpService"))
+            return HttpService:JSONDecode(readfile(path))
+        end)
+
+        if success and typeof(data) == "table" then
+            Library.LuaScriptsEnabled = data.enabled ~= false
+            if typeof(data.scripts) == "table" then
+                Library.LuaScripts = data.scripts
+            end
+        end
+    end
+
+    function Library:CreateLuaWindow()
+        if Library.LuaWindowFrame then
+            return Library.LuaWindowFrame
+        end
+
+        Library:LoadLuaConfig()
+
+        local ScreenGui = Library.ScreenGui
+
+        local Holder = Instance.new("Frame")
+        Holder.AutomaticSize = Enum.AutomaticSize.Y
+        Holder.BackgroundColor3 = Library.Scheme.BackgroundColor
+        Holder.Position = UDim2.fromOffset(200, 200)
+        Holder.Size = UDim2.fromOffset(320, 0)
+        Holder.ZIndex = 15
+        Holder.Visible = false
+        Holder.Parent = ScreenGui
+        Library:AddToRegistry(Holder, { BackgroundColor3 = "BackgroundColor" })
+
+        local Corner = Instance.new("UICorner")
+        Corner.CornerRadius = UDim.new(0, Library.CornerRadius)
+        Corner.Parent = Holder
+
+        Library:AddOutline(Holder)
+
+        -- Title bar
+        local TitleBar = Instance.new("Frame")
+        TitleBar.BackgroundTransparency = 1
+        TitleBar.Size = UDim2.new(1, 0, 0, 34)
+        TitleBar.Parent = Holder
+
+        local TitleLabel = Instance.new("TextLabel")
+        TitleLabel.BackgroundTransparency = 1
+        TitleLabel.Size = UDim2.new(1, -24, 1, 0)
+        TitleLabel.Position = UDim2.fromOffset(12, 0)
+        TitleLabel.Text = "Lua Scripts"
+        TitleLabel.TextSize = 15
+        TitleLabel.TextColor3 = Library.Scheme.FontColor
+        TitleLabel.FontFace = Library.Scheme.Font
+        TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        TitleLabel.Parent = TitleBar
+        Library:AddToRegistry(TitleLabel, { TextColor3 = "FontColor" })
+
+        -- Divider
+        local Divider = Instance.new("Frame")
+        Divider.BackgroundColor3 = Library.Scheme.OutlineColor
+        Divider.Position = UDim2.fromOffset(0, 34)
+        Divider.Size = UDim2.new(1, 0, 0, 1)
+        Divider.BorderSizePixel = 0
+        Divider.Parent = Holder
+        Library:AddToRegistry(Divider, { BackgroundColor3 = "OutlineColor" })
+
+        -- Content area
+        local Content = Instance.new("ScrollingFrame")
+        Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        Content.BackgroundTransparency = 1
+        Content.Position = UDim2.fromOffset(0, 36)
+        Content.Size = UDim2.new(1, 0, 0, 300)
+        Content.CanvasSize = UDim2.fromScale(0, 0)
+        Content.ScrollBarThickness = 3
+        Content.ScrollBarImageColor3 = Library.Scheme.AccentColor
+        Content.BorderSizePixel = 0
+        Content.Parent = Holder
+        Library:AddToRegistry(Content, { ScrollBarImageColor3 = "AccentColor" })
+
+        local ListLayout = Instance.new("UIListLayout")
+        ListLayout.Padding = UDim.new(0, 6)
+        ListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        ListLayout.Parent = Content
+
+        local ContentPadding = Instance.new("UIPadding")
+        ContentPadding.PaddingTop = UDim.new(0, 6)
+        ContentPadding.PaddingBottom = UDim.new(0, 6)
+        ContentPadding.PaddingLeft = UDim.new(0, 8)
+        ContentPadding.PaddingRight = UDim.new(0, 8)
+        ContentPadding.Parent = Content
+
+        -- Make draggable
+        Library:MakeDraggable(Holder, TitleBar)
+
+        Library.LuaWindowFrame = Holder
+        Library.LuaWindowContainer = Content
+
+        Library:PopulateLuaWindow()
+
+        return Holder
+    end
+
+    function Library:PopulateLuaWindow()
+        if not Library.LuaWindowContainer then return end
+
+        -- Clear existing children
+        for _, child in Library.LuaWindowContainer:GetChildren() do
+            if child:IsA("GuiObject") then
+                child:Destroy()
+            end
+        end
+
+        -- Re-add layout
+        local existingLayout = Library.LuaWindowContainer:FindFirstChildOfClass("UIListLayout")
+        if not existingLayout then
+            local ll = Instance.new("UIListLayout")
+            ll.Padding = UDim.new(0, 6)
+            ll.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            ll.SortOrder = Enum.SortOrder.LayoutOrder
+            ll.Parent = Library.LuaWindowContainer
+        end
+
+        if not Library.LuaScriptsEnabled then
+            -- Show "not supported" message
+            local NoSupport = Instance.new("TextLabel")
+            NoSupport.BackgroundTransparency = 1
+            NoSupport.Size = UDim2.new(1, 0, 0, 40)
+            NoSupport.Text = "This script doesn't support lua."
+            NoSupport.TextSize = 14
+            NoSupport.TextColor3 = Library.Scheme.FontColor
+            NoSupport.FontFace = Library.Scheme.Font
+            NoSupport.TextWrapped = true
+            NoSupport.Parent = Library.LuaWindowContainer
+            Library:AddToRegistry(NoSupport, { TextColor3 = "FontColor" })
+            return
+        end
+
+        if #Library.LuaScripts == 0 then
+            local EmptyLabel = Instance.new("TextLabel")
+            EmptyLabel.BackgroundTransparency = 1
+            EmptyLabel.Size = UDim2.new(1, 0, 0, 30)
+            EmptyLabel.Text = "No lua scripts configured."
+            EmptyLabel.TextSize = 14
+            EmptyLabel.TextColor3 = Library.Scheme.FontColor
+            EmptyLabel.FontFace = Library.Scheme.Font
+            EmptyLabel.TextWrapped = true
+            EmptyLabel.Parent = Library.LuaWindowContainer
+            Library:AddToRegistry(EmptyLabel, { TextColor3 = "FontColor" })
+            return
+        end
+
+        for i, script in ipairs(Library.LuaScripts) do
+            local Card = Instance.new("TextButton")
+            Card.AutoButtonColor = false
+            Card.BackgroundColor3 = Library.Scheme.MainColor
+            Card.Size = UDim2.new(1, 0, 0, 80)
+            Card.Text = ""
+            Card.BorderSizePixel = 0
+            Card.LayoutOrder = i
+            Card.Parent = Library.LuaWindowContainer
+            Library:AddToRegistry(Card, { BackgroundColor3 = "MainColor" })
+
+            local CardCorner = Instance.new("UICorner")
+            CardCorner.CornerRadius = UDim.new(0, Library.CornerRadius)
+            CardCorner.Parent = Card
+
+            Library:AddOutline(Card)
+
+            -- Background image
+            if typeof(script.image) == "string" and script.image ~= "" then
+                local BgImage = Instance.new("ImageLabel")
+                BgImage.Image = script.image
+                BgImage.BackgroundTransparency = 1
+                BgImage.Size = UDim2.fromScale(1, 1)
+                BgImage.ImageTransparency = 0.7
+                BgImage.ScaleType = Enum.ScaleType.Crop
+                BgImage.ZIndex = Card.ZIndex + 1
+                BgImage.Parent = Card
+
+                local ImgCorner = Instance.new("UICorner")
+                ImgCorner.CornerRadius = UDim.new(0, Library.CornerRadius)
+                ImgCorner.Parent = BgImage
+            end
+
+            -- Title
+            local Title = Instance.new("TextLabel")
+            Title.BackgroundTransparency = 1
+            Title.Position = UDim2.fromOffset(10, 8)
+            Title.Size = UDim2.new(1, -20, 0, 20)
+            Title.Text = typeof(script.title) == "string" and script.title or "Untitled"
+            Title.TextSize = 16
+            Title.TextColor3 = Library.Scheme.FontColor
+            Title.FontFace = Library.Scheme.Font
+            Title.TextXAlignment = Enum.TextXAlignment.Left
+            Title.ZIndex = Card.ZIndex + 2
+            Title.Parent = Card
+            Library:AddToRegistry(Title, { TextColor3 = "FontColor" })
+
+            -- Description
+            local Desc = Instance.new("TextLabel")
+            Desc.BackgroundTransparency = 1
+            Desc.Position = UDim2.fromOffset(10, 30)
+            Desc.Size = UDim2.new(1, -20, 0, 40)
+            Desc.Text = typeof(script.description) == "string" and script.description or ""
+            Desc.TextSize = 13
+            Desc.TextColor3 = Library.Scheme.FontColor
+            Desc.FontFace = Library.Scheme.Font
+            Desc.TextXAlignment = Enum.TextXAlignment.Left
+            Desc.TextYAlignment = Enum.TextYAlignment.Top
+            Desc.TextWrapped = true
+            Desc.TextTransparency = 0.3
+            Desc.ZIndex = Card.ZIndex + 2
+            Desc.Parent = Card
+            Library:AddToRegistry(Desc, { TextColor3 = "FontColor" })
+
+            -- Hover effect
+            Card.MouseEnter:Connect(function()
+                TweenService:Create(Card, Library.TweenInfo, {
+                    BackgroundColor3 = GetLighterColor(Library.Scheme.MainColor)
+                }):Play()
+            end)
+            Card.MouseLeave:Connect(function()
+                TweenService:Create(Card, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.MainColor
+                }):Play()
+            end)
+
+            -- Click to load script
+            Card.MouseButton1Click:Connect(function()
+                if typeof(script.url) == "string" and script.url ~= "" then
+                    local success, err = pcall(function()
+                        loadstring(game:HttpGet(script.url))()
+                    end)
+                    if success then
+                        Library:Notify("Loaded: " .. (script.title or "Script"), 3)
+                    else
+                        Library:Notify("Failed to load: " .. tostring(err), 5)
+                    end
+                else
+                    Library:Notify("No URL configured for this script", 3)
+                end
+            end)
+        end
+    end
+
+    function Library:ToggleLuaWindow()
+        if not Library.LuaWindowFrame then
+            Library:CreateLuaWindow()
+        end
+        Library.LuaWindowVisible = not Library.LuaWindowVisible
+        Library.LuaWindowFrame.Visible = Library.LuaWindowVisible
+    end
+
+    function Library:SetLuaScripts(scripts)
+        if typeof(scripts) == "table" then
+            Library.LuaScripts = scripts
+            Library:PopulateLuaWindow()
+        end
+    end
+
+    function Library:SetLuaEnabled(enabled)
+        Library.LuaScriptsEnabled = enabled
+        Library:PopulateLuaWindow()
+    end
+
+    function Library:SetLuaConfigPath(path)
+        Library.LuaConfigPath = path
+    end
+end
+
+--// Asset Download System \\--
+function Library.DownloadAssets(ForceRedownload)
+    local results = {}
+    for AssetName, _ in pairs(CustomImageManagerAssets) do
+        local success, err = CustomImageManager.DownloadAsset(AssetName, ForceRedownload)
+        results[AssetName] = { success = success, error = err }
+    end
+    return results
+end
 
 getgenv().Library = Library
 return Library
