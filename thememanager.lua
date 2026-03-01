@@ -523,11 +523,6 @@ do
                 getgenv().watermark = v
             end
         end })
-        box:AddInput("WatermarkIcon", { Text = "Watermark icon", Default = "box", Callback = function(v)
-            if typeof(self.Library.SetWatermarkIcon) == "function" then
-                self.Library:SetWatermarkIcon(v)
-            end
-        end })
         box:AddToggle("ShowKeybindList", { Text = "Keybind list", Default = (self.Library.KeybindFrame and self.Library.KeybindFrame.Visible) or false, Callback = function(v)
             if self.Library.ToggleKeybindList then
                 self.Library:ToggleKeybindList()
