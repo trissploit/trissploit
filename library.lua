@@ -1346,23 +1346,27 @@ local function New(ClassName: string, Properties: { [string]: any }): any
     end
 
     -- Auto-attach accent gradient to lucide-style icons
+    -- Only apply when the image looks like a lucide icon spritesheet (has rect properties)
+    -- AND the caller did NOT already set ImageColor3 (to avoid overriding explicit colors)
     if (ClassName == "ImageLabel" or ClassName == "ImageButton") and Properties and Properties.Image and Properties.Image ~= "" then
         local hasRect = Properties.ImageRectSize or Properties.ImageRectOffset
-        if hasRect then
+        local hasExplicitColor = Properties.ImageColor3 ~= nil
+        if hasRect and not hasExplicitColor then
             local grad = Instance:FindFirstChild("LucideAccentGradient") or Instance:FindFirstChildOfClass("UIGradient")
             if not grad then
-                grad = New("UIGradient", { Name = "LucideAccentGradient", Rotation = 90, Parent = Instance })
+                local g = Instance.new("UIGradient")
+                g.Name = "LucideAccentGradient"
+                g.Rotation = 90
+                pcall(function()
+                    g.Color = Library:GetAccentSolidSequence()
+                end)
+                g.Parent = Instance
+                Library.Registry[g] = {
+                    Color = function()
+                        return Library:GetAccentSolidSequence()
+                    end,
+                }
             end
-
-            pcall(function()
-                grad.Color = Library:GetAccentSolidSequence()
-            end)
-
-            Library.Registry[grad] = {
-                Color = function()
-                    return Library:GetAccentSolidSequence()
-                end,
-            }
         end
     end
 
@@ -1674,36 +1678,59 @@ function Library:MakeLine(Frame: GuiObject, Info)
 end
 
 function Library:AddHoverEffect(button, stroke, element)
-    -- Hover effect highlights the outline on hover, restores OutlineColor on leave
+    -- Hover effect targets the dark/shadow outline, not the main outline
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
         if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark }):Play()
     end)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
+    -- Dark outer stroke (Thickness 2 so 1px peeks out behind the inner)
+    local ShadowStroke = New("UIStroke", {
+        Color = "Dark",
+        Thickness = 2,
+        LineJoinMode = Enum.LineJoinMode.Miter,
+        Parent = Frame,
+    })
+    -- Inner outline stroke (Thickness 1, drawn on top)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    -- return two values for compat with existing callers (second is same stroke)
-    return OutlineStroke, OutlineStroke
+    return OutlineStroke, ShadowStroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
+    -- Outermost black stroke (Thickness 3 so 1px peeks beyond shadow)
+    local OuterBlackStroke = New("UIStroke", {
+        Color = "Dark",
+        Thickness = 3,
+        Transparency = 0.5,
+        LineJoinMode = Enum.LineJoinMode.Miter,
+        Parent = Frame,
+    })
+    -- Dark shadow stroke (Thickness 2)
+    local ShadowStroke = New("UIStroke", {
+        Color = "Dark",
+        Thickness = 2,
+        LineJoinMode = Enum.LineJoinMode.Miter,
+        Parent = Frame,
+    })
+    -- Inner outline stroke (Thickness 1, drawn on top)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    return OutlineStroke, OutlineStroke, OutlineStroke
+    return OutlineStroke, ShadowStroke, OuterBlackStroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -2484,6 +2511,30 @@ do
             Parent = LW.Holder,
         })
 
+        -- Title bar with "Luas" title + divider
+        local LuaTitleBar = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 30),
+            ZIndex = 1001,
+            Parent = LW.Holder,
+        })
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(10, 0),
+            Size = UDim2.new(1, -40, 1, 0),
+            Text = "Luas",
+            TextSize = 15,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 1002,
+            Parent = LuaTitleBar,
+        })
+        Library:MakeLine(LW.Holder, {
+            Position = UDim2.fromOffset(0, 30),
+            Size = UDim2.new(1, 0, 0, 1),
+            ZIndex = 1001,
+        })
+        Library:MakeDraggable(LW.Holder, LuaTitleBar, true)
+
         -- Divider line above bottom bar
         Library:MakeLine(LW.Holder, {
             AnchorPoint = Vector2.new(0, 1),
@@ -2492,16 +2543,16 @@ do
             ZIndex = 1001,
         })
 
-        -- Floating refresh button anchored to top-right (lucide icon, NOT changeable)
+        -- Floating refresh button anchored to title bar right (lucide icon, NOT changeable)
         local RefreshIcon = Library:GetIcon("refresh-cw")
         local RefreshBtn = New("TextButton", {
-            AnchorPoint = Vector2.new(1, 0),
+            AnchorPoint = Vector2.new(1, 0.5),
             BackgroundTransparency = 1,
-            Position = UDim2.new(1, -6, 0, 6),
-            Size = UDim2.fromOffset(22, 22),
+            Position = UDim2.new(1, -8, 0.5, 0),
+            Size = UDim2.fromOffset(20, 20),
             Text = "",
             ZIndex = 1002,
-            Parent = LW.Holder,
+            Parent = LuaTitleBar,
         })
         local RefreshImg = New("ImageLabel", {
             Image = RefreshIcon and RefreshIcon.Url or "",
@@ -2551,18 +2602,19 @@ do
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
-            Text = "Obsidian | Lua Scripts",
+            Text = "Luas",
             TextSize = 12,
             TextTransparency = 0.5,
             ZIndex = 1002,
             Parent = BottomBarHolder,
         })
 
-        --// Scroll area fills window (no top bar, leaves room for bottom bar)
+        --// Scroll area (below title bar, above bottom bar)
+        local LuaScrollTop = 31
         LW.ScrollFrame = New("ScrollingFrame", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, 2),
-            Size = UDim2.new(1, 0, 1, -(2 + LuaBottomBarHeight + 1)),
+            Position = UDim2.fromOffset(0, LuaScrollTop),
+            Size = UDim2.new(1, 0, 1, -(LuaScrollTop + LuaBottomBarHeight + 1)),
             CanvasSize = UDim2.fromOffset(0, 0),
             ScrollBarThickness = 3,
             ScrollBarImageColor3 = Library.Scheme.AccentColor,
@@ -2588,9 +2640,6 @@ do
             PaddingTop = UDim.new(0, 8),
             Parent = LW.ScrollFrame,
         })
-
-        -- Make window draggable from any transparent area
-        Library:MakeDraggable(LW.Holder, LW.Holder, true)
 
         -- Populate with scripts
         Library:RefreshLuaWindow()
@@ -4915,7 +4964,7 @@ do
                 })
                 Button.Tween:Play()
                 TweenService:Create(Button.Stroke, Library.TweenInfo, {
-                    Color = Library.Scheme.OutlineColor,
+                    Color = Library.Scheme.Dark,
                 }):Play()
             end)
 
@@ -5395,8 +5444,15 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
+        -- Dark outer stroke for toggle (Thickness 2 peeks behind inner)
+        New("UIStroke", {
+            Color = "Dark",
+            Thickness = 2,
+            Parent = Switch,
+        })
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
+            Thickness = 1,
             Parent = Switch,
         })
 
