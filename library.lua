@@ -623,13 +623,13 @@ function Library:UpdateKeybindFrame()
         end
     end
 
-    -- Use the larger of content-required width and user-preferred width
-    local finalWidth = XSize + 18
-    if Library.KeybindUserWidth then
-        finalWidth = math.max(finalWidth, Library.KeybindUserWidth)
+    -- Only update width if it needs to grow (don't shrink past user resize)
+    local desiredW = math.ceil((XSize + 18) * Library.DPIScale)
+    local currentW = Library.KeybindFrame.Size.X.Offset
+    if desiredW > currentW then
+        local currentH = Library.KeybindFrame.Size.Y.Offset
+        Library.KeybindFrame.Size = UDim2.fromOffset(desiredW, currentH)
     end
-    Library.KeybindFrame.Size = UDim2.fromOffset(math.ceil(finalWidth * Library.DPIScale), 0)
-    Library:UpdateDPI(Library.KeybindFrame, { Size = UDim2.fromOffset(finalWidth, 0) })
 end
 
 function Library:CreateMobileButton(Toggle)
@@ -1590,8 +1590,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
     end))
 end
 
-function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: () -> ()?, MinOverride: Vector2?)
-    local MinSz = MinOverride or Library.MinSize
+function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: () -> ()?)
     local StartPos
     local FrameSize
     local Dragging = false
@@ -1634,9 +1633,9 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
             local Delta = Input.Position - StartPos
             UI.Size = UDim2.new(
                 FrameSize.X.Scale,
-                math.clamp(FrameSize.X.Offset + Delta.X, MinSz.X, math.huge),
+                math.clamp(FrameSize.X.Offset + Delta.X, Library.MinSize.X, math.huge),
                 FrameSize.Y.Scale,
-                math.clamp(FrameSize.Y.Offset + Delta.Y, MinSz.Y, math.huge)
+                math.clamp(FrameSize.Y.Offset + Delta.Y, Library.MinSize.Y, math.huge)
             )
             if Callback then
                 Library:SafeCallback(Callback)
@@ -1817,11 +1816,16 @@ function Library:AddDraggableButton(Text: string, Func)
 end
 
 function Library:AddDraggableMenu(Name: string)
+    local MinWidth = 120
+    local MinHeight = 80
+    local DefaultWidth = 180
+
     local Holder = New("Frame", {
-        AutomaticSize = Enum.AutomaticSize.Y,
+        AutomaticSize = Enum.AutomaticSize.None,
         BackgroundColor3 = "BackgroundColor",
         Position = UDim2.fromOffset(6, 6),
-        Size = UDim2.fromOffset(0, 0),
+        Size = UDim2.fromOffset(DefaultWidth, MinHeight),
+        ClipsDescendants = true,
         ZIndex = 10,
         Parent = ScreenGui,
     })
@@ -1862,12 +1866,21 @@ function Library:AddDraggableMenu(Name: string)
         Parent = Label,
     })
 
-    local Container = New("Frame", {
+    local Container = New("ScrollingFrame", {
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(0, 35),
         Size = UDim2.new(1, 0, 1, -35),
+        CanvasSize = UDim2.fromOffset(0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 2,
+        ScrollBarImageColor3 = Library.Scheme.AccentColor,
+        BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+        TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+        MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
         Parent = Holder,
     })
+    Library.Registry[Container] = { ScrollBarImageColor3 = "AccentColor" }
+
     New("UIListLayout", {
         Padding = UDim.new(0, 7),
         Parent = Container,
@@ -1879,6 +1892,62 @@ function Library:AddDraggableMenu(Name: string)
         PaddingTop = UDim.new(0, 7),
         Parent = Container,
     })
+
+    -- Resize handle (bottom-right corner)
+    local ResizeHandle = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 1),
+        BackgroundTransparency = 1,
+        Position = UDim2.fromScale(1, 1),
+        Size = UDim2.fromOffset(16, 16),
+        Text = "",
+        ZIndex = 12,
+        Parent = Holder,
+    })
+    local resizeIcon = Library:GetIcon("move-diagonal-2")
+    if resizeIcon then
+        New("ImageLabel", {
+            Image = resizeIcon.Url or "",
+            ImageColor3 = "FontColor",
+            ImageRectOffset = resizeIcon.ImageRectOffset or Vector2.zero,
+            ImageRectSize = resizeIcon.ImageRectSize or Vector2.zero,
+            ImageTransparency = 0.5,
+            Position = UDim2.fromOffset(2, 2),
+            Size = UDim2.new(1, -4, 1, -4),
+            ZIndex = 12,
+            Parent = ResizeHandle,
+        })
+    end
+
+    -- Resize logic
+    do
+        local StartPos
+        local FrameSize
+        local Dragging = false
+        local Changed
+
+        ResizeHandle.InputBegan:Connect(function(Input)
+            if not (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+                return
+            end
+            StartPos = Input.Position
+            FrameSize = Holder.Size
+            Dragging = true
+            Changed = Input.Changed:Connect(function()
+                if Input.UserInputState ~= Enum.UserInputState.End then return end
+                Dragging = false
+                if Changed and Changed.Connected then Changed:Disconnect(); Changed = nil end
+            end)
+        end)
+
+        Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input)
+            if Dragging and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
+                local Delta = Input.Position - StartPos
+                local newW = math.max(FrameSize.X.Offset + Delta.X, MinWidth)
+                local newH = math.max(FrameSize.Y.Offset + Delta.Y, MinHeight)
+                Holder.Size = UDim2.fromOffset(newW, newH)
+            end
+        end))
+    end
 
     Library:MakeDraggable(Holder, Label, true)
     return Holder, Container
@@ -2147,13 +2216,24 @@ end
 do
     local LW = {
         Holder = nil,
-        Container = nil,
         ScrollFrame = nil,
+        GridLayout = nil,
         Scripts = {},
         ConfigPath = "Obsidian/lua_scripts.json",
+        LuaFolderPath = "Obsidian/luas",
         Enabled = false,
-        LuaDisabledMessage = nil, -- set to a string to show "This script doesn't support lua."
+        LuaDisabledMessage = nil,
     }
+
+    -- Ensure the luas folder exists
+    local function EnsureLuaFolder()
+        pcall(function()
+            if isfolder and makefolder then
+                if not isfolder("Obsidian") then makefolder("Obsidian") end
+                if not isfolder(LW.LuaFolderPath) then makefolder(LW.LuaFolderPath) end
+            end
+        end)
+    end
 
     function Library:SetLuaScripts(scripts)
         if typeof(scripts) ~= "table" then return end
@@ -2194,18 +2274,54 @@ do
         end)
     end
 
+    -- Load .lua files from the Obsidian/luas/ folder
+    function Library:LoadLuaFolder()
+        EnsureLuaFolder()
+        if not isfolder or not listfiles or not readfile or not isfile then return end
+        pcall(function()
+            if not isfolder(LW.LuaFolderPath) then return end
+            local files = listfiles(LW.LuaFolderPath)
+            for _, filePath in ipairs(files) do
+                if typeof(filePath) == "string" and (filePath:sub(-4) == ".lua" or filePath:sub(-5) == ".luau" or filePath:sub(-4) == ".txt") then
+                    local fileName = filePath:match("([^/\\]+)$") or filePath
+                    local ext = fileName:match("%.([^%.]+)$") or ""
+                    local title = fileName:sub(1, -(#ext + 2)) -- remove extension
+                    local code = ""
+                    pcall(function() code = readfile(filePath) end)
+                    if code ~= "" then
+                        -- Check if script already exists (from config), skip if so
+                        local exists = false
+                        for _, s in ipairs(LW.Scripts) do
+                            if s.title == title then exists = true break end
+                        end
+                        if not exists then
+                            table.insert(LW.Scripts, {
+                                title = title,
+                                description = "Loaded from luas folder",
+                                code = code,
+                                image = "",
+                            })
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
     function Library:SaveLuaConfig()
         if not writefile then return end
         pcall(function()
-            if isfolder and not isfolder("Obsidian") then makefolder("Obsidian") end
+            EnsureLuaFolder()
             writefile(LW.ConfigPath, game:GetService("HttpService"):JSONEncode(LW.Scripts))
         end)
     end
 
     local function CreateLuaCard(scriptData, parent)
+        -- Cards are sized by the UIGridLayout (2 per row), height is fixed
         local Card = New("Frame", {
             BackgroundColor3 = "MainColor",
-            Size = UDim2.new(1, 0, 0, 70),
+            Size = UDim2.new(1, 0, 0, 80),
+            ClipsDescendants = true,
             Parent = parent,
         })
         New("UICorner", {
@@ -2235,9 +2351,10 @@ do
         local Title = New("TextLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(10, 6),
-            Size = UDim2.new(1, -80, 0, 18),
+            Size = UDim2.new(1, -20, 0, 18),
             Text = scriptData.title or "Untitled",
-            TextSize = 15,
+            TextSize = 14,
+            TextTruncate = Enum.TextTruncate.AtEnd,
             TextXAlignment = Enum.TextXAlignment.Left,
             ZIndex = 2,
             Parent = Card,
@@ -2245,28 +2362,29 @@ do
         Library.Registry[Title] = { TextColor3 = "AccentColor", FontFace = "Font" }
 
         -- Description
-        local Desc = New("TextLabel", {
+        New("TextLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(10, 26),
-            Size = UDim2.new(1, -80, 0, 30),
+            Size = UDim2.new(1, -20, 0, 22),
             Text = scriptData.description or "",
-            TextSize = 12,
+            TextSize = 11,
             TextWrapped = true,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Top,
             TextTransparency = 0.4,
+            TextTruncate = Enum.TextTruncate.AtEnd,
             ZIndex = 2,
             Parent = Card,
         })
 
-        -- Load button (uses same style as library buttons)
+        -- Load button (bottom of card, full width minus padding)
         local LoadBtn = New("TextButton", {
-            AnchorPoint = Vector2.new(1, 0.5),
+            AnchorPoint = Vector2.new(0.5, 1),
             BackgroundColor3 = "MainColor",
-            Position = UDim2.new(1, -8, 0.5, 0),
-            Size = UDim2.fromOffset(56, 24),
+            Position = UDim2.new(0.5, 0, 1, -6),
+            Size = UDim2.new(1, -16, 0, 22),
             Text = "Load",
-            TextSize = 13,
+            TextSize = 12,
             TextTransparency = 0.3,
             ZIndex = 2,
             Parent = Card,
@@ -2314,14 +2432,14 @@ do
     function Library:RefreshLuaWindow()
         if not LW.ScrollFrame then return end
 
-        -- Clear existing cards
+        -- Clear existing cards (keep layout objects)
         for _, child in ipairs(LW.ScrollFrame:GetChildren()) do
-            if child:IsA("Frame") and child.Name ~= "UIListLayout" then
+            if child:IsA("Frame") then
                 child:Destroy()
             end
         end
 
-        -- Show disabled message if lua is disabled (text is not customizable)
+        -- Show disabled message if lua is disabled
         if LW.LuaDisabledMessage then
             local MsgLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
@@ -2335,19 +2453,19 @@ do
             return
         end
 
-        -- Reload from config file
+        -- Reload from config file + folder
         Library:LoadLuaConfig()
+        Library:LoadLuaFolder()
 
         -- Create cards for each script
         for _, scriptData in ipairs(LW.Scripts) do
             CreateLuaCard(scriptData, LW.ScrollFrame)
         end
 
-        -- Update canvas size
+        -- Update canvas size after layout
         task.defer(function()
-            local layout = LW.ScrollFrame:FindFirstChildOfClass("UIListLayout")
-            if layout then
-                LW.ScrollFrame.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 14)
+            if LW.GridLayout then
+                LW.ScrollFrame.CanvasSize = UDim2.fromOffset(0, LW.GridLayout.AbsoluteContentSize.Y + 14)
             end
         end)
     end
@@ -2355,26 +2473,24 @@ do
     function Library:CreateLuaWindow()
         if LW.Holder then return LW end
 
-        local LW_TitleBarH = 48
-        local LW_BottomBarH = 20
+        EnsureLuaFolder()
 
-        -- Outer container — same visual style as the main window
-        LW.Holder = New("TextButton", {
+        local LuaWindowWidth = 480
+        local LuaWindowHeight = 380
+        local LuaTopBarHeight = 40
+        local LuaBottomBarHeight = 20
+
+        -- Main holder - matches main window structure exactly
+        LW.Holder = New("Frame", {
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
             end,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(580, 420),
-            Text = "",
+            Size = UDim2.fromOffset(LuaWindowWidth, LuaWindowHeight),
             Visible = false,
             ZIndex = 999,
             Parent = ScreenGui,
-        })
-        Library:AddToRegistry(LW.Holder, {
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
-            end,
         })
         New("UICorner", {
             CornerRadius = UDim.new(0, Library.CornerRadius),
@@ -2382,129 +2498,145 @@ do
         })
         Library:AddOutline(LW.Holder)
 
-        -- Accent line at very top (1px, accent color)
+        -- Accent line at top (same as main window's top accent)
         New("Frame", {
             BackgroundColor3 = "AccentColor",
             Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 1002,
+            ZIndex = 1001,
             Parent = LW.Holder,
         })
 
-        -- Divider below title bar
+        -- Divider lines matching main window: below top bar + above bottom bar
         Library:MakeLine(LW.Holder, {
-            Position = UDim2.fromOffset(0, LW_TitleBarH),
+            Position = UDim2.fromOffset(0, LuaTopBarHeight),
             Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 1001,
+            ZIndex = 1000,
         })
-
-        -- Divider above bottom bar
         Library:MakeLine(LW.Holder, {
             AnchorPoint = Vector2.new(0, 1),
-            Position = UDim2.new(0, 0, 1, -LW_BottomBarH),
+            Position = UDim2.new(0, 0, 1, -LuaBottomBarHeight),
             Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 1001,
+            ZIndex = 1000,
         })
 
-        -- Top bar (draggable title area)
-        local LW_TopBar = New("Frame", {
+        --// Top Bar
+        local TopBar = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, LW_TitleBarH),
+            Size = UDim2.new(1, 0, 0, LuaTopBarHeight),
             ZIndex = 1000,
             Parent = LW.Holder,
         })
-        Library:MakeDraggable(LW.Holder, LW_TopBar, true)
+        Library:MakeDraggable(LW.Holder, TopBar, true)
 
+        -- Title label
         New("TextLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(12, 0),
-            Size = UDim2.new(1, -24, 1, 0),
+            Size = UDim2.new(1, -50, 1, 0),
             Text = "Lua Scripts",
-            TextSize = 20,
+            TextSize = 16,
             TextXAlignment = Enum.TextXAlignment.Left,
             ZIndex = 1000,
-            Parent = LW_TopBar,
+            Parent = TopBar,
         })
 
-        -- Bottom bar (same style as main window)
-        local LW_BottomBar = New("Frame", {
+        -- Refresh button (lucide icon, NOT changeable)
+        local RefreshIcon = Library:GetIcon("refresh-cw")
+        local RefreshBtn = New("TextButton", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(1, -10, 0.5, 0),
+            Size = UDim2.fromOffset(24, 24),
+            Text = "",
+            ZIndex = 1001,
+            Parent = TopBar,
+        })
+        local RefreshImg = New("ImageLabel", {
+            Image = RefreshIcon and RefreshIcon.Url or "",
+            ImageColor3 = "FontColor",
+            ImageRectOffset = RefreshIcon and RefreshIcon.ImageRectOffset or Vector2.zero,
+            ImageRectSize = RefreshIcon and RefreshIcon.ImageRectSize or Vector2.zero,
+            ImageTransparency = 0.5,
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            ZIndex = 1001,
+            Parent = RefreshBtn,
+        })
+
+        RefreshBtn.MouseEnter:Connect(function()
+            TweenService:Create(RefreshImg, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+        end)
+        RefreshBtn.MouseLeave:Connect(function()
+            TweenService:Create(RefreshImg, Library.TweenInfo, { ImageTransparency = 0.5 }):Play()
+        end)
+        RefreshBtn.MouseButton1Click:Connect(function()
+            Library:RefreshLuaWindow()
+            Library:Notify({ Title = "Lua Scripts", Description = "Refreshed script list", Time = 2, IconName = "refresh-cw" })
+        end)
+
+        --// Bottom Bar (matches main window bottom bar)
+        local BottomBarHolder = New("Frame", {
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
             end,
             Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, LW_BottomBarH),
-            ZIndex = 1001,
+            Size = UDim2.new(1, 0, 0, LuaBottomBarHeight),
+            ZIndex = 1000,
             Parent = LW.Holder,
         })
-        Library:AddToRegistry(LW_BottomBar, {
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-            end,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = LW_BottomBar,
-        })
-        local LW_BottomCover = Library:MakeCover(LW_BottomBar, "Top")
-        Library:AddToRegistry(LW_BottomCover, {
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-            end,
-        })
-
-        -- Resize handle in bottom-right corner
-        local LW_ResizeBtn = New("TextButton", {
-            AnchorPoint = Vector2.new(1, 0),
-            BackgroundTransparency = 1,
-            Position = UDim2.fromScale(1, 0),
-            Size = UDim2.fromScale(1, 1),
-            SizeConstraint = Enum.SizeConstraint.RelativeYY,
-            Text = "",
-            ZIndex = 1002,
-            Parent = LW_BottomBar,
-        })
-        Library:MakeResizable(LW.Holder, LW_ResizeBtn, nil, Vector2.new(300, 240))
-        local LW_ResizeIcon = Library:GetIcon("move-diagonal-2")
-        if LW_ResizeIcon then
-            New("ImageLabel", {
-                Image = LW_ResizeIcon.Url,
-                ImageColor3 = "FontColor",
-                ImageRectOffset = LW_ResizeIcon.ImageRectOffset,
-                ImageRectSize = LW_ResizeIcon.ImageRectSize,
-                ImageTransparency = 0.5,
-                Position = UDim2.fromOffset(2, 2),
-                Size = UDim2.new(1, -4, 1, -4),
-                ZIndex = 1002,
-                Parent = LW_ResizeBtn,
+        do
+            local Cover = Library:MakeCover(BottomBarHolder, "Top")
+            Library:AddToRegistry(Cover, {
+                BackgroundColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
+                end,
             })
         end
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = BottomBarHolder,
+        })
 
-        -- Scrollable content area
+        -- Footer text in bottom bar
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Text = "Obsidian | Lua Scripts",
+            TextSize = 12,
+            TextTransparency = 0.5,
+            ZIndex = 1001,
+            Parent = BottomBarHolder,
+        })
+
+        --// Scroll area for lua cards (between top bar and bottom bar)
         LW.ScrollFrame = New("ScrollingFrame", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, LW_TitleBarH + 1),
-            Size = UDim2.new(1, 0, 1, -(LW_TitleBarH + 1 + LW_BottomBarH + 1)),
+            Position = UDim2.fromOffset(0, LuaTopBarHeight + 1),
+            Size = UDim2.new(1, 0, 1, -(LuaTopBarHeight + 1 + LuaBottomBarHeight + 1)),
             CanvasSize = UDim2.fromOffset(0, 0),
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
             ScrollBarThickness = 3,
             ScrollBarImageColor3 = Library.Scheme.AccentColor,
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
             ZIndex = 1000,
             Parent = LW.Holder,
         })
         Library.Registry[LW.ScrollFrame] = { ScrollBarImageColor3 = "AccentColor" }
 
-        -- 2-per-row grid layout
-        New("UIGridLayout", {
-            CellSize = UDim2.new(0.5, -11, 0, 70),
+        -- 2-column grid layout for cards
+        LW.GridLayout = New("UIGridLayout", {
             CellPadding = UDim2.fromOffset(8, 8),
+            CellSize = UDim2.new(0.5, -12, 0, 80),
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
             SortOrder = Enum.SortOrder.LayoutOrder,
             Parent = LW.ScrollFrame,
         })
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 7),
-            PaddingLeft = UDim.new(0, 7),
-            PaddingRight = UDim.new(0, 7),
-            PaddingTop = UDim.new(0, 7),
+            PaddingBottom = UDim.new(0, 8),
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 8),
+            PaddingTop = UDim.new(0, 8),
             Parent = LW.ScrollFrame,
         })
 
@@ -5164,13 +5296,13 @@ do
 
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
-            Thickness = 1,
+            Thickness = 0.3,
             ZIndex = 3,
             Parent = Checkbox,
         })
         local CheckboxShadowStroke = New("UIStroke", {
             Color = "Dark",
-            Thickness = 1,
+            Thickness = 0.3,
             ZIndex = 2,
             Parent = Checkbox,
         })
@@ -7981,40 +8113,6 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.Position = UDim2.new(0, 6, 0.5, 0)
         Library.KeybindFrame.Visible = false
 
-        -- Right-edge resize grip for keybind list width
-        do
-            local KBResizing = false
-            local KBResizeStartX, KBResizeStartWidth
-            local KBHandle = New("Frame", {
-                AnchorPoint = Vector2.new(1, 0),
-                BackgroundColor3 = "AccentColor",
-                BackgroundTransparency = 0.6,
-                Position = UDim2.fromScale(1, 0),
-                Size = UDim2.new(0, 4, 1, 0),
-                ZIndex = 15,
-                Parent = Library.KeybindFrame,
-            })
-            New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = KBHandle })
-            KBHandle.InputBegan:Connect(function(inp)
-                if not IsClickInput(inp) then return end
-                KBResizing = true
-                KBResizeStartX = inp.Position.X
-                KBResizeStartWidth = Library.KeybindFrame.Size.X.Offset
-                inp.Changed:Connect(function()
-                    if inp.UserInputState == Enum.UserInputState.End then
-                        KBResizing = false
-                    end
-                end)
-            end)
-            Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
-                if KBResizing and IsHoverInput(inp) then
-                    local newWidth = math.clamp(KBResizeStartWidth + (inp.Position.X - KBResizeStartX), 120, 600)
-                    Library.KeybindUserWidth = newWidth
-                    Library.KeybindFrame.Size = UDim2.fromOffset(math.ceil(newWidth * Library.DPIScale), 0)
-                end
-            end))
-        end
-
         MainFrame = New("TextButton", {
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
@@ -8342,9 +8440,9 @@ function Library:CreateWindow(WindowInfo)
             Library._FooterCycleThread = footerCycleThread
         end
 
-        --// Keybind List Toggle Button (left of bottom bar)
+        --// Lua Window Toggle Button (left of bottom bar) - ONLY opens the lua menu
         do
-            local KeybindBtn = New("TextButton", {
+            local LuaBtn = New("TextButton", {
                 AnchorPoint = Vector2.new(0, 0.5),
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0, 4, 0.5, 0),
@@ -8364,21 +8462,17 @@ function Library:CreateWindow(WindowInfo)
                     BackgroundTransparency = 1,
                     Size = UDim2.fromScale(1, 1),
                     ZIndex = 2,
-                    Parent = KeybindBtn,
+                    Parent = LuaBtn,
                 })
-                KeybindBtn.MouseEnter:Connect(function()
+                LuaBtn.MouseEnter:Connect(function()
                     TweenService:Create(KeyImg, Library.TweenInfo, { ImageTransparency = 0 }):Play()
                 end)
-                KeybindBtn.MouseLeave:Connect(function()
+                LuaBtn.MouseLeave:Connect(function()
                     TweenService:Create(KeyImg, Library.TweenInfo, { ImageTransparency = 0.6 }):Play()
                 end)
             end
-            KeybindBtn.MouseButton1Click:Connect(function()
-                if Library.ToggleLuaWindow then
-                    Library:ToggleLuaWindow()
-                else
-                    Library:ToggleKeybindList()
-                end
+            LuaBtn.MouseButton1Click:Connect(function()
+                Library:ToggleLuaWindow()
             end)
         end
 
