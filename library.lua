@@ -1230,6 +1230,34 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
             continue
         elseif ThemeProperties[k] then
             ThemeProperties[k] = nil
+            -- Re-check if the new value is also a theme color/function so it gets re-registered
+            if k ~= "Text" and typeof(v) == "string" and Library.Scheme[v] then
+                ThemeProperties[k] = v
+                local assigned = Library.Scheme[v]
+                if k == "FontFace" and assigned ~= nil then
+                    if typeof(assigned) == "string" then
+                        local ok, enumVal = pcall(function() return Enum.Font[assigned] end)
+                        if ok and enumVal then assigned = Font.fromEnum(enumVal) end
+                    elseif typeof(assigned) == "EnumItem" then
+                        assigned = Font.fromEnum(assigned)
+                    end
+                end
+                Instance[k] = assigned
+                continue
+            elseif k ~= "Text" and typeof(v) == "function" then
+                ThemeProperties[k] = v
+                local assigned = v()
+                if k == "FontFace" and assigned ~= nil then
+                    if typeof(assigned) == "string" then
+                        local ok, enumVal = pcall(function() return Enum.Font[assigned] end)
+                        if ok and enumVal then assigned = Font.fromEnum(enumVal) end
+                    elseif typeof(assigned) == "EnumItem" then
+                        assigned = Font.fromEnum(assigned)
+                    end
+                end
+                Instance[k] = assigned
+                continue
+            end
         elseif k ~= "Text" and (Library.Scheme[v] or typeof(v) == "function") then
             -- me when Red in dropdowns break things (temp fix - or perm idk if deivid will do something about this)
             ThemeProperties[k] = v
@@ -2013,9 +2041,13 @@ do
     end
 
     function Library:ToggleWatermark(Enable)
+        if not WM.Holder then
+            Library:CreateWatermark(Library.CurrentWindowTitle or "")
+        end
         if not WM.Holder then return end
         WM.Enabled = Enable and true or false
         WM.Holder.Visible = WM.Enabled
+        Library.Watermark = WM.Enabled
     end
 
     function Library:SetWatermarkName(Name)
@@ -2104,19 +2136,6 @@ do
         if WM.Holder then WM.Holder:Destroy(); WM.Holder = nil; WM.Label = nil; WM.AccentLine = nil; WM.Enabled = false end
     end
 
-    -- Auto-sync Library.Watermark flag
-    task.spawn(function()
-        local last = nil
-        while not Library.Unloaded do
-            local want = Library.Watermark and true or false
-            if want ~= last then
-                if not WM.Holder then Library:CreateWatermark(Library.CurrentWindowTitle or "") end
-                Library:ToggleWatermark(want)
-                last = want
-            end
-            task.wait(0.3)
-        end
-    end)
 end
 
 --// Lua Window System \\--
@@ -2151,8 +2170,8 @@ do
         end
     end
 
-    function Library:SetLuaDisabledMessage(msg)
-        LW.LuaDisabledMessage = msg
+    function Library:SetLuaDisabledMessage(disabled)
+        LW.LuaDisabledMessage = disabled and true or false
         if LW.Holder then
             Library:RefreshLuaWindow()
         end
@@ -2297,12 +2316,12 @@ do
             end
         end
 
-        -- Show disabled message if set
+        -- Show disabled message if lua is disabled (text is not customizable)
         if LW.LuaDisabledMessage then
             local MsgLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, 0, 0, 40),
-                Text = LW.LuaDisabledMessage,
+                Text = "This script doesn't support lua.",
                 TextSize = 14,
                 TextWrapped = true,
                 TextTransparency = 0.3,
@@ -3418,7 +3437,7 @@ do
                     KeybindsToggle:SetNormal(true)
                 end
 
-                KeybindsToggle:SetText(("[%s] %s (%s)"):format(KeyPicker.DisplayValue, KeyPicker.Text, KeyPicker.Mode))
+                KeybindsToggle:SetText(("[%s] %s (%s)"):format(KeyPicker.DisplayValue, ParentObj.Text or KeyPicker.Text, KeyPicker.Mode))
                 KeybindsToggle:SetVisibility(true)
                 KeybindsToggle:Display(State)
             end
