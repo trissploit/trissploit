@@ -6063,7 +6063,9 @@ do
         Slider:Display()
         Groupbox:Resize()
 
-        Slider.Holder = Holder
+        if Slider then
+            Slider.Holder = Holder
+        end
         table.insert(Groupbox.Elements, Slider)
 
         Slider.Default = Slider.Value
