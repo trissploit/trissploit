@@ -207,7 +207,7 @@ local Library = {
         BackgroundColor = Color3.fromRGB(15, 15, 15),
         MainColor = Color3.fromRGB(25, 25, 25),
         AccentColor = Color3.fromRGB(125, 85, 255),
-        OutlineColor = Color3.fromRGB(40, 40, 40),
+        OutlineColor = Color3.fromRGB(65, 65, 65),
         FontColor = Color3.new(1, 1, 1),
         Font = Font.fromEnum(Enum.Font.Code),
 
@@ -1673,14 +1673,14 @@ function Library:MakeLine(Frame: GuiObject, Info)
 end
 
 function Library:AddHoverEffect(button, stroke, element)
-    -- Hover effect targets the black/shadow outline, not the main outline
+    -- Hover effect highlights the outline on hover, restores OutlineColor on leave
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
         if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark }):Play()
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
     end)
 end
 
@@ -1688,44 +1688,21 @@ function Library:AddSmallOutline(Frame: GuiObject)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        ZIndex = 3,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    local ShadowStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 1,
-        ZIndex = 2,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    return OutlineStroke, ShadowStroke
+    -- return two values for compat with existing callers (second is same stroke)
+    return OutlineStroke, OutlineStroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        ZIndex = 3,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    local ShadowStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 1,
-        ZIndex = 2,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    local OuterBlackStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 1,
-        Transparency = 0.5,
-        ZIndex = 1,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    return OutlineStroke, ShadowStroke, OuterBlackStroke
+    return OutlineStroke, OutlineStroke, OutlineStroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -2318,10 +2295,12 @@ do
 
     local function CreateLuaCard(scriptData, parent)
         -- Cards are sized by the UIGridLayout (2 per row), height is fixed
+        local CardZIndex = 1000
         local Card = New("Frame", {
             BackgroundColor3 = "MainColor",
-            Size = UDim2.new(1, 0, 0, 80),
+            Size = UDim2.new(1, 0, 0, 90),
             ClipsDescendants = true,
+            ZIndex = CardZIndex,
             Parent = parent,
         })
         New("UICorner", {
@@ -2338,7 +2317,7 @@ do
                 Size = UDim2.fromScale(1, 1),
                 ImageTransparency = 0.85,
                 ScaleType = Enum.ScaleType.Crop,
-                ZIndex = 0,
+                ZIndex = CardZIndex,
                 Parent = Card,
             })
             New("UICorner", {
@@ -2347,33 +2326,32 @@ do
             })
         end
 
-        -- Title
-        local Title = New("TextLabel", {
+        -- Title (explicitly accent-colored via New so it's set immediately)
+        New("TextLabel", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(10, 6),
-            Size = UDim2.new(1, -20, 0, 18),
+            Position = UDim2.fromOffset(8, 6),
+            Size = UDim2.new(1, -16, 0, 16),
             Text = scriptData.title or "Untitled",
+            TextColor3 = "AccentColor",
             TextSize = 14,
             TextTruncate = Enum.TextTruncate.AtEnd,
             TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 2,
+            ZIndex = CardZIndex + 1,
             Parent = Card,
         })
-        Library.Registry[Title] = { TextColor3 = "AccentColor", FontFace = "Font" }
 
         -- Description
         New("TextLabel", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(10, 26),
-            Size = UDim2.new(1, -20, 0, 22),
+            Position = UDim2.fromOffset(8, 24),
+            Size = UDim2.new(1, -16, 0, 24),
             Text = scriptData.description or "",
             TextSize = 11,
             TextWrapped = true,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Top,
-            TextTransparency = 0.4,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            ZIndex = 2,
+            TextTransparency = 0.35,
+            ZIndex = CardZIndex + 1,
             Parent = Card,
         })
 
@@ -2386,22 +2364,22 @@ do
             Text = "Load",
             TextSize = 12,
             TextTransparency = 0.3,
-            ZIndex = 2,
+            ZIndex = CardZIndex + 1,
             Parent = Card,
         })
         New("UICorner", {
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = LoadBtn,
         })
-        local _, LoadBtnShadow = Library:AddSmallOutline(LoadBtn)
+        local LoadBtnStroke = Library:AddSmallOutline(LoadBtn)
 
         LoadBtn.MouseEnter:Connect(function()
             TweenService:Create(LoadBtn, Library.TweenInfo, { TextTransparency = 0 }):Play()
-            TweenService:Create(LoadBtnShadow, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
+            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
         end)
         LoadBtn.MouseLeave:Connect(function()
             TweenService:Create(LoadBtn, Library.TweenInfo, { TextTransparency = 0.3 }):Play()
-            TweenService:Create(LoadBtnShadow, Library.TweenInfo, { Color = Library.Scheme.Dark }):Play()
+            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
         end)
 
         LoadBtn.MouseButton1Click:Connect(function()
@@ -2477,10 +2455,9 @@ do
 
         local LuaWindowWidth = 480
         local LuaWindowHeight = 380
-        local LuaTopBarHeight = 40
         local LuaBottomBarHeight = 20
 
-        -- Main holder - matches main window structure exactly
+        -- Main holder - matches main window structure
         LW.Holder = New("Frame", {
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
@@ -2498,76 +2475,49 @@ do
         })
         Library:AddOutline(LW.Holder)
 
-        -- Accent line at top (same as main window's top accent)
+        -- Accent line at very top
         New("Frame", {
             BackgroundColor3 = "AccentColor",
             Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 1001,
+            ZIndex = 1002,
             Parent = LW.Holder,
         })
 
-        -- Divider lines matching main window: below top bar + above bottom bar
-        Library:MakeLine(LW.Holder, {
-            Position = UDim2.fromOffset(0, LuaTopBarHeight),
-            Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 1000,
-        })
+        -- Divider line above bottom bar
         Library:MakeLine(LW.Holder, {
             AnchorPoint = Vector2.new(0, 1),
             Position = UDim2.new(0, 0, 1, -LuaBottomBarHeight),
             Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 1000,
+            ZIndex = 1001,
         })
 
-        --// Top Bar
-        local TopBar = New("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, LuaTopBarHeight),
-            ZIndex = 1000,
-            Parent = LW.Holder,
-        })
-        Library:MakeDraggable(LW.Holder, TopBar, true)
-
-        -- Title label
-        New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(12, 0),
-            Size = UDim2.new(1, -50, 1, 0),
-            Text = "Lua Scripts",
-            TextSize = 16,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 1000,
-            Parent = TopBar,
-        })
-
-        -- Refresh button (lucide icon, NOT changeable)
+        -- Floating refresh button anchored to top-right (lucide icon, NOT changeable)
         local RefreshIcon = Library:GetIcon("refresh-cw")
         local RefreshBtn = New("TextButton", {
-            AnchorPoint = Vector2.new(1, 0.5),
+            AnchorPoint = Vector2.new(1, 0),
             BackgroundTransparency = 1,
-            Position = UDim2.new(1, -10, 0.5, 0),
-            Size = UDim2.fromOffset(24, 24),
+            Position = UDim2.new(1, -6, 0, 6),
+            Size = UDim2.fromOffset(22, 22),
             Text = "",
-            ZIndex = 1001,
-            Parent = TopBar,
+            ZIndex = 1002,
+            Parent = LW.Holder,
         })
         local RefreshImg = New("ImageLabel", {
             Image = RefreshIcon and RefreshIcon.Url or "",
             ImageColor3 = "FontColor",
             ImageRectOffset = RefreshIcon and RefreshIcon.ImageRectOffset or Vector2.zero,
             ImageRectSize = RefreshIcon and RefreshIcon.ImageRectSize or Vector2.zero,
-            ImageTransparency = 0.5,
+            ImageTransparency = 0.6,
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
-            ZIndex = 1001,
+            ZIndex = 1002,
             Parent = RefreshBtn,
         })
-
         RefreshBtn.MouseEnter:Connect(function()
             TweenService:Create(RefreshImg, Library.TweenInfo, { ImageTransparency = 0 }):Play()
         end)
         RefreshBtn.MouseLeave:Connect(function()
-            TweenService:Create(RefreshImg, Library.TweenInfo, { ImageTransparency = 0.5 }):Play()
+            TweenService:Create(RefreshImg, Library.TweenInfo, { ImageTransparency = 0.6 }):Play()
         end)
         RefreshBtn.MouseButton1Click:Connect(function()
             Library:RefreshLuaWindow()
@@ -2582,7 +2532,7 @@ do
             end,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, LuaBottomBarHeight),
-            ZIndex = 1000,
+            ZIndex = 1001,
             Parent = LW.Holder,
         })
         do
@@ -2597,23 +2547,21 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = BottomBarHolder,
         })
-
-        -- Footer text in bottom bar
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
             Text = "Obsidian | Lua Scripts",
             TextSize = 12,
             TextTransparency = 0.5,
-            ZIndex = 1001,
+            ZIndex = 1002,
             Parent = BottomBarHolder,
         })
 
-        --// Scroll area for lua cards (between top bar and bottom bar)
+        --// Scroll area fills window (no top bar, leaves room for bottom bar)
         LW.ScrollFrame = New("ScrollingFrame", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, LuaTopBarHeight + 1),
-            Size = UDim2.new(1, 0, 1, -(LuaTopBarHeight + 1 + LuaBottomBarHeight + 1)),
+            Position = UDim2.fromOffset(0, 2),
+            Size = UDim2.new(1, 0, 1, -(2 + LuaBottomBarHeight + 1)),
             CanvasSize = UDim2.fromOffset(0, 0),
             ScrollBarThickness = 3,
             ScrollBarImageColor3 = Library.Scheme.AccentColor,
@@ -2626,7 +2574,7 @@ do
         -- 2-column grid layout for cards
         LW.GridLayout = New("UIGridLayout", {
             CellPadding = UDim2.fromOffset(8, 8),
-            CellSize = UDim2.new(0.5, -12, 0, 80),
+            CellSize = UDim2.new(0.5, -12, 0, 90),
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
             SortOrder = Enum.SortOrder.LayoutOrder,
@@ -2639,6 +2587,9 @@ do
             PaddingTop = UDim.new(0, 8),
             Parent = LW.ScrollFrame,
         })
+
+        -- Make window draggable from any transparent area
+        Library:MakeDraggable(LW.Holder, LW.Holder, true)
 
         -- Populate with scripts
         Library:RefreshLuaWindow()
@@ -4963,7 +4914,7 @@ do
                 })
                 Button.Tween:Play()
                 TweenService:Create(Button.Stroke, Library.TweenInfo, {
-                    Color = Library.Scheme.Dark,
+                    Color = Library.Scheme.OutlineColor,
                 }):Play()
             end)
 
