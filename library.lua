@@ -1692,24 +1692,29 @@ function Library:AddHoverEffect(button, stroke, element)
 end
 
 function Library:AddShadowFrame(Frame: GuiObject)
-    -- Transparent child frame sized 1px larger on each side with a dark UIStroke.
-    -- Sits behind the frame's own content (ZIndex - 1), giving a black outer border
-    -- visible around the colored outline without stacking UIStrokes on the same object.
-    local corner = Frame:FindFirstChildOfClass("UICorner")
-    local shadowCornerRadius = corner
-        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 1)
-        or UDim.new(0, Library.CornerRadius + 1)
+    -- Create a one‑pixel outer border that stays aligned even when the
+    -- target frame is laid out by a UIList/UIGrid/UIPadding/etc.  When the
+    -- frame contains a layout we parent the shadow as a *sibling* instead of
+    -- a child; otherwise a layout will include the shadow in its calculations
+    -- and knock everything off‑center.
+    local hasLayout = Frame:FindFirstChildOfClass("UIListLayout")
+        or Frame:FindFirstChildOfClass("UIGridLayout")
+        or Frame:FindFirstChildOfClass("UIPadding")
+        or Frame:FindFirstChildOfClass("UIPageLayout")
+
+    local parent = hasLayout and Frame.Parent or Frame
+    if not parent then
+        return nil
+    end
 
     local Shadow = Instance.new("Frame")
-    Shadow.BackgroundTransparency = 1
-    Shadow.Size = UDim2.new(1, 2, 1, 2)
-    Shadow.Position = UDim2.fromOffset(-1, -1)
-    Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
     Shadow.Name = "_OutlineShadow"
-    Shadow.Parent = Frame
+    Shadow.BackgroundTransparency = 1
+    Shadow.AnchorPoint = Frame.AnchorPoint or Vector2.new(0,0)
+    Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
+    Shadow.Parent = parent
 
     local ShadowCorner = Instance.new("UICorner")
-    ShadowCorner.CornerRadius = shadowCornerRadius
     ShadowCorner.Parent = Shadow
 
     local DarkStroke = Instance.new("UIStroke")
@@ -1718,6 +1723,45 @@ function Library:AddShadowFrame(Frame: GuiObject)
     DarkStroke.LineJoinMode = Enum.LineJoinMode.Miter
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
+
+    local function update()
+        -- update geometry relative to Frame
+        local anchor = Frame.AnchorPoint or Vector2.new(0,0)
+        Shadow.AnchorPoint = anchor
+        if hasLayout then
+            Shadow.Size = UDim2.new(
+                Frame.Size.X.Scale, Frame.Size.X.Offset + 2,
+                Frame.Size.Y.Scale, Frame.Size.Y.Offset + 2
+            )
+            Shadow.Position = UDim2.new(
+                Frame.Position.X.Scale, Frame.Position.X.Offset - 1,
+                Frame.Position.Y.Scale, Frame.Position.Y.Offset - 1
+            )
+        else
+            -- child case: use full-size with offset and respect anchor
+            Shadow.Size = UDim2.new(1, 2, 1, 2)
+            Shadow.Position = UDim2.fromOffset(-1, -1)
+        end
+        Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
+
+        -- corner radius needs to track any UICorner on the frame
+        local corner = Frame:FindFirstChildOfClass("UICorner")
+        local rad = corner
+            and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 1)
+            or UDim.new(0, Library.CornerRadius + 1)
+        ShadowCorner.CornerRadius = rad
+    end
+
+    -- initially align and then hook changes
+    update()
+    Frame:GetPropertyChangedSignal("Size"):Connect(update)
+    Frame:GetPropertyChangedSignal("Position"):Connect(update)
+    Frame:GetPropertyChangedSignal("ZIndex"):Connect(update)
+    Frame.AncestryChanged:Connect(function(_, newParent)
+        if not newParent then
+            Shadow:Destroy()
+        end
+    end)
 
     return Shadow
 end
