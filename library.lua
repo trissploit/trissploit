@@ -6691,7 +6691,7 @@ do
             end
 
         elseif typeof(Info.Default) == "table" then
-            for _, Value in next, Info.Default do
+            for _, Value in pairs(Info.Default) do
                 local Index = table.find(Dropdown.Values, Value)
                 if Index then
                     table.insert(Defaults, Index)
