@@ -1673,54 +1673,35 @@ function Library:MakeLine(Frame: GuiObject, Info)
 end
 
 function Library:AddHoverEffect(button, stroke, element)
-    -- Hover effect targets the shadow/dark stroke layer
+    -- Hover effect tweens the single outline stroke
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
         if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark }):Play()
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
     end)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    local OutlineStroke = New("UIStroke", {
+    local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    local ShadowStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 2,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    return OutlineStroke, ShadowStroke
+    return Stroke, Stroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    local OutlineStroke = New("UIStroke", {
+    local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    local ShadowStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 2,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    local OuterBlackStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 3,
-        Transparency = 0.5,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    return OutlineStroke, ShadowStroke, OuterBlackStroke
+    return Stroke, Stroke, Stroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -4171,7 +4152,7 @@ do
                         s.dot.BorderColor3 = Library:GetDarkerColor(s.color)
                     end
                     if s.outline then
-                        s.outline.Transparency = (s == SelectedStop) and 0 or 1
+                        s.outline.Color = (s == SelectedStop) and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
                     end
                 end
             end
@@ -4189,12 +4170,9 @@ do
             })
             -- apply library corner radius to dots so they follow theme rounding
             New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Dot })
-            -- small persistent dark outline for visibility
-            local SmallStroke = New("UIStroke", { Color = "Dark", Thickness = 1, Transparency = 0, Parent = Dot })
-            Library.Registry[SmallStroke] = { Color = "Dark" }
-            -- accent outline shown only for selected dot
-            local OutlineStroke = New("UIStroke", { Color = "AccentColor", Thickness = 2, Transparency = 1, Parent = Dot })
-            Library.Registry[OutlineStroke] = { Color = "AccentColor" }
+            -- single outline stroke for dot - switches between OutlineColor and AccentColor for selection
+            local OutlineStroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, Transparency = 0, Parent = Dot })
+            Library.Registry[OutlineStroke] = { Color = "OutlineColor" }
 
             stop.dot = Dot
             stop.outline = OutlineStroke
@@ -5251,18 +5229,11 @@ do
 
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
-            Thickness = 0.3,
-            ZIndex = 3,
-            Parent = Checkbox,
-        })
-        local CheckboxShadowStroke = New("UIStroke", {
-            Color = "Dark",
-            Thickness = 0.3,
-            ZIndex = 2,
+            Thickness = 1,
             Parent = Checkbox,
         })
 
-        Library:AddHoverEffect(Button, CheckboxShadowStroke, Toggle)
+        Library:AddHoverEffect(Button, CheckboxStroke, Toggle)
 
         local CheckboxGradient = New("UIGradient", {
             Color = Library:GetAccentGradientSequence(),
@@ -5297,8 +5268,7 @@ do
                 return
             end
 
-            CheckboxStroke.Transparency = Toggle.Disabled and 0.5 or (Toggle.Value and 1 or 0)
-            CheckboxShadowStroke.Transparency = Toggle.Disabled and 0.5 or 0
+            CheckboxStroke.Transparency = Toggle.Disabled and 0.5 or 0
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
@@ -5400,7 +5370,8 @@ do
         })
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
-            Thickness = 1.5,
+            Thickness = 2,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
             Parent = Switch,
         })
 
