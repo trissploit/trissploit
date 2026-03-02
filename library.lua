@@ -6064,13 +6064,13 @@ do
         Groupbox:Resize()
 
         Slider.Holder = Holder
-                        KeybindsToggle.Holder = Holder
+        table.insert(Groupbox.Elements, Slider)
 
         Slider.Default = Slider.Value
 
         Options[Idx] = Slider
 
-                        binding.UI = KeybindsToggle
+        return Slider
     end
 
     function Funcs:AddDropdown(Idx, Info)
