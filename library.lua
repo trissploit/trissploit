@@ -6266,6 +6266,24 @@ do
             Size = false,
         })
 
+        local function FormatDisplayText()
+            local s = ""
+            if Info.Multi then
+                for _, Value in pairs(Dropdown.Values) do
+                    if Dropdown.Value[Value] then
+                        s = s .. (Info.FormatDisplayValue and tostring(Info.FormatDisplayValue(Value)) or tostring(Value)) .. ", "
+                    end
+                end
+                s = s:sub(1, #s - 2)
+            else
+                s = Dropdown.Value and tostring(Dropdown.Value) or ""
+                if s ~= "" and Info.FormatDisplayValue then
+                    s = tostring(Info.FormatDisplayValue(s))
+                end
+            end
+            return s
+        end
+
         function Dropdown:RecalculateListSize(Count)
             local Y = math.clamp(
                 (Count or GetTableSize(Dropdown.Values)) * (21 * Library.DPIScale),
@@ -6286,24 +6304,6 @@ do
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
             Display.TextTransparency = Dropdown.Disabled and 0.8 or 0
             ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
-        end
-
-        local function FormatDisplayText()
-            local s = ""
-            if Info.Multi then
-                for _, Value in pairs(Dropdown.Values) do
-                    if Dropdown.Value[Value] then
-                        s = s .. (Info.FormatDisplayValue and tostring(Info.FormatDisplayValue(Value)) or tostring(Value)) .. ", "
-                    end
-                end
-                s = s:sub(1, #s - 2)
-            else
-                s = Dropdown.Value and tostring(Dropdown.Value) or ""
-                if s ~= "" and Info.FormatDisplayValue then
-                    s = tostring(Info.FormatDisplayValue(s))
-                end
-            end
-            return s
         end
 
         function Dropdown:Display()
