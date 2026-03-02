@@ -6094,6 +6094,7 @@ do
             Values = Info.Values,
             DisabledValues = Info.DisabledValues,
             Multi = Info.Multi,
+            Value = Info.Multi and {} or nil,
 
             SpecialType = Info.SpecialType,
             ExcludeLocalPlayer = Info.ExcludeLocalPlayer,
@@ -6705,10 +6706,13 @@ do
         if next(Defaults) then
             for i = 1, #Defaults do
                 local Index = Defaults[i]
-                if Info.Multi then
-                    Dropdown.Value[Dropdown.Values[Index]] = true
-                else
-                    Dropdown.Value = Dropdown.Values[Index]
+                local SelectedValue = Dropdown.Values[Index]
+                if SelectedValue ~= nil then
+                    if Info.Multi then
+                        Dropdown.Value[SelectedValue] = true
+                    else
+                        Dropdown.Value = SelectedValue
+                    end
                 end
 
                 if not Info.Multi then
