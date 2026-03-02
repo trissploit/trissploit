@@ -207,7 +207,6 @@ local Library = {
         BackgroundColor = Color3.fromRGB(15, 15, 15),
         MainColor = Color3.fromRGB(25, 25, 25),
         AccentColor = Color3.fromRGB(125, 85, 255),
-        AccentGradientStart = Color3.fromRGB(125, 85, 255), -- same as accent; used for sliders/gradients
         OutlineColor = Color3.fromRGB(65, 65, 65),
         FontColor = Color3.new(1, 1, 1),
         Font = Font.fromEnum(Enum.Font.Code),
@@ -1346,27 +1345,23 @@ local function New(ClassName: string, Properties: { [string]: any }): any
     end
 
     -- Auto-attach accent gradient to lucide-style icons
-    -- Only apply when the image looks like a lucide icon spritesheet (has rect properties)
-    -- AND the caller did NOT already set ImageColor3 (to avoid overriding explicit colors)
     if (ClassName == "ImageLabel" or ClassName == "ImageButton") and Properties and Properties.Image and Properties.Image ~= "" then
         local hasRect = Properties.ImageRectSize or Properties.ImageRectOffset
-        local hasExplicitColor = Properties.ImageColor3 ~= nil
-        if hasRect and not hasExplicitColor then
+        if hasRect then
             local grad = Instance:FindFirstChild("LucideAccentGradient") or Instance:FindFirstChildOfClass("UIGradient")
             if not grad then
-                local g = Instance.new("UIGradient")
-                g.Name = "LucideAccentGradient"
-                g.Rotation = 90
-                pcall(function()
-                    g.Color = Library:GetAccentSolidSequence()
-                end)
-                g.Parent = Instance
-                Library.Registry[g] = {
-                    Color = function()
-                        return Library:GetAccentSolidSequence()
-                    end,
-                }
+                grad = New("UIGradient", { Name = "LucideAccentGradient", Rotation = 90, Parent = Instance })
             end
+
+            pcall(function()
+                grad.Color = Library:GetAccentSolidSequence()
+            end)
+
+            Library.Registry[grad] = {
+                Color = function()
+                    return Library:GetAccentSolidSequence()
+                end,
+            }
         end
     end
 
@@ -1678,7 +1673,7 @@ function Library:MakeLine(Frame: GuiObject, Info)
 end
 
 function Library:AddHoverEffect(button, stroke, element)
-    -- Hover effect targets the dark/shadow outline, not the main outline
+    -- Hover effect targets the shadow/dark stroke layer
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
@@ -1690,17 +1685,15 @@ function Library:AddHoverEffect(button, stroke, element)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- Dark outer stroke (Thickness 2 so 1px peeks out behind the inner)
-    local ShadowStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 2,
-        LineJoinMode = Enum.LineJoinMode.Miter,
-        Parent = Frame,
-    })
-    -- Inner outline stroke (Thickness 1, drawn on top)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
+        LineJoinMode = Enum.LineJoinMode.Miter,
+        Parent = Frame,
+    })
+    local ShadowStroke = New("UIStroke", {
+        Color = "Dark",
+        Thickness = 2,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
@@ -1708,25 +1701,22 @@ function Library:AddSmallOutline(Frame: GuiObject)
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    -- Outermost black stroke (Thickness 3 so 1px peeks beyond shadow)
-    local OuterBlackStroke = New("UIStroke", {
-        Color = "Dark",
-        Thickness = 3,
-        Transparency = 0.5,
+    local OutlineStroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Thickness = 1,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    -- Dark shadow stroke (Thickness 2)
     local ShadowStroke = New("UIStroke", {
         Color = "Dark",
         Thickness = 2,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    -- Inner outline stroke (Thickness 1, drawn on top)
-    local OutlineStroke = New("UIStroke", {
-        Color = "OutlineColor",
-        Thickness = 1,
+    local OuterBlackStroke = New("UIStroke", {
+        Color = "Dark",
+        Thickness = 3,
+        Transparency = 0.5,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
@@ -2483,7 +2473,7 @@ do
 
         local LuaWindowWidth = 480
         local LuaWindowHeight = 380
-        local LuaBottomBarHeight = 20
+        local LuaTitleBarHeight = 30
 
         -- Main holder - matches main window structure
         LW.Holder = New("Frame", {
@@ -2511,13 +2501,15 @@ do
             Parent = LW.Holder,
         })
 
-        -- Title bar with "Luas" title + divider
-        local LuaTitleBar = New("Frame", {
+        -- Title bar with "Luas" title
+        local TitleBar = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 30),
+            Size = UDim2.new(1, 0, 0, LuaTitleBarHeight),
             ZIndex = 1001,
             Parent = LW.Holder,
         })
+        Library:MakeDraggable(LW.Holder, TitleBar, true)
+
         New("TextLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(10, 0),
@@ -2526,33 +2518,26 @@ do
             TextSize = 15,
             TextXAlignment = Enum.TextXAlignment.Left,
             ZIndex = 1002,
-            Parent = LuaTitleBar,
+            Parent = TitleBar,
         })
-        Library:MakeLine(LW.Holder, {
-            Position = UDim2.fromOffset(0, 30),
-            Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 1001,
-        })
-        Library:MakeDraggable(LW.Holder, LuaTitleBar, true)
 
-        -- Divider line above bottom bar
+        -- Divider below title bar
         Library:MakeLine(LW.Holder, {
-            AnchorPoint = Vector2.new(0, 1),
-            Position = UDim2.new(0, 0, 1, -LuaBottomBarHeight),
+            Position = UDim2.fromOffset(0, LuaTitleBarHeight),
             Size = UDim2.new(1, 0, 0, 1),
             ZIndex = 1001,
         })
 
-        -- Floating refresh button anchored to title bar right (lucide icon, NOT changeable)
+        -- Floating refresh button anchored to top-right (lucide icon, NOT changeable)
         local RefreshIcon = Library:GetIcon("refresh-cw")
         local RefreshBtn = New("TextButton", {
             AnchorPoint = Vector2.new(1, 0.5),
             BackgroundTransparency = 1,
-            Position = UDim2.new(1, -8, 0.5, 0),
-            Size = UDim2.fromOffset(20, 20),
+            Position = UDim2.new(1, -8, 0, LuaTitleBarHeight / 2),
+            Size = UDim2.fromOffset(18, 18),
             Text = "",
             ZIndex = 1002,
-            Parent = LuaTitleBar,
+            Parent = LW.Holder,
         })
         local RefreshImg = New("ImageLabel", {
             Image = RefreshIcon and RefreshIcon.Url or "",
@@ -2576,45 +2561,11 @@ do
             Library:Notify({ Title = "Lua Scripts", Description = "Refreshed script list", Time = 2, IconName = "refresh-cw" })
         end)
 
-        --// Bottom Bar (matches main window bottom bar)
-        local BottomBarHolder = New("Frame", {
-            AnchorPoint = Vector2.new(0, 1),
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-            end,
-            Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, LuaBottomBarHeight),
-            ZIndex = 1001,
-            Parent = LW.Holder,
-        })
-        do
-            local Cover = Library:MakeCover(BottomBarHolder, "Top")
-            Library:AddToRegistry(Cover, {
-                BackgroundColor3 = function()
-                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-                end,
-            })
-        end
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = BottomBarHolder,
-        })
-        New("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromScale(1, 1),
-            Text = "Luas",
-            TextSize = 12,
-            TextTransparency = 0.5,
-            ZIndex = 1002,
-            Parent = BottomBarHolder,
-        })
-
-        --// Scroll area (below title bar, above bottom bar)
-        local LuaScrollTop = 31
+        --// Scroll area (below title bar, fills rest of window)
         LW.ScrollFrame = New("ScrollingFrame", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, LuaScrollTop),
-            Size = UDim2.new(1, 0, 1, -(LuaScrollTop + LuaBottomBarHeight + 1)),
+            Position = UDim2.fromOffset(0, LuaTitleBarHeight + 1),
+            Size = UDim2.new(1, 0, 1, -(LuaTitleBarHeight + 1)),
             CanvasSize = UDim2.fromOffset(0, 0),
             ScrollBarThickness = 3,
             ScrollBarImageColor3 = Library.Scheme.AccentColor,
@@ -2640,6 +2591,9 @@ do
             PaddingTop = UDim.new(0, 8),
             Parent = LW.ScrollFrame,
         })
+
+        -- Make window draggable from scroll area too
+        Library:MakeDraggable(LW.Holder, LW.ScrollFrame, true)
 
         -- Populate with scripts
         Library:RefreshLuaWindow()
@@ -5444,15 +5398,9 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
-        -- Dark outer stroke for toggle (Thickness 2 peeks behind inner)
-        New("UIStroke", {
-            Color = "Dark",
-            Thickness = 2,
-            Parent = Switch,
-        })
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
-            Thickness = 1,
+            Thickness = 1.5,
             Parent = Switch,
         })
 
@@ -5767,7 +5715,7 @@ do
         })
 
         local Fill = New("Frame", {
-            BackgroundColor3 = "AccentGradientStart",
+            BackgroundColor3 = "AccentColor",
             Size = UDim2.fromScale(0.5, 1),
             Parent = Bar,
 
@@ -5801,8 +5749,8 @@ do
             DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or 0
 
             FillGradient.Enabled = not Slider.Disabled
-            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentGradientStart
-            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentGradientStart"
+            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentColor
+            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentColor"
         end
 
         function Slider:Display()
@@ -9421,7 +9369,7 @@ function Library:CreateWindow(WindowInfo)
             })
 
             local Fill = New("Frame", {
-                BackgroundColor3 = "AccentGradientStart",
+                BackgroundColor3 = "AccentColor",
                 Size = UDim2.fromScale(1, 1),
                 Parent = Bar,
                 DPIExclude = { Size = true },
