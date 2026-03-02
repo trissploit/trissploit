@@ -207,6 +207,7 @@ local Library = {
         BackgroundColor = Color3.fromRGB(15, 15, 15),
         MainColor = Color3.fromRGB(25, 25, 25),
         AccentColor = Color3.fromRGB(125, 85, 255),
+        AccentGradientStart = Color3.fromRGB(125, 85, 255), -- same as accent; used for sliders/gradients
         OutlineColor = Color3.fromRGB(65, 65, 65),
         FontColor = Color3.new(1, 1, 1),
         Font = Font.fromEnum(Enum.Font.Code),
