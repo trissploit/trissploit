@@ -10499,6 +10499,7 @@ function Library:CreateWindow(WindowInfo)
 
     return Window
 end
+end
 
 local function OnPlayerChange()
     if Library.Unloaded then
