@@ -7902,8 +7902,8 @@ function Library:CreateWindow(WindowInfo)
     Library.CornerRadius = WindowInfo.CornerRadius
 
     -- When LocalizedAssets is requested, silently ensure all assets are downloaded
-    Library.LocalizedAssets = WindowInfo.LocalizedAssets == true
-    if Library.LocalizedAssets then
+    Library.LocalizedAssets = WindowInfo.LocalizedAssets
+    if WindowInfo.LocalizedAssets then
         task.spawn(function() Library:DownloadAssets(true) end)
     end
     
@@ -10524,7 +10524,6 @@ local function OnTeamChange()
             Dropdown:SetValues(TeamList)
         end
     end
-end
 end
 
 Library:GiveSignal(Players.PlayerAdded:Connect(OnPlayerChange))
