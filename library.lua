@@ -1715,6 +1715,9 @@ function Library:AddShadowFrame(Frame: GuiObject)
     local ShadowCorner = Instance.new("UICorner")
     ShadowCorner.CornerRadius = shadowCornerRadius
     ShadowCorner.Parent = Shadow
+    -- track shadow corners so they can follow library rounding (+1 offset)
+    Library._ShadowCorners = Library._ShadowCorners or {}
+    table.insert(Library._ShadowCorners, ShadowCorner)
 
     local DarkStroke = Instance.new("UIStroke")
     DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
@@ -2262,7 +2265,7 @@ do
         GridLayout = nil,
         Scripts = {},
         ConfigPath = "Obsidian/lua_scripts.json",
-        LuaFolderPath = "Obsidian/luas",
+        LuaFolderPath = "Obsidian/luas", -- default path, can be changed via SetLuaFolder
         Enabled = false,
         LuaDisabledMessage = nil,
     }
@@ -2295,6 +2298,19 @@ do
         if LW.Holder then
             Library:RefreshLuaWindow()
         end
+    end
+
+    function Library:SetLuaFolder(path)
+        if typeof(path) ~= "string" then return end
+        LW.LuaFolderPath = path
+        EnsureLuaFolder()
+        if LW.Holder then
+            Library:RefreshLuaWindow()
+        end
+    end
+
+    function Library:GetLuaFolder()
+        return LW.LuaFolderPath
     end
 
     function Library:SetLuaDisabledMessage(disabled)
@@ -2649,6 +2665,10 @@ do
     end
 
     function Library:ToggleLuaWindow()
+        -- respect global disable flag
+        if _G.library and _G.library.luaenabled == false then
+            return
+        end
         if not LW.Holder then
             Library:CreateLuaWindow()
         end
@@ -7858,6 +7878,19 @@ function Library:CreateWindow(WindowInfo)
             end
         end
     end
+    -- update any shadow corners (+1 offset)
+    if Library._ShadowCorners then
+        for _, sc in ipairs(Library._ShadowCorners) do
+            if sc and sc.Parent and sc:IsA("UICorner") then
+                local base = sc.Parent:FindFirstChildOfClass("UICorner")
+                if base then
+                    sc.CornerRadius = UDim.new(base.CornerRadius.Scale, base.CornerRadius.Offset + 1)
+                else
+                    sc.CornerRadius = UDim.new(0, Library.CornerRadius + 1)
+                end
+            end
+        end
+    end
     
     Library:SetNotifySide(WindowInfo.NotifySide)
     Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
@@ -8437,7 +8470,11 @@ function Library:CreateWindow(WindowInfo)
 
         --// Lua Window Toggle Button (left of bottom bar) - ONLY opens the lua menu
         do
-            local LuaBtn = New("TextButton", {
+            local function LuaEnabled()
+                return not (_G.library and _G.library.luaenabled == false)
+            end
+            if LuaEnabled() then
+                local LuaBtn = New("TextButton", {
                 AnchorPoint = Vector2.new(0, 0.5),
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0, 4, 0.5, 0),
@@ -8469,7 +8506,23 @@ function Library:CreateWindow(WindowInfo)
             LuaBtn.MouseButton1Click:Connect(function()
                 Library:ToggleLuaWindow()
             end)
+            -- keep reference for dynamic toggling
+            Library._LuaToggleButton = LuaBtn
         end
+        -- monitor global setting and hide/show button accordingly
+        spawn(function()
+            while true do
+                local enabled = (_G.library and _G.library.luaenabled ~= false)
+                if Library._LuaToggleButton then
+                    Library._LuaToggleButton.Visible = enabled
+                end
+                if not enabled and LW.Enabled then
+                    LW.Enabled = false
+                    if LW.Holder then LW.Holder.Visible = false end
+                end
+                task.wait(0.5)
+            end
+        end)
 
         --// Resize Button
         if WindowInfo.Resizable then
