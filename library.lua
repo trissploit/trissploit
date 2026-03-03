@@ -333,6 +333,7 @@ local Templates = {
         SidebarCompactWidth = 54,
         SidebarCollapseThreshold = 0.5,
         SidebarHighlightCallback = nil,
+        LocalizedAssets = false,
     },
     Toggle = {
         Text = "Toggle",
@@ -1170,13 +1171,39 @@ type IconModule = {
     GetAsset: (Name: string) -> Icon?,
 }
 
-local FetchIcons, Icons = pcall(function()
-    return (loadstring(
-        game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua")
-    ) :: () -> IconModule)()
-end)
+local FetchIcons = false
+local Icons = nil
+local _iconsLoaded = false
+local ICONS_SOURCE_URL = "https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua"
+local ICONS_LOCAL_PATH = "Obsidian/assets/icons_source.lua"
+
+local function LoadIcons()
+    if _iconsLoaded then return end
+    _iconsLoaded = true
+    -- Try disk cache first (always prefer local)
+    if isfile and readfile and isfile(ICONS_LOCAL_PATH) then
+        local ok, result = pcall(function() return loadstring(readfile(ICONS_LOCAL_PATH))() end)
+        if ok and result then FetchIcons = true; Icons = result; return end
+    end
+    -- Web fallback, auto-cache to disk for next time
+    local ok, result = pcall(function()
+        local src = game:HttpGet(ICONS_SOURCE_URL)
+        pcall(function()
+            if writefile then
+                if isfolder and makefolder then
+                    if not isfolder("Obsidian") then makefolder("Obsidian") end
+                    if not isfolder("Obsidian/assets") then makefolder("Obsidian/assets") end
+                end
+                writefile(ICONS_LOCAL_PATH, src)
+            end
+        end)
+        return loadstring(src)()
+    end)
+    if ok and result then FetchIcons = true; Icons = result end
+end
 
 function Library:GetIcon(IconName: string)
+    if not _iconsLoaded then LoadIcons() end
     if not FetchIcons then
         return
     end
@@ -2678,9 +2705,11 @@ do
 end
 
 --// Download Assets System \\--
-function Library:DownloadAssets()
+function Library:DownloadAssets(silent)
     if not writefile or not isfolder or not makefolder then
-        Library:Notify({ Title = "Assets", Description = "Your executor doesn't support file operations", Time = 4, Type = "warning" })
+        if not silent then
+            Library:Notify({ Title = "Assets", Description = "Your executor doesn't support file operations", Time = 4, Type = "warning" })
+        end
         return false
     end
 
@@ -2692,7 +2721,14 @@ function Library:DownloadAssets()
         end
     end
 
-    -- Download all registered assets
+    -- Also cache the icons source for local use
+    if isfile and not isfile(ICONS_LOCAL_PATH) then
+        pcall(function()
+            writefile(ICONS_LOCAL_PATH, game:HttpGet(ICONS_SOURCE_URL))
+        end)
+    end
+
+    -- Download all registered image assets
     local downloaded = 0
     local failed = 0
     for assetName, _ in pairs(CustomImageManagerAssets) do
@@ -2704,12 +2740,14 @@ function Library:DownloadAssets()
         end
     end
 
-    Library:Notify({
-        Title = "Assets",
-        Description = string.format("Downloaded %d asset(s), %d failed", downloaded, failed),
-        Time = 3,
-        IconName = "download",
-    })
+    if not silent then
+        Library:Notify({
+            Title = "Assets",
+            Description = string.format("Downloaded %d asset(s), %d failed", downloaded, failed),
+            Time = 3,
+            IconName = "download",
+        })
+    end
     return true
 end
 
@@ -7862,6 +7900,12 @@ function Library:CreateWindow(WindowInfo)
     end
 
     Library.CornerRadius = WindowInfo.CornerRadius
+
+    -- When LocalizedAssets is requested, silently ensure all assets are downloaded
+    Library.LocalizedAssets = WindowInfo.LocalizedAssets
+    if WindowInfo.LocalizedAssets then
+        task.spawn(function() Library:DownloadAssets(true) end)
+    end
     
     -- Update tooltip/watermark/tab info corners
     if TooltipCorner then
