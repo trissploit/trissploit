@@ -1680,37 +1680,25 @@ function Library:MakeLine(Frame: GuiObject, Info)
 end
 
 function Library:AddHoverEffect(button, stroke, element)
-    local function tweenShadow(frame, entering)
-        local shadow = frame and frame:FindFirstChild("_OutlineShadow")
-        local outerStroke = shadow and shadow:FindFirstChildOfClass("UIStroke")
-        if outerStroke then
-            local c = entering
-                and Library:GetDarkerColor(Library.Scheme.AccentColor)
-                or (Library.Scheme.Dark or Color3.new(0, 0, 0))
-            TweenService:Create(outerStroke, Library.TweenInfo, { Color = c }):Play()
-        end
-    end
-
+    -- Hover effect tweens the single outline stroke
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
-        tweenShadow(stroke.Parent, true)
     end)
     button.MouseLeave:Connect(function()
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
-        tweenShadow(stroke.Parent, false)
     end)
 end
 
 function Library:AddShadowFrame(Frame: GuiObject)
-    -- Skip immediately if a layout already exists on this frame
-    if Frame:FindFirstChildOfClass("UIListLayout")
-        or Frame:FindFirstChildOfClass("UIGridLayout")
-        or Frame:FindFirstChildOfClass("UITableLayout") then
+    -- Skip if the frame has a UIListLayout (shadow would become a layout member)
+    if Frame:FindFirstChildOfClass("UIListLayout") then
         return nil
     end
 
+    -- Transparent child frame with a dark UIStroke. Gives a black outer border
+    -- visible around the colored outline without stacking UIStrokes on the same object.
     local corner = Frame:FindFirstChildOfClass("UICorner")
     local shadowCornerRadius = corner
         and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 1)
@@ -1735,12 +1723,24 @@ function Library:AddShadowFrame(Frame: GuiObject)
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
 
-    -- Auto-destroy if a layout gets added after we run (e.g. TabButton adds UIListLayout after AddOutline)
-    local conn
-    conn = Frame.ChildAdded:Connect(function(child)
-        if child:IsA("UIListLayout") or child:IsA("UIGridLayout") or child:IsA("UITableLayout") then
-            conn:Disconnect()
-            Library.Registry[DarkStroke] = nil
+    -- If UIPadding exists now, counteract it. Also listen for future UIPadding.
+    local function AdjustForPadding()
+        local pad = Frame:FindFirstChildOfClass("UIPadding")
+        if pad then
+            local pl = pad.PaddingLeft.Offset
+            local pr = pad.PaddingRight.Offset
+            local pt = pad.PaddingTop.Offset
+            local pb = pad.PaddingBottom.Offset
+            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
+            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
+        end
+    end
+    AdjustForPadding()
+    Frame.ChildAdded:Connect(function(child)
+        if child:IsA("UIPadding") then
+            task.defer(AdjustForPadding)
+        elseif child:IsA("UIListLayout") then
+            -- UIListLayout added after shadow — remove shadow to prevent layout issues
             pcall(function() Shadow:Destroy() end)
         end
     end)
@@ -1749,7 +1749,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- No shadow frame for inner elements (Box, Display, Bar etc.) - only the outer outline stroke
+    Library:AddShadowFrame(Frame)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
@@ -4962,7 +4962,7 @@ do
                 })
                 Button.Tween:Play()
                 TweenService:Create(Button.Stroke, Library.TweenInfo, {
-                    Color = Library.Scheme.Dark,
+                    Color = Library.Scheme.OutlineColor,
                 }):Play()
             end)
 
@@ -5292,6 +5292,7 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = Checkbox,
         })
+        Library:AddShadowFrame(Checkbox)
 
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
@@ -5434,34 +5435,13 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
+        Library:AddShadowFrame(Switch)
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
             Thickness = 2,
             ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
             Parent = Switch,
         })
-
-        -- Dark outer ring on toggle -- parented to Button (not Switch) to avoid UIPadding offset errors.
-        -- Switch is 32x18, anchored to right of Button, so shadow is 34x20 at (1px right, 1px up).
-        do
-            local SwitchShadow = Instance.new("Frame")
-            SwitchShadow.BackgroundTransparency = 1
-            SwitchShadow.AnchorPoint = Vector2.new(1, 0)
-            SwitchShadow.Position = UDim2.new(1, 1, 0, -1)
-            SwitchShadow.Size = UDim2.fromOffset(34, 20)
-            SwitchShadow.ZIndex = math.max(1, Switch.ZIndex - 1)
-            SwitchShadow.Name = "_SwitchOutlineShadow"
-            SwitchShadow.Parent = Button
-            local SwitchShadowCorner = Instance.new("UICorner")
-            SwitchShadowCorner.CornerRadius = UDim.new(1, 1)
-            SwitchShadowCorner.Parent = SwitchShadow
-            local SwitchDarkStroke = Instance.new("UIStroke")
-            SwitchDarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
-            SwitchDarkStroke.Thickness = 1
-            SwitchDarkStroke.LineJoinMode = Enum.LineJoinMode.Miter
-            SwitchDarkStroke.Parent = SwitchShadow
-            Library.Registry[SwitchDarkStroke] = { Color = "Dark" }
-        end
 
         local Ball = New("Frame", {
             BackgroundColor3 = "FontColor",
