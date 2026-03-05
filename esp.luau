@@ -217,6 +217,14 @@ local MAX_DT = 0.01 -- cap delta to avoid huge single-frame jumps (seconds)
 -- Utility functions
 -- rainbow removed
 
+local function lerpColor(c1, c2, t)
+    return Color3.new(
+        c1.R + (c2.R - c1.R) * t,
+        c1.G + (c2.G - c1.G) * t,
+        c1.B + (c2.B - c1.B) * t
+    )
+end
+
 local function createGradientSequence(color1, color2, color3)
     return ColorSequence.new{
         ColorSequenceKeypoint.new(0, color1),
@@ -225,14 +233,66 @@ local function createGradientSequence(color1, color2, color3)
     }
 end
 
+-- Convert arbitrary gradient stops (from ulib colorpicker) to a UIGradient
+local function stopsToUIGradient(uiGradient, stops, rotation)
+    if not stops or #stops == 0 then return end
+    local sorted = {}
+    for _, s in ipairs(stops) do sorted[#sorted+1] = s end
+    table.sort(sorted, function(a, b) return (a.pos or 0) < (b.pos or 0) end)
+    if sorted[1].pos > 0 then
+        table.insert(sorted, 1, { pos = 0, color = sorted[1].color, transp = sorted[1].transp or sorted[1].transparency or 0 })
+    end
+    if sorted[#sorted].pos < 1 then
+        sorted[#sorted+1] = { pos = 1, color = sorted[#sorted].color, transp = sorted[#sorted].transp or sorted[#sorted].transparency or 0 }
+    end
+    local ckp, tkp = {}, {}
+    for _, s in ipairs(sorted) do
+        ckp[#ckp+1] = ColorSequenceKeypoint.new(s.pos, s.color)
+        tkp[#tkp+1] = NumberSequenceKeypoint.new(s.pos, s.transp or s.transparency or 0)
+    end
+    uiGradient.Color = ColorSequence.new(ckp)
+    uiGradient.Transparency = NumberSequence.new(tkp)
+    if rotation then uiGradient.Rotation = rotation end
+end
 
+-- Sample arbitrary gradient stops down to 3 Color3 values (legacy compat)
+local function gradientStopsToThree(stops)
+    if not stops or #stops == 0 then
+        local w = Color3.new(1,1,1); return w, w, w
+    end
+    local sorted = {}
+    for _, s in ipairs(stops) do sorted[#sorted+1] = s end
+    table.sort(sorted, function(a, b) return (a.pos or 0) < (b.pos or 0) end)
+    local function sampleAt(target)
+        if #sorted == 1 then return sorted[1].color end
+        for i = 1, #sorted - 1 do
+            if target <= sorted[i+1].pos then
+                local range = sorted[i+1].pos - sorted[i].pos
+                if range <= 0 then return sorted[i].color end
+                return lerpColor(sorted[i].color, sorted[i+1].color, (target - sorted[i].pos) / range)
+            end
+        end
+        return sorted[#sorted].color
+    end
+    return sampleAt(0), sampleAt(0.5), sampleAt(1)
+end
 
-local function lerpColor(c1, c2, t)
-    return Color3.new(
-        c1.R + (c2.R - c1.R) * t,
-        c1.G + (c2.G - c1.G) * t,
-        c1.B + (c2.B - c1.B) * t
-    )
+-- Sample color from arbitrary gradient stops at a given position [0..1]
+local function sampleStopsAtPosition(stops, pos)
+    if not stops or #stops == 0 then return Color3.new(1,1,1) end
+    local sorted = {}
+    for _, s in ipairs(stops) do sorted[#sorted+1] = s end
+    table.sort(sorted, function(a, b) return (a.pos or 0) < (b.pos or 0) end)
+    if pos <= sorted[1].pos then return sorted[1].color end
+    if pos >= sorted[#sorted].pos then return sorted[#sorted].color end
+    for i = 1, #sorted - 1 do
+        if pos <= sorted[i+1].pos then
+            local range = sorted[i+1].pos - sorted[i].pos
+            if range <= 0 then return sorted[i].color end
+            return lerpColor(sorted[i].color, sorted[i+1].color, (pos - sorted[i].pos) / range)
+        end
+    end
+    return sorted[#sorted].color
 end
 
 local function getEnumFont(fontName)
@@ -1025,6 +1085,9 @@ local function updateESP(deltaTime)
             
             if getSetting("Enabled", ESPSettings.Enabled) then
                 local fontEnum = getEnumFont(getSetting("TextFont", ESPSettings.TextFont))
+                -- Dynamic text scale factor based on box height (encodes distance)
+                local textScale = math.clamp(h / 80, 0.65, 1.0)
+                local scaledTextSize = math.max(9, math.floor(13 * textScale))
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
                     local nameText = ""
@@ -1037,7 +1100,8 @@ local function updateESP(deltaTime)
                     end
                     espObj.Name.Text = nameText
                     espObj.Name.Font = fontEnum
-                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
+                    espObj.Name.TextSize = scaledTextSize
+                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - math.max(8, math.floor(scaledTextSize * 1.1)))
                     espObj.Name.Visible = true
                 else
                     if espObj.Name then espObj.Name.Visible = false end
@@ -1053,7 +1117,8 @@ local function updateESP(deltaTime)
                         -- Default: place distance below the box centered (AnchorPoint 0.5,0 = top-center)
                         espObj.Distance.Text = dtext
                         espObj.Distance.Font = fontEnum
-                        espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 2)
+                        espObj.Distance.TextSize = scaledTextSize
+                        espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + math.max(1, math.floor(h * 0.03)))
                         espObj.Distance.Visible = true
                     end
                 else
@@ -1081,16 +1146,25 @@ local function updateESP(deltaTime)
                         -- Gradient always enabled on the box outline (parented to UIStroke)
                         local useFill = getSetting("BoxFill", ESPSettings.BoxFill)
                         if useFill then
-                            local c1 = getSetting("BoxFillCustomColor1", ESPSettings.BoxFillCustomColor1)
-                            local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2)
-                            local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3)
-                            espObj.OutlineGradient.Color = createGradientSequence(c1, c2, c3)
+                            -- Use raw stops if available, otherwise fallback to 3-color
+                            if espObj.BoxFillStops then
+                                stopsToUIGradient(espObj.OutlineGradient, espObj.BoxFillStops)
+                            else
+                                local c1 = getSetting("BoxFillCustomColor1", ESPSettings.BoxFillCustomColor1)
+                                local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2)
+                                local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3)
+                                espObj.OutlineGradient.Color = createGradientSequence(c1, c2, c3)
+                            end
                         else
-                            espObj.OutlineGradient.Color = createGradientSequence(
-                                getSetting("BoxCustomColor1", ESPSettings.BoxCustomColor1) or getSetting("BoxColor", ESPSettings.BoxColor),
-                                getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2) or getSetting("BoxColor", ESPSettings.BoxColor),
-                                getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3) or getSetting("BoxColor", ESPSettings.BoxColor)
-                            )
+                            if espObj.BoxStops then
+                                stopsToUIGradient(espObj.OutlineGradient, espObj.BoxStops)
+                            else
+                                espObj.OutlineGradient.Color = createGradientSequence(
+                                    getSetting("BoxCustomColor1", ESPSettings.BoxCustomColor1) or getSetting("BoxColor", ESPSettings.BoxColor),
+                                    getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2) or getSetting("BoxColor", ESPSettings.BoxColor),
+                                    getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3) or getSetting("BoxColor", ESPSettings.BoxColor)
+                                )
+                            end
                         end
                         espObj.OutlineGradient.Enabled = true
                         espObj.OutlineGradient.Rotation = -90
@@ -1170,11 +1244,15 @@ local function updateESP(deltaTime)
                         espObj.BoxGradient.Rotation = (baseRotation) % 360
                     end
 
-                    -- Three-stop fill gradient
-                    local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
-                    local gc2 = c2 or ESPSettings.BoxFillColor or gc1
-                    local gc3 = c3 or ESPSettings.BoxFillColor or gc2
-                    espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                    -- Fill gradient: use raw stops if available, fallback 3-color
+                    if espObj.BoxFillStops then
+                        stopsToUIGradient(espObj.BoxGradient, espObj.BoxFillStops)
+                    else
+                        local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
+                        local gc2 = c2 or ESPSettings.BoxFillColor or gc1
+                        local gc3 = c3 or ESPSettings.BoxFillColor or gc2
+                        espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                    end
                     espObj.BoxFill.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
                     espObj.BoxFill.BackgroundColor3 = Color3.new(1, 1, 1)
                 else
@@ -1244,8 +1322,13 @@ local function updateESP(deltaTime)
                         local hc2 = getSetting("HealthBarColor2", ESPSettings.HealthBarColor2) or Color3.fromRGB(255, 170, 0)
                         local hc3 = getSetting("HealthBarColor3", ESPSettings.HealthBarColor3) or Color3.fromRGB(0, 255, 0)
 
+                        -- Use raw stops if available; otherwise sample from 3-color legacy
+                        local healthStops = espObj.HealthBarStops
                         local function sampleBase(u)
                             u = (u % 1 + 1) % 1
+                            if healthStops then
+                                return sampleStopsAtPosition(healthStops, u)
+                            end
                             if u < (1/3) then
                                 local t2 = u / (1/3)
                                 return lerpColor(hc1, hc2, t2)
@@ -1307,7 +1390,8 @@ local function updateESP(deltaTime)
                             espObj.HealthBar.Visible = true
 
                             -- HP and distance combined centered under the bar
-                            local textY = barY + thickness + 6
+                            local textGap = math.max(2, math.floor(h * 0.03))
+                            local textY = barY + thickness + textGap
                             local hpVal = 0
                             if hum and hum.Health then hpVal = math.max(0, math.floor(hum.Health)) end
                             local hpStr = tostring(hpVal)
@@ -1318,6 +1402,7 @@ local function updateESP(deltaTime)
                             if espObj.HPText then
                                 espObj.HPText.Text = combined
                                 espObj.HPText.Font = fontEnum
+                                espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, centerX, 0, textY)
                                 espObj.HPText.Visible = true
                             end
@@ -1359,6 +1444,7 @@ local function updateESP(deltaTime)
                             local textStr = string.format("%d%%", healthPercent)
                             espObj.HealthText.Text = textStr
                             espObj.HealthText.Font = fontEnum
+                            espObj.HealthText.TextSize = scaledTextSize
                             local hpPosMode = getSetting("HealthBarPosition", ESPSettings.HealthBarPosition)
                             if hpPosMode == "Right" then
                                 espObj.HealthText.Position = UDim2.new(0, x + w + padding, 0, y + h - barHeight + 3)
@@ -1431,6 +1517,23 @@ local function addESP(player)
         espObj.HealthGradientPhase = espObj.HealthGradientPhase or math.random()
         espObj.GradientAngle = espObj.GradientAngle or 0
     end
+    -- Apply stored gradient stops from previous HandleColorPickerChange calls
+    for _, prefix in ipairs({"BoxFill", "Box", "HealthBar"}) do
+        local stops = ESPSettings[prefix .. "_GradientStops"]
+        local rot = ESPSettings[prefix .. "_GradientRotation"]
+        if stops then
+            if prefix == "BoxFill" then
+                espObj.BoxFillStops = stops
+                if espObj.BoxGradient then stopsToUIGradient(espObj.BoxGradient, stops, rot) end
+            elseif prefix == "Box" then
+                espObj.BoxStops = stops
+                if espObj.OutlineGradient then stopsToUIGradient(espObj.OutlineGradient, stops, rot) end
+            elseif prefix == "HealthBar" then
+                espObj.HealthBarStops = stops
+                if espObj.HealthBarGradient then stopsToUIGradient(espObj.HealthBarGradient, stops, rot) end
+            end
+        end
+    end
     ESPObjects[player] = espObj
 end
 
@@ -1477,6 +1580,61 @@ getgenv().TrisESP = {
         end
         ESPObjects = {}
         if ESPHolder then ESPHolder:Destroy() end
+    end,
+
+    -- Gradient adapter: apply ulib gradient stops directly to a UIGradient instance
+    ApplyGradientToUIGradient = stopsToUIGradient,
+    -- Convert arbitrary stops to 3 sampled Color3 values (for legacy 3-stop settings)
+    GradientStopsToThree = gradientStopsToThree,
+
+    -- Handle a ulib ColorPicker callback payload (Color3 or { Stops = [{pos,color,transparency},...] })
+    HandleColorPickerChange = function(settingPrefix, payload)
+        if not payload then return false end
+        if typeof and typeof(payload) == "Color3" then
+            ESPSettings[settingPrefix .. "CustomColor1"] = payload
+            ESPSettings[settingPrefix .. "CustomColor2"] = payload
+            ESPSettings[settingPrefix .. "CustomColor3"] = payload
+            -- clear raw stops so fallback 3-color path is used
+            ESPSettings[settingPrefix .. "_GradientStops"] = nil
+            ESPSettings[settingPrefix .. "_GradientRotation"] = nil
+            for _, espObj in pairs(ESPObjects) do
+                if settingPrefix == "BoxFill" then espObj.BoxFillStops = nil
+                elseif settingPrefix == "Box" then espObj.BoxStops = nil
+                elseif settingPrefix == "HealthBar" then espObj.HealthBarStops = nil end
+            end
+            return true
+        end
+        if type(payload) == "table" and payload.Stops then
+            local stops = payload.Stops
+            local c1, c2, c3 = gradientStopsToThree(stops)
+            ESPSettings[settingPrefix .. "CustomColor1"] = c1
+            ESPSettings[settingPrefix .. "CustomColor2"] = c2
+            ESPSettings[settingPrefix .. "CustomColor3"] = c3
+            -- store raw stops on every ESP object for full-fidelity rendering
+            for _, espObj in pairs(ESPObjects) do
+                if settingPrefix == "BoxFill" then
+                    espObj.BoxFillStops = stops
+                    if espObj.BoxGradient then
+                        stopsToUIGradient(espObj.BoxGradient, stops, payload.Rotation)
+                    end
+                elseif settingPrefix == "Box" then
+                    espObj.BoxStops = stops
+                    if espObj.OutlineGradient then
+                        stopsToUIGradient(espObj.OutlineGradient, stops, payload.Rotation)
+                    end
+                elseif settingPrefix == "HealthBar" then
+                    espObj.HealthBarStops = stops
+                    if espObj.HealthBarGradient then
+                        stopsToUIGradient(espObj.HealthBarGradient, stops, payload.Rotation)
+                    end
+                end
+            end
+            -- also store globally so newly spawned ESP objects pick it up
+            ESPSettings[settingPrefix .. "_GradientStops"] = stops
+            ESPSettings[settingPrefix .. "_GradientRotation"] = payload.Rotation
+            return true
+        end
+        return false
     end,
 
     -- Helper to resolve a player reference (player object, userId number, or player name)
