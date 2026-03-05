@@ -239,16 +239,16 @@ local function stopsToUIGradient(uiGradient, stops, rotation)
     local sorted = {}
     for _, s in ipairs(stops) do sorted[#sorted+1] = s end
     table.sort(sorted, function(a, b) return (a.pos or 0) < (b.pos or 0) end)
-    if sorted[1].pos > 0 then
-        table.insert(sorted, 1, { pos = 0, color = sorted[1].color, transp = sorted[1].transp or sorted[1].transparency or 0 })
+    if (sorted[1].pos or 0) > 0 then
+        table.insert(sorted, 1, { pos = 0, color = sorted[1].color or Color3.new(1,1,1), transp = sorted[1].transp or sorted[1].transparency or 0 })
     end
-    if sorted[#sorted].pos < 1 then
-        sorted[#sorted+1] = { pos = 1, color = sorted[#sorted].color, transp = sorted[#sorted].transp or sorted[#sorted].transparency or 0 }
+    if (sorted[#sorted].pos or 0) < 1 then
+        sorted[#sorted+1] = { pos = 1, color = sorted[#sorted].color or Color3.new(1,1,1), transp = sorted[#sorted].transp or sorted[#sorted].transparency or 0 }
     end
     local ckp, tkp = {}, {}
     for _, s in ipairs(sorted) do
-        ckp[#ckp+1] = ColorSequenceKeypoint.new(s.pos, s.color)
-        tkp[#tkp+1] = NumberSequenceKeypoint.new(s.pos, s.transp or s.transparency or 0)
+        ckp[#ckp+1] = ColorSequenceKeypoint.new(s.pos or 0, s.color or Color3.new(1,1,1))
+        tkp[#tkp+1] = NumberSequenceKeypoint.new(s.pos or 0, s.transp or s.transparency or 0)
     end
     uiGradient.Color = ColorSequence.new(ckp)
     uiGradient.Transparency = NumberSequence.new(tkp)
@@ -1247,13 +1247,17 @@ local function updateESP(deltaTime)
                     -- Fill gradient: use raw stops if available, fallback 3-color
                     if espObj.BoxFillStops then
                         stopsToUIGradient(espObj.BoxGradient, espObj.BoxFillStops)
+                        -- When using gradient stops, let UIGradient handle transparency
+                        espObj.BoxFill.BackgroundTransparency = 0
                     else
                         local gc1 = c1 or ESPSettings.BoxFillColor or Color3.new(1,1,1)
                         local gc2 = c2 or ESPSettings.BoxFillColor or gc1
                         local gc3 = c3 or ESPSettings.BoxFillColor or gc2
                         espObj.BoxGradient.Color = createGradientSequence(gc1, gc2, gc3)
+                        -- Reset UIGradient transparency for 3-color mode (frame controls it)
+                        espObj.BoxGradient.Transparency = NumberSequence.new(0)
+                        espObj.BoxFill.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
                     end
-                    espObj.BoxFill.BackgroundTransparency = math.clamp(getSetting("BoxFillTransparency", ESPSettings.BoxFillTransparency) or 0.5, 0, 1)
                     espObj.BoxFill.BackgroundColor3 = Color3.new(1, 1, 1)
                 else
                     if espObj.BoxFill then espObj.BoxFill.Visible = false end
