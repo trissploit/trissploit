@@ -74,6 +74,8 @@ local ESPSettings = {
     NameMode = "DisplayName",
     ShowHealthText = false,
     ShowDistance = false,
+    -- Font selection: "ProggyClean" | "Tahoma"
+    TextFont = "ProggyClean",
     
     -- Gradient settings (autorotate enabled internally)
     -- NOTE: UI gradient autorotation is handled internally; GUI animation controls removed
@@ -91,6 +93,10 @@ local ESPSettings = {
     -- Box settings
     Boxes = false,
     BoxType = "Square",
+    -- Box sizing mode: "Static" uses a fixed width ratio, "Bounding" uses dynamic part projection
+    BoxSizingMode = "Static",
+    -- Width multiplier for Static sizing mode (ratio of height)
+    StaticBoxWidth = 0.6,
     BoxColor = Color3.fromRGB(0, 170, 255),
     Thickness = 2,
     BoxOutlineColor = Color3.new(0, 0, 0),
@@ -103,12 +109,13 @@ local ESPSettings = {
     -- Tracers
     Tracers = false,
     TracerFrom = "Bottom",
-    TracerThickness = 2,
-    TracerColor = Color3.fromRGB(0, 170, 255),
+    TracerThickness = 1.2,
+    TracerColor = Color3.fromRGB(255, 255, 255),
     
     -- Health bar
     HealthBarEnabled = false,
-    HealthBarPosition = "Left",
+    -- Health bar position: "Left" (vertical) or "Bottom" (horizontal below box)
+    HealthBarPosition = "Bottom",
     HealthBarThickness = 2.5,
     -- Health bar custom gradient (3 stops)
     HealthBarColor1 = Color3.fromRGB(255, 0, 0),
@@ -120,9 +127,6 @@ local ESPSettings = {
     HealthGradientEnabled = true,
     -- Number of samples used when building the animated gradient (fixed default)
     -- (setting removed; defaults to 12 samples)
-    -- Health gradient blending: "linear" | "smooth" | "ease"
-    -- "smooth" uses smoothstep, "ease" uses cosine ease in/out
-    HealthGradientBlend = "linear",
     -- Whether the healthbar outline thickness scales with the filled height
     HealthOutlineFollow = false,
     
@@ -138,12 +142,15 @@ Documentation: TrisESP usage & API
 Settings (table: `getgenv().TrisESP.Settings`)
 - Enabled (bool): Master system toggle. When false, all ESP is removed.
 - MaxDistance (number): Max render distance (studs).
+- TextFont (string): "ProggyClean" (monospace) or "Tahoma" (sans-serif).
 - AnimateBoxRotation (bool): Rotate box-fill gradients when true.
 - BoxRotationSpeed (number): Rotation speed used when AnimateBoxRotation is enabled.
 - Boxes (bool): Enable box outlines.
 - BoxType (string): "Square" or "Corner".
+- BoxSizingMode (string): "Static" uses a fixed width ratio, "Bounding" uses dynamic part projection.
+- StaticBoxWidth (number): Width multiplier for Static sizing mode (ratio of height, default 0.6).
 - BoxOutlineColor (Color3): Outline color for box frames (outline stroke forced to 1px).
-- BoxCustomColor1/2/3 (Color3): 3-stop gradient for box outlines (if OutlineGradient enabled).
+- BoxCustomColor1/2/3 (Color3): 3-stop gradient for box outlines (always active on UIStroke).
 - BoxFill (bool): Enable gradient-filled boxes (independent of `Boxes`).
 - BoxFillCustomColor1/2/3 (Color3): 3-stop gradient for box fill.
 - BoxFillTransparency (number 0-1): Transparency for the box fill layer.
@@ -151,12 +158,11 @@ Settings (table: `getgenv().TrisESP.Settings`)
 - Tracers (bool), TracerFrom ("Top"|"Bottom"|"Center"), TracerThickness, TracerColor
 
 - HealthBarEnabled (bool): Show vertical health bar.
-- HealthBarPosition ("Left"|"Right"): Side to draw health bar.
+- HealthBarPosition ("Left"|"Right"|"Bottom"): Side/position to draw health bar.
 - HealthBarThickness (number): Pixel width of health bar.
 - HealthBarColor1/2/3 (Color3): 3-stop gradient used for the health bar.
-- HealthGradientEnabled (bool): Animate the health gradient when true. When false, the system preserves the last phase but doesn't advance it.
+- HealthGradientEnabled (bool): Animate the health gradient when true.
 - HealthGradientSpeed (number): Cycles per second used when HealthGradientEnabled is true.
-- HealthGradientBlend ("linear"|"smooth"|"ease"): Interpolation between stops.
 - ShowHealthText (bool): Show percent value next to the healthbar.
 - HealthOutlineFollow (bool): When true the outline height follows the filled height.
 
@@ -229,6 +235,13 @@ local function lerpColor(c1, c2, t)
     )
 end
 
+local function getEnumFont(fontName)
+    if fontName == "Tahoma" then
+        return Enum.Font.SourceSans
+    end
+    return Enum.Font.Code -- ProggyClean (default)
+end
+
 local function getHealthColor(ratio)
     if ratio > 0.75 then
         return Color3.fromRGB(0, 255, 0)
@@ -296,25 +309,68 @@ end
 local function getScreenRectForCharacter(char)
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        local ok, extents = pcall(function() return char:GetExtentsSize() end)
-        if ok and extents and extents.Y > 0 then
-            local halfH = extents.Y / 2
-            local topWorld = hrp.Position + Vector3.new(0, halfH, 0)
-            local bottomWorld = hrp.Position - Vector3.new(0, halfH, 0)
+    if not hrp then return nil end
+
+    local sizingMode = ESPSettings.BoxSizingMode or "Static"
+
+    if sizingMode == "Bounding" then
+        -- Dynamic bounding box: project all character part corners to screen space
+        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+        local anyVisible = false
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                local corners = {
+                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new(-part.Size.X/2,  part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2,  part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2,  part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2, -part.Size.Y/2,  part.Size.Z/2),
+                    part.CFrame * CFrame.new(-part.Size.X/2,  part.Size.Y/2,  part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2,  part.Size.Y/2,  part.Size.Z/2),
+                }
+                for _, corner in ipairs(corners) do
+                    local sp = Camera:WorldToViewportPoint(corner.Position)
+                    if sp.Z > 0 then
+                        anyVisible = true
+                        minX = math.min(minX, sp.X)
+                        minY = math.min(minY, sp.Y)
+                        maxX = math.max(maxX, sp.X)
+                        maxY = math.max(maxY, sp.Y)
+                    end
+                end
+            end
+        end
+        if not anyVisible or minX == math.huge then return nil end
+        local w = maxX - minX
+        local h = maxY - minY
+        if w < 1 or h < 1 then return nil end
+        return { x = minX, y = minY, w = w, h = h, cx = minX + w/2, cy = minY + h/2 }
+    else
+        -- Static mode: use GetBoundingBox for accurate center + fixed width ratio
+        local ok, cf, size = pcall(function()
+            local c, s = char:GetBoundingBox()
+            return c, s
+        end)
+        if ok and cf and size and size.Y > 0 then
+            local halfH = size.Y / 2
+            local center = cf.Position
+            local topWorld = center + Vector3.new(0, halfH, 0)
+            local bottomWorld = center - Vector3.new(0, halfH, 0)
             local spTop = Camera:WorldToViewportPoint(topWorld)
             local spBottom = Camera:WorldToViewportPoint(bottomWorld)
             if spTop.Z > 0 and spBottom.Z > 0 then
                 local h = math.abs(spBottom.Y - spTop.Y)
-                local w = h * 0.55
+                local widthRatio = ESPSettings.StaticBoxWidth or 0.6
+                local w = h * widthRatio
                 local cx = (spTop.X + spBottom.X) / 2
                 local x = cx - w / 2
                 local y = spTop.Y
                 return { x = x, y = y, w = w, h = h, cx = cx, cy = y + h/2 }
             end
         end
+        return nil
     end
-    return nil
 end
 
 -- Create ESP object
@@ -333,12 +389,13 @@ local function createESPObject()
     espObj.HealthGradientPhase = nil
     
     -- Name label
+    local initFont = getEnumFont(ESPSettings.TextFont)
     espObj.Name = Instance.new("TextLabel")
     espObj.Name.Name = "NameLabel"
     espObj.Name.BackgroundTransparency = 1
     espObj.Name.Size = UDim2.new(0, 100, 0, 20)
     espObj.Name.AnchorPoint = Vector2.new(0.5, 0.5)
-    espObj.Name.Font = Enum.Font.Code
+    espObj.Name.Font = initFont
     espObj.Name.TextSize = 13
     espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Name.TextStrokeTransparency = 0
@@ -348,13 +405,13 @@ local function createESPObject()
     espObj.Name.ZIndex = 10
     espObj.Name.Parent = container
     
-    -- Distance label
+    -- Distance label (AnchorPoint top-center so text stays right below the box)
     espObj.Distance = Instance.new("TextLabel")
     espObj.Distance.Name = "DistanceLabel"
     espObj.Distance.BackgroundTransparency = 1
     espObj.Distance.Size = UDim2.new(0, 100, 0, 20)
-    espObj.Distance.AnchorPoint = Vector2.new(0.5, 0.5)
-    espObj.Distance.Font = Enum.Font.Code
+    espObj.Distance.AnchorPoint = Vector2.new(0.5, 0)
+    espObj.Distance.Font = initFont
     espObj.Distance.TextSize = 13
     espObj.Distance.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Distance.TextStrokeTransparency = 0
@@ -373,7 +430,7 @@ local function createESPObject()
     espObj.Weapon.BackgroundTransparency = 1
     espObj.Weapon.Size = UDim2.new(0, 100, 0, 20)
     espObj.Weapon.AnchorPoint = Vector2.new(0.5, 0.5)
-    espObj.Weapon.Font = Enum.Font.Code
+    espObj.Weapon.Font = initFont
     espObj.Weapon.TextSize = 13
     espObj.Weapon.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Weapon.TextStrokeTransparency = 0
@@ -401,12 +458,12 @@ local function createESPObject()
     espObj.BoxOutline.LineJoinMode = Enum.LineJoinMode.Miter
     espObj.BoxOutline.Parent = espObj.Box
 
-    -- Box outline gradient (for colored outlines)
+    -- Box outline gradient (for colored outlines - parented to UIStroke)
     espObj.OutlineGradient = Instance.new("UIGradient")
     espObj.OutlineGradient.Name = "OutlineGradient"
-    espObj.OutlineGradient.Enabled = false
+    espObj.OutlineGradient.Enabled = true
     espObj.OutlineGradient.Rotation = -90
-    espObj.OutlineGradient.Parent = espObj.Box
+    espObj.OutlineGradient.Parent = espObj.BoxOutline
 
     -- Separate Box Fill frame (completely independent of Box outline)
     espObj.BoxFill = Instance.new("Frame")
@@ -434,6 +491,14 @@ local function createESPObject()
     espObj.Tracer.Visible = false
     espObj.Tracer.ZIndex = 2
     espObj.Tracer.Parent = container
+    -- Tracer outline (UIStroke) for a crisp outline around the rotated tracer
+    espObj.TracerOutline = Instance.new("UIStroke")
+    espObj.TracerOutline.Name = "TracerOutline"
+    espObj.TracerOutline.Color = Color3.fromRGB(0, 0, 0)
+    espObj.TracerOutline.Thickness = 1
+    espObj.TracerOutline.Transparency = 0
+    espObj.TracerOutline.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.TracerOutline.Parent = espObj.Tracer
     
     -- Health bar background
     espObj.HealthBarBG = Instance.new("Frame")
@@ -461,11 +526,17 @@ local function createESPObject()
     espObj.HealthBarGradient.Name = "HealthGradient"
     espObj.HealthBarGradient.Enabled = true
     espObj.HealthBarGradient.Rotation = -90
-    espObj.HealthBarGradient.Color = createGradientSequence(
+                espObj.HealthBarGradient.Color = createGradientSequence(
         Color3.fromRGB(200, 0, 0),
         Color3.fromRGB(60, 60, 125),
         Color3.fromRGB(119, 120, 255)
     )
+                -- Preview: set gradient orientation based on health bar position
+                if ESPSettings.HealthBarPosition == "Bottom" then
+                    espObj.HealthBarGradient.Rotation = 0
+                else
+                    espObj.HealthBarGradient.Rotation = -90
+                end
     espObj.HealthBarGradient.Parent = espObj.HealthBar
     
     -- Health text
@@ -474,7 +545,7 @@ local function createESPObject()
     espObj.HealthText.BackgroundTransparency = 1
     espObj.HealthText.Size = UDim2.new(0, 50, 0, 20)
     espObj.HealthText.AnchorPoint = Vector2.new(0.5, 0.5)
-    espObj.HealthText.Font = Enum.Font.Code
+    espObj.HealthText.Font = initFont
     espObj.HealthText.TextSize = 13
     espObj.HealthText.TextColor3 = Color3.fromRGB(119, 120, 255)
     espObj.HealthText.TextStrokeTransparency = 0
@@ -482,6 +553,21 @@ local function createESPObject()
     espObj.HealthText.Visible = false
     espObj.HealthText.ZIndex = 10
     espObj.HealthText.Parent = container
+    
+    -- HP numeric text (top-left of health bar)
+    espObj.HPText = Instance.new("TextLabel")
+    espObj.HPText.Name = "HPText"
+    espObj.HPText.BackgroundTransparency = 1
+    espObj.HPText.Size = UDim2.new(0, 40, 0, 18)
+    espObj.HPText.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.HPText.Font = initFont
+    espObj.HPText.TextSize = 13
+    espObj.HPText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.HPText.TextStrokeTransparency = 0
+    espObj.HPText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.HPText.Visible = false
+    espObj.HPText.ZIndex = 11
+    espObj.HPText.Parent = container
     
     -- Corner boxes (8 frames)
     espObj.Corners = {}
@@ -529,9 +615,11 @@ local function hideESP(espObj)
     if espObj.Box then espObj.Box.Visible = false end
     if espObj.BoxFill then espObj.BoxFill.Visible = false end
     if espObj.Tracer then espObj.Tracer.Visible = false end
+    if espObj.TracerOutline then pcall(function() espObj.TracerOutline.Transparency = 1 end) end
     if espObj.HealthBar then espObj.HealthBar.Visible = false end
     if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
     if espObj.HealthText then espObj.HealthText.Visible = false end
+    if espObj.HPText then espObj.HPText.Visible = false end
     if espObj.CustomTextLabels then
         for _, lbl in ipairs(espObj.CustomTextLabels) do
             lbl.Visible = false
@@ -638,7 +726,7 @@ local function updateESP(deltaTime)
                     local spBottom = camera:WorldToViewportPoint(bottomWorld)
                     if spTop.Z > 0 and spBottom.Z > 0 then
                         local h = math.abs(spBottom.Y - spTop.Y)
-                        local w = h * 0.55
+                        local w = h * (ESPSettings.StaticBoxWidth or 0.6)
                         local cx = (spTop.X + spBottom.X) / 2
                         local x = cx - w / 2
                         local y = spTop.Y
@@ -755,13 +843,23 @@ local function updateESP(deltaTime)
                 espObj.BoxOutline.Color = settings.BoxOutlineColor
                 espObj.BoxOutline.Thickness = 1
                 
-                local outlineSeq = createGradientSequence(
-                    settings.BoxCustomColor1,
-                    settings.BoxCustomColor2,
-                    settings.BoxCustomColor3
-                )
+                local outlineSeq
+                if settings.BoxFill then
+                    outlineSeq = createGradientSequence(
+                        settings.BoxFillCustomColor1,
+                        settings.BoxFillCustomColor2,
+                        settings.BoxFillCustomColor3
+                    )
+                    espObj.OutlineGradient.Enabled = true
+                else
+                    outlineSeq = createGradientSequence(
+                        settings.BoxCustomColor1,
+                        settings.BoxCustomColor2,
+                        settings.BoxCustomColor3
+                    )
+                    espObj.OutlineGradient.Enabled = true
+                end
                 espObj.OutlineGradient.Color = outlineSeq
-                espObj.OutlineGradient.Enabled = true
                 espObj.OutlineGradient.Rotation = -90
                 
                 -- Hide corners for square mode
@@ -779,19 +877,32 @@ local function updateESP(deltaTime)
                 local barHeight = localH * healthRatio
 
                 local barX = localX
-                if settings.HealthBarPosition == "Right" then
-                    barX = localX + localW + 2
-                elseif settings.HealthBarPosition == "Left" then
-                    barX = localX - barThickness - 2
+                -- Support horizontal Bottom position in preview
+                if settings.HealthBarPosition == "Bottom" then
+                    local barY = localY + localH + 4
+                    local fullW = localW
+                    local filledW = math.floor(fullW * (humanoid.Health / (humanoid.MaxHealth > 0 and humanoid.MaxHealth or 1)))
+                    espObj.HealthBarBG.Visible = true
+                    espObj.HealthBarBG.Position = UDim2.new(0, localX, 0, barY)
+                    espObj.HealthBarBG.Size = UDim2.new(0, fullW, 0, barThickness)
+                    espObj.HealthBar.Visible = true
+                    espObj.HealthBar.Position = UDim2.new(0, localX, 0, barY)
+                    espObj.HealthBar.Size = UDim2.new(0, filledW, 0, barThickness)
+                else
+                    if settings.HealthBarPosition == "Right" then
+                        barX = localX + localW + 2
+                    elseif settings.HealthBarPosition == "Left" then
+                        barX = localX - barThickness - 2
+                    end
+
+                    espObj.HealthBarBG.Visible = true
+                    espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, localY)
+                    espObj.HealthBarBG.Size = UDim2.new(0, barThickness, 0, localH)
+
+                    espObj.HealthBar.Visible = true
+                    espObj.HealthBar.Position = UDim2.new(0, barX, 0, localY + localH - barHeight)
+                    espObj.HealthBar.Size = UDim2.new(0, barThickness, 0, barHeight)
                 end
-
-                espObj.HealthBarBG.Visible = true
-                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, localY)
-                espObj.HealthBarBG.Size = UDim2.new(0, barThickness, 0, localH)
-
-                espObj.HealthBar.Visible = true
-                espObj.HealthBar.Position = UDim2.new(0, barX, 0, localY + localH - barHeight)
-                espObj.HealthBar.Size = UDim2.new(0, barThickness, 0, barHeight)
                 
                 -- Animate health gradient
                 if settings.HealthGradientEnabled then
@@ -820,7 +931,13 @@ local function updateESP(deltaTime)
                     end
                     table.insert(keypoints, ColorSequenceKeypoint.new(t, c))
                 end
-                espObj.HealthBarGradient.Color = ColorSequence.new(keypoints)
+                        espObj.HealthBarGradient.Color = ColorSequence.new(keypoints)
+                        -- orient health gradient horizontally for Bottom mode so phase moves left->right
+                        if settings.HealthBarPosition == "Bottom" then
+                            espObj.HealthBarGradient.Rotation = 0
+                        else
+                            espObj.HealthBarGradient.Rotation = -90
+                        end
                 
                 if settings.ShowHealthText then
                     espObj.HealthText.Visible = true
@@ -907,6 +1024,7 @@ local function updateESP(deltaTime)
             local Dist = distance / 3.5714285714
             
             if getSetting("Enabled", ESPSettings.Enabled) then
+                local fontEnum = getEnumFont(getSetting("TextFont", ESPSettings.TextFont))
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
                     local nameText = ""
@@ -918,6 +1036,7 @@ local function updateESP(deltaTime)
                         nameText = (player.Name or player.DisplayName or "")
                     end
                     espObj.Name.Text = nameText
+                    espObj.Name.Font = fontEnum
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - 15)
                     espObj.Name.Visible = true
                 else
@@ -926,9 +1045,17 @@ local function updateESP(deltaTime)
                 
                 -- Distance
                 if getSetting("ShowDistance", ESPSettings.ShowDistance) and espObj.Distance then
-                    espObj.Distance.Text = string.format("[%d st]", math.floor(Dist))
-                    espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 7)
-                    espObj.Distance.Visible = true
+                    local dtext = string.format("[%d st]", math.floor(Dist))
+                    if getSetting("HealthBarPosition", ESPSettings.HealthBarPosition) == "Bottom" then
+                        -- Bottom mode: distance is included in the combined HP+distance label, hide separate distance
+                        espObj.Distance.Visible = false
+                    else
+                        -- Default: place distance below the box centered (AnchorPoint 0.5,0 = top-center)
+                        espObj.Distance.Text = dtext
+                        espObj.Distance.Font = fontEnum
+                        espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + 2)
+                        espObj.Distance.Visible = true
+                    end
                 else
                     if espObj.Distance then espObj.Distance.Visible = false end
                 end
@@ -936,6 +1063,7 @@ local function updateESP(deltaTime)
                 -- Weapon (placeholder)
                 if espObj.Weapon then
                     espObj.Weapon.Text = "none"
+                    espObj.Weapon.Font = fontEnum
                     espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 20)
                     espObj.Weapon.Visible = false
                 end
@@ -946,17 +1074,26 @@ local function updateESP(deltaTime)
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
-                        -- Outline color always respects configured outline color
+                        -- Outline color fallback (used when gradient disabled)
                         espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
                         -- Force outline thickness to 1px per user request
                         espObj.BoxOutline.Thickness = 1
-                        -- Outline gradient left disabled by default
-                        espObj.OutlineGradient.Color = createGradientSequence(
-                            ESPSettings.BoxCustomColor1 or ESPSettings.BoxColor,
-                            ESPSettings.BoxCustomColor2 or ESPSettings.BoxColor,
-                            ESPSettings.BoxCustomColor3 or ESPSettings.BoxColor
-                        )
-                        espObj.OutlineGradient.Enabled = false
+                        -- Gradient always enabled on the box outline (parented to UIStroke)
+                        local useFill = getSetting("BoxFill", ESPSettings.BoxFill)
+                        if useFill then
+                            local c1 = getSetting("BoxFillCustomColor1", ESPSettings.BoxFillCustomColor1)
+                            local c2 = getSetting("BoxFillCustomColor2", ESPSettings.BoxFillCustomColor2)
+                            local c3 = getSetting("BoxFillCustomColor3", ESPSettings.BoxFillCustomColor3)
+                            espObj.OutlineGradient.Color = createGradientSequence(c1, c2, c3)
+                        else
+                            espObj.OutlineGradient.Color = createGradientSequence(
+                                getSetting("BoxCustomColor1", ESPSettings.BoxCustomColor1) or getSetting("BoxColor", ESPSettings.BoxColor),
+                                getSetting("BoxCustomColor2", ESPSettings.BoxCustomColor2) or getSetting("BoxColor", ESPSettings.BoxColor),
+                                getSetting("BoxCustomColor3", ESPSettings.BoxCustomColor3) or getSetting("BoxColor", ESPSettings.BoxColor)
+                            )
+                        end
+                        espObj.OutlineGradient.Enabled = true
+                        espObj.OutlineGradient.Rotation = -90
                         -- Hide corner frames when square outline in use
                         for _, corner in ipairs(espObj.Corners) do
                             corner.Visible = false
@@ -1050,11 +1187,12 @@ local function updateESP(deltaTime)
                         local startX = x + w + 6 -- place to the right of the box
                         local lineHeight = 16
                         for i, txt in ipairs(espObj.CustomTexts) do
+                            local textStr = tostring(txt or "")
                             local lbl = espObj.CustomTextLabels[i]
                             if not lbl then
                                 lbl = Instance.new("TextLabel")
                                 lbl.BackgroundTransparency = 1
-                                lbl.Font = Enum.Font.Code
+                                lbl.Font = fontEnum
                                 lbl.TextSize = 13
                                 lbl.TextColor3 = Color3.fromRGB(255,255,255)
                                 lbl.TextStrokeTransparency = 0
@@ -1063,11 +1201,12 @@ local function updateESP(deltaTime)
                                 lbl.Parent = espObj.Container
                                 espObj.CustomTextLabels[i] = lbl
                             end
-                            lbl.Text = tostring(txt or "")
+                            lbl.Font = fontEnum
+                            lbl.Text = textStr
                             lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
                             lbl.Visible = true
                         end
-                        -- hide any surplus labels
+                        -- hide any surplus GUI labels
                         for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
                             if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
                         end
@@ -1105,30 +1244,17 @@ local function updateESP(deltaTime)
                         local hc2 = getSetting("HealthBarColor2", ESPSettings.HealthBarColor2) or Color3.fromRGB(255, 170, 0)
                         local hc3 = getSetting("HealthBarColor3", ESPSettings.HealthBarColor3) or Color3.fromRGB(0, 255, 0)
 
-                        -- Setup blending/sampling helper (used by static and animated modes)
-                        local blendMode = getSetting("HealthGradientBlend", ESPSettings.HealthGradientBlend) or "linear"
-                        local function applyBlend(t)
-                            t = math.clamp(t, 0, 1)
-                            if blendMode == "smooth" then
-                                return t * t * (3 - 2 * t)
-                            elseif blendMode == "ease" then
-                                return 0.5 * (1 - math.cos(math.pi * t))
-                            else
-                                return t
-                            end
-                        end
-
                         local function sampleBase(u)
                             u = (u % 1 + 1) % 1
                             if u < (1/3) then
                                 local t2 = u / (1/3)
-                                return lerpColor(hc1, hc2, applyBlend(t2))
+                                return lerpColor(hc1, hc2, t2)
                             elseif u < (2/3) then
                                 local t2 = (u - (1/3)) / (1/3)
-                                return lerpColor(hc2, hc3, applyBlend(t2))
+                                return lerpColor(hc2, hc3, t2)
                             else
                                 local t2 = (u - (2/3)) / (1/3)
-                                return lerpColor(hc3, hc1, applyBlend(t2))
+                                return lerpColor(hc3, hc1, t2)
                             end
                         end
 
@@ -1157,36 +1283,84 @@ local function updateESP(deltaTime)
                         local thickness = ESPSettings.HealthBarThickness or 2
                         local padding = 4
 
-                        -- Position background/fill based on configured side
-                        local bgX
-                        if ESPSettings.HealthBarPosition == "Right" then
-                            bgX = x + w + padding
-                        else
-                            -- Default to Left
-                            bgX = x - (thickness + padding)
-                        end
+                        local posMode = getSetting("HealthBarPosition", ESPSettings.HealthBarPosition) or "Left"
 
-                        -- Outline resizing: optionally make the BG match the filled height
-                        if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
-                            -- Position BG to align with filled portion
-                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                            espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, barHeight)
-                        else
-                            -- Full-height background
-                            espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
-                            espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
-                        end
+                        if posMode == "Bottom" then
+                            -- Horizontal bar below the box
+                            local barX = x
+                            local barY = y + h + padding
+                            local fullWidth = w
+                            local filledWidth = math.floor(fullWidth * (healthRatio or 0))
 
-                        espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
-                        espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
-                        espObj.HealthBarBG.Visible = true
-                        espObj.HealthBar.Visible = true
+                            -- Background: full or follow filled width
+                            if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
+                                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, barY)
+                                espObj.HealthBarBG.Size = UDim2.new(0, filledWidth, 0, thickness)
+                            else
+                                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, barY)
+                                espObj.HealthBarBG.Size = UDim2.new(0, fullWidth, 0, thickness)
+                            end
+
+                            espObj.HealthBar.Position = UDim2.new(0, barX, 0, barY)
+                            espObj.HealthBar.Size = UDim2.new(0, filledWidth, 0, thickness)
+                            espObj.HealthBarBG.Visible = true
+                            espObj.HealthBar.Visible = true
+
+                            -- HP and distance combined centered under the bar
+                            local textY = barY + thickness + 6
+                            local hpVal = 0
+                            if hum and hum.Health then hpVal = math.max(0, math.floor(hum.Health)) end
+                            local hpStr = tostring(hpVal)
+                            local dtext = string.format("[%d st]", math.floor(Dist))
+                            local combined = hpStr .. "  " .. dtext
+                            local centerX = barX + (fullWidth / 2)
+
+                            if espObj.HPText then
+                                espObj.HPText.Text = combined
+                                espObj.HPText.Font = fontEnum
+                                espObj.HPText.Position = UDim2.new(0, centerX, 0, textY)
+                                espObj.HPText.Visible = true
+                            end
+                            if espObj.Distance then espObj.Distance.Visible = false end
+
+                        else
+                            -- Vertical bar on left/right (default behavior preserved)
+                            local bgX
+                            if posMode == "Right" then
+                                bgX = x + w + padding
+                            else
+                                -- Left
+                                bgX = x - (thickness + padding)
+                            end
+
+                            -- Outline resizing: optionally make the BG match the filled height
+                            if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
+                                -- Position BG to align with filled portion
+                                espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                                espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, barHeight)
+                            else
+                                -- Full-height background
+                                espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                                espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
+                            end
+
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                            espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
+                            espObj.HealthBarBG.Visible = true
+                            espObj.HealthBar.Visible = true
+
+                            -- Hide HP text when not using Bottom mode
+                            if espObj.HPText then espObj.HPText.Visible = false end
+                        end
 
                         -- Health text: place near the top of the filled portion and match gradient
                         if getSetting("ShowHealthText", ESPSettings.ShowHealthText) and espObj.HealthText then
                             local healthPercent = math.floor((healthRatio or 0) * 100)
-                            espObj.HealthText.Text = string.format("%d%%", healthPercent)
-                            if ESPSettings.HealthBarPosition == "Right" then
+                            local textStr = string.format("%d%%", healthPercent)
+                            espObj.HealthText.Text = textStr
+                            espObj.HealthText.Font = fontEnum
+                            local hpPosMode = getSetting("HealthBarPosition", ESPSettings.HealthBarPosition)
+                            if hpPosMode == "Right" then
                                 espObj.HealthText.Position = UDim2.new(0, x + w + padding, 0, y + h - barHeight + 3)
                             else
                                 espObj.HealthText.Position = UDim2.new(0, x - (thickness + padding), 0, y + h - barHeight + 3)
@@ -1213,9 +1387,18 @@ local function updateESP(deltaTime)
                     end
                     
                     local tracerTo = Vector2.new(x + w/2, y + h/2)
-                    positionTracer(espObj.Tracer, tracerFrom.X, tracerFrom.Y, tracerTo.X, tracerTo.Y, ESPSettings.TracerThickness)
+                    local thickness = ESPSettings.TracerThickness or 2
+                    positionTracer(espObj.Tracer, tracerFrom.X, tracerFrom.Y, tracerTo.X, tracerTo.Y, thickness)
                     espObj.Tracer.BackgroundColor3 = ESPSettings.TracerColor
                     espObj.Tracer.Visible = true
+                    -- Configure tracer outline if present
+                    if espObj.TracerOutline then
+                        pcall(function()
+                            espObj.TracerOutline.Color = Color3.fromRGB(0,0,0)
+                            espObj.TracerOutline.Transparency = 0
+                            espObj.TracerOutline.Thickness = math.max(0.5, thickness * 0.6)
+                        end)
+                    end
                 end
                 
                 -- Chams
