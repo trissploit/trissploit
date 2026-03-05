@@ -1792,3 +1792,7 @@ getgenv().TrisESP = {
         return true
     end,
 }
+
+-- allow module-style loading
+return getgenv().TrisESP
+
