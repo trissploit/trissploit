@@ -300,6 +300,26 @@ local function sampleStopsAtPosition(stops, pos)
     return sorted[#sorted].color
 end
 
+-- Build a RichText string that colors each character by its position along gradient stops.
+-- `phase` offsets the sampling so animated gradients stay in sync with the bar.
+local function makeGradientText(text, stops, phase)
+    local len = #text
+    if len == 0 then return "" end
+    local parts = {}
+    for i = 1, len do
+        local t = (len == 1) and 0 or ((i - 1) / (len - 1))
+        local samplePos = ((t - (phase or 0)) % 1 + 1) % 1
+        local color = sampleStopsAtPosition(stops, samplePos)
+        local r = math.floor(color.R * 255 + 0.5)
+        local g = math.floor(color.G * 255 + 0.5)
+        local b = math.floor(color.B * 255 + 0.5)
+        local char = text:sub(i, i)
+        char = char:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+        parts[i] = string.format('<font color="rgb(%d,%d,%d)">%s</font>', r, g, b, char)
+    end
+    return table.concat(parts)
+end
+
 local function getEnumFont(fontName)
     if fontName == "Tahoma" then
         return Enum.Font.SourceSans
@@ -604,30 +624,33 @@ local function createESPObject()
                 end
     espObj.HealthBarGradient.Parent = espObj.HealthBar
     
-    -- Health text
+    -- Health text (RichText enabled for per-character gradient coloring)
     espObj.HealthText = Instance.new("TextLabel")
     espObj.HealthText.Name = "HealthText"
     espObj.HealthText.BackgroundTransparency = 1
-    espObj.HealthText.Size = UDim2.new(0, 50, 0, 20)
+    espObj.HealthText.Size = UDim2.new(0, 60, 0, 20)
     espObj.HealthText.AnchorPoint = Vector2.new(0.5, 0.5)
     espObj.HealthText.Font = initFont
     espObj.HealthText.TextSize = 13
-    espObj.HealthText.TextColor3 = Color3.fromRGB(119, 120, 255)
+    espObj.HealthText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.HealthText.RichText = true
     espObj.HealthText.TextStrokeTransparency = 0
     espObj.HealthText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.HealthText.Visible = false
     espObj.HealthText.ZIndex = 10
     espObj.HealthText.Parent = container
     
-    -- HP numeric text (top-left of health bar)
+    -- HP numeric text (combined HP+distance label below the bottom health bar)
     espObj.HPText = Instance.new("TextLabel")
     espObj.HPText.Name = "HPText"
     espObj.HPText.BackgroundTransparency = 1
-    espObj.HPText.Size = UDim2.new(0, 40, 0, 18)
-    espObj.HPText.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.HPText.Size = UDim2.new(0, 120, 0, 18)
+    -- AnchorPoint (0.5, 0) means Position Y sets the TOP edge of the label, preventing overlap with the bar
+    espObj.HPText.AnchorPoint = Vector2.new(0.5, 0)
     espObj.HPText.Font = initFont
     espObj.HPText.TextSize = 13
     espObj.HPText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.HPText.RichText = true
     espObj.HPText.TextStrokeTransparency = 0
     espObj.HPText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.HPText.Visible = false
@@ -1350,8 +1373,8 @@ local function updateESP(deltaTime)
                                             or getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if espObj.HPText then
                                 if showLabel then
-                                    local textGap = math.max(2, math.floor(h * 0.03))
-                                    local textY = barY + thickness + textGap
+                                    -- textY is the TOP of the label (AnchorPoint.Y = 0) so it cannot overlap the bar
+                                    local textY = barY + thickness + 3
                                     local hpVal = 0
                                     if hum and hum.Health then hpVal = math.max(0, math.floor(hum.Health)) end
                                     local hpStr = tostring(hpVal)
@@ -1359,7 +1382,8 @@ local function updateESP(deltaTime)
                                     local combined = hpStr .. "  " .. dtext
                                     local centerX = barX + (fullWidth / 2)
 
-                                    espObj.HPText.Text = combined
+                                    local healthStops = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
+                                    espObj.HPText.Text = makeGradientText(combined, healthStops, espObj.HealthGradientPhase or 0)
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     espObj.HPText.Position = UDim2.new(0, centerX, 0, textY)
@@ -1407,15 +1431,16 @@ local function updateESP(deltaTime)
                         if posMode ~= "Bottom" and getSetting("ShowHealthText", ESPSettings.ShowHealthText) and espObj.HealthText then
                             local healthPercent = math.floor((healthRatio or 0) * 100)
                             local textStr = string.format("%d%%", healthPercent)
-                            espObj.HealthText.Text = textStr
+                            local healthStops = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
+                            -- Per-character gradient coloring via RichText; position aligns with the filled bar top
+                            espObj.HealthText.Text = makeGradientText(textStr, healthStops, espObj.HealthGradientPhase or 0)
                             espObj.HealthText.Font = fontEnum
                             espObj.HealthText.TextSize = scaledTextSize
                             if posMode == "Right" then
-                                espObj.HealthText.Position = UDim2.new(0, x + w + padding + thickness + 3, 0, y + h - barHeight + 3)
+                                espObj.HealthText.Position = UDim2.new(0, x + w + padding + thickness + 3, 0, y + h - barHeight)
                             else
-                                espObj.HealthText.Position = UDim2.new(0, x - (thickness + padding) - 5, 0, y + h - barHeight + 3)
+                                espObj.HealthText.Position = UDim2.new(0, x - (thickness + padding) - 3, 0, y + h - barHeight)
                             end
-                            espObj.HealthText.TextColor3 = healthTextColor or espObj.HealthText.TextColor3
                             espObj.HealthText.Visible = true
                         else
                             if espObj.HealthText then espObj.HealthText.Visible = false end
