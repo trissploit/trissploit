@@ -76,6 +76,14 @@ local ESPSettings = {
     ShowDistance = false,
     -- Font selection: "ProggyClean" | "Tahoma"
     TextFont = "ProggyClean",
+    -- Text gradient: applies to name, distance and health text labels
+    TextGradientEnabled = false,
+    TextGradientSpeed = 0.3,
+    TextGradientStops = {
+        {pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0},
+        {pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0},
+    },
     
     -- Gradient settings (autorotate enabled internally)
     -- NOTE: UI gradient autorotation is handled internally; GUI animation controls removed
@@ -472,6 +480,7 @@ local function createESPObject()
     }
     espObj.GradientAngle = nil
     espObj.HealthGradientPhase = nil
+    espObj.TextGradientPhase = nil
     
     -- Name label
     local initFont = getEnumFont(ESPSettings.TextFont)
@@ -499,6 +508,7 @@ local function createESPObject()
     espObj.Distance.Font = initFont
     espObj.Distance.TextSize = 13
     espObj.Distance.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Distance.RichText = true
     espObj.Distance.TextStrokeTransparency = 0
     espObj.Distance.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.Distance.Visible = false
@@ -1102,6 +1112,15 @@ local function updateESP(deltaTime)
                 -- Dynamic text scale factor based on box height (encodes distance)
                 local textScale = math.clamp(h / 80, 0.65, 1.0)
                 local scaledTextSize = math.max(9, math.floor(13 * textScale))
+                -- Consistent pixel gap used above AND below the box for all text labels
+                local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
+                -- Per-frame text gradient phase
+                local textGradEnabled = getSetting("TextGradientEnabled", ESPSettings.TextGradientEnabled)
+                local textStops = ESPSettings.TextGradientStops
+                if textGradEnabled then
+                    espObj.TextGradientPhase = ((espObj.TextGradientPhase or 0) + dt * (ESPSettings.TextGradientSpeed or 0.3)) % 1
+                end
+                local textPhase = espObj.TextGradientPhase or 0
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
                     local nameText = ""
@@ -1112,32 +1131,17 @@ local function updateESP(deltaTime)
                     else
                         nameText = (player.Name or player.DisplayName or "")
                     end
-                    espObj.Name.Text = nameText
+                    espObj.Name.Text = textGradEnabled and makeGradientText(nameText, textStops, textPhase) or nameText
                     espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
-                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - math.max(8, math.floor(scaledTextSize * 1.1)))
+                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
                     espObj.Name.Visible = true
                 else
                     if espObj.Name then espObj.Name.Visible = false end
                 end
                 
-                -- Distance
-                if getSetting("ShowDistance", ESPSettings.ShowDistance) and espObj.Distance then
-                    local dtext = string.format("[%d st]", math.floor(Dist))
-                    if getSetting("HealthBarPosition", ESPSettings.HealthBarPosition) == "Bottom" then
-                        -- Bottom mode: distance is included in the combined HP+distance label, hide separate distance
-                        espObj.Distance.Visible = false
-                    else
-                        -- Default: place distance below the box centered (AnchorPoint 0.5,0 = top-center)
-                        espObj.Distance.Text = dtext
-                        espObj.Distance.Font = fontEnum
-                        espObj.Distance.TextSize = scaledTextSize
-                        espObj.Distance.Position = UDim2.new(0, x + w/2, 0, y + h + math.max(1, math.floor(h * 0.03)))
-                        espObj.Distance.Visible = true
-                    end
-                else
-                    if espObj.Distance then espObj.Distance.Visible = false end
-                end
+                -- Distance label is always hidden here – it is combined into HPText below the box/bar
+                if espObj.Distance then espObj.Distance.Visible = false end
                 
                 -- Weapon (placeholder)
                 if espObj.Weapon then
@@ -1340,10 +1344,28 @@ local function updateESP(deltaTime)
                         -- Force health bar outline to 1px black (do not change)
                         espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
 
-                        local thickness = ESPSettings.HealthBarThickness or 2
+                        local thickness = getSetting("HealthBarThickness", ESPSettings.HealthBarThickness) or 2.5
                         local padding = 4
-
                         local posMode = getSetting("HealthBarPosition", ESPSettings.HealthBarPosition) or "Left"
+
+                        -- Gradient rotation every frame
+                        espObj.HealthBarGradient.Rotation = (posMode == "Bottom") and 0 or -90
+
+                        -- Build the shared below-box label text
+                        local showHPTxt  = getSetting("ShowHealthText", ESPSettings.ShowHealthText)
+                        local showDist   = getSetting("ShowDistance",   ESPSettings.ShowDistance)
+                        local hPercent   = math.floor((healthRatio or 0) * 100)
+                        local distStr    = string.format("[%d st]", math.floor(Dist))
+                        local hStops     = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
+                        local hPhase     = espObj.HealthGradientPhase or 0
+                        local belowText
+                        if showHPTxt and showDist then
+                            belowText = string.format("HP:%d%%  %s", hPercent, distStr)
+                        elseif showHPTxt then
+                            belowText = string.format("HP:%d%%", hPercent)
+                        elseif showDist then
+                            belowText = distStr
+                        end
 
                         if posMode == "Bottom" then
                             -- Horizontal bar below the box
@@ -1352,7 +1374,6 @@ local function updateESP(deltaTime)
                             local fullWidth = w
                             local filledWidth = math.floor(fullWidth * (healthRatio or 0))
 
-                            -- Background: full or follow filled width
                             if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
                                 espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, barY)
                                 espObj.HealthBarBG.Size = UDim2.new(0, filledWidth, 0, thickness)
@@ -1360,97 +1381,82 @@ local function updateESP(deltaTime)
                                 espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, barY)
                                 espObj.HealthBarBG.Size = UDim2.new(0, fullWidth, 0, thickness)
                             end
-
                             espObj.HealthBar.Position = UDim2.new(0, barX, 0, barY)
                             espObj.HealthBar.Size = UDim2.new(0, filledWidth, 0, thickness)
                             espObj.HealthBarBG.Visible = true
                             espObj.HealthBar.Visible = true
 
-                            -- HP and distance combined centered under the bar
-                            -- only show the combined label if either health text or distance
-                            -- is enabled by settings (otherwise hide it entirely)
-                            local showLabel = getSetting("ShowHealthText", ESPSettings.ShowHealthText) 
-                                            or getSetting("ShowDistance", ESPSettings.ShowDistance)
+                            -- HPText: same gap below bar as name text uses above box
                             if espObj.HPText then
-                                if showLabel then
-                                    -- textY is the TOP of the label (AnchorPoint.Y = 0) so it cannot overlap the bar
-                                    local textY = barY + thickness + 3
-                                    local hpVal = 0
-                                    if hum and hum.Health then hpVal = math.max(0, math.floor(hum.Health)) end
-                                    local hpStr = tostring(hpVal)
-                                    local dtext = string.format("[%d st]", math.floor(Dist))
-                                    local combined = hpStr .. "  " .. dtext
-                                    local centerX = barX + (fullWidth / 2)
-
-                                    local healthStops = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
-                                    espObj.HPText.Text = makeGradientText(combined, healthStops, espObj.HealthGradientPhase or 0)
+                                if belowText then
+                                    espObj.HPText.Text = makeGradientText(belowText, hStops, hPhase)
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
-                                    espObj.HPText.Position = UDim2.new(0, centerX, 0, textY)
+                                    -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
+                                    espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + nameGap)
                                     espObj.HPText.Visible = true
                                 else
                                     espObj.HPText.Visible = false
                                 end
                             end
-                            if espObj.Distance then espObj.Distance.Visible = false end
 
                         else
-                            -- Vertical bar on left/right (default behavior preserved)
+                            -- Vertical bar on left/right
                             local bgX
                             if posMode == "Right" then
                                 bgX = x + w + padding
                             else
-                                -- Left
                                 bgX = x - (thickness + padding)
                             end
 
-                            -- Outline resizing: optionally make the BG match the filled height
                             if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
-                                -- Position BG to align with filled portion
                                 espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
                                 espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, barHeight)
                             else
-                                -- Full-height background
                                 espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
                                 espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
                             end
-
                             espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
                             espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
                             espObj.HealthBarBG.Visible = true
                             espObj.HealthBar.Visible = true
 
-                            -- Hide HP text when not using Bottom mode
-                            if espObj.HPText then espObj.HPText.Visible = false end
-                        end
-
-                        -- Update gradient rotation every frame so it matches current position mode
-                        espObj.HealthBarGradient.Rotation = (posMode == "Bottom") and 0 or -90
-
-                        -- Health text: Left/Right modes only; Bottom uses HPText label instead
-                        if posMode ~= "Bottom" and getSetting("ShowHealthText", ESPSettings.ShowHealthText) and espObj.HealthText then
-                            local healthPercent = math.floor((healthRatio or 0) * 100)
-                            local textStr = string.format("%d%%", healthPercent)
-                            local healthStops = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
-                            -- Per-character gradient coloring via RichText; position aligns with the filled bar top
-                            espObj.HealthText.Text = makeGradientText(textStr, healthStops, espObj.HealthGradientPhase or 0)
-                            espObj.HealthText.Font = fontEnum
-                            espObj.HealthText.TextSize = scaledTextSize
-                            if posMode == "Right" then
-                                espObj.HealthText.Position = UDim2.new(0, x + w + padding + thickness + 3, 0, y + h - barHeight)
-                            else
-                                espObj.HealthText.Position = UDim2.new(0, x - (thickness + padding) - 3, 0, y + h - barHeight)
+                            -- HPText: same gap below box as name text uses above box, always centered
+                            if espObj.HPText then
+                                if belowText then
+                                    espObj.HPText.Text = makeGradientText(belowText, hStops, hPhase)
+                                    espObj.HPText.Font = fontEnum
+                                    espObj.HPText.TextSize = scaledTextSize
+                                    espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + nameGap)
+                                    espObj.HPText.Visible = true
+                                else
+                                    espObj.HPText.Visible = false
+                                end
                             end
-                            espObj.HealthText.Visible = true
-                        else
-                            if espObj.HealthText then espObj.HealthText.Visible = false end
                         end
+
+                        -- HealthText retired: always hidden (everything is in HPText now)
+                        if espObj.HealthText then espObj.HealthText.Visible = false end
                     else
-                        -- Ensure health visuals are hidden when disabled
+                        -- Health bar disabled
                         if espObj.HealthBar then espObj.HealthBar.Visible = false end
                         if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
                         if espObj.HealthText then espObj.HealthText.Visible = false end
-                        if espObj.HPText then espObj.HPText.Visible = false end
+                        -- HPText: show distance-only if ShowDistance enabled (no health bar available)
+                        if espObj.HPText then
+                            local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
+                            if showDist then
+                                local distOnly = string.format("[%d st]", math.floor(Dist))
+                                local distStops = ESPSettings.TextGradientStops
+                                espObj.HPText.Text = textGradEnabled and makeGradientText(distOnly, distStops, textPhase) or distOnly
+                                espObj.HPText.Font = fontEnum
+                                espObj.HPText.TextSize = scaledTextSize
+                                espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + nameGap)
+                                espObj.HPText.Visible = true
+                            else
+                                espObj.HPText.Visible = false
+                            end
+                        end
                     end
                 
                 -- Tracer
