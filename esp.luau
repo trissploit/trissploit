@@ -1344,21 +1344,29 @@ local function updateESP(deltaTime)
                             espObj.HealthBar.Visible = true
 
                             -- HP and distance combined centered under the bar
-                            local textGap = math.max(2, math.floor(h * 0.03))
-                            local textY = barY + thickness + textGap
-                            local hpVal = 0
-                            if hum and hum.Health then hpVal = math.max(0, math.floor(hum.Health)) end
-                            local hpStr = tostring(hpVal)
-                            local dtext = string.format("[%d st]", math.floor(Dist))
-                            local combined = hpStr .. "  " .. dtext
-                            local centerX = barX + (fullWidth / 2)
-
+                            -- only show the combined label if either health text or distance
+                            -- is enabled by settings (otherwise hide it entirely)
+                            local showLabel = getSetting("ShowHealthText", ESPSettings.ShowHealthText) 
+                                            or getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if espObj.HPText then
-                                espObj.HPText.Text = combined
-                                espObj.HPText.Font = fontEnum
-                                espObj.HPText.TextSize = scaledTextSize
-                                espObj.HPText.Position = UDim2.new(0, centerX, 0, textY)
-                                espObj.HPText.Visible = true
+                                if showLabel then
+                                    local textGap = math.max(2, math.floor(h * 0.03))
+                                    local textY = barY + thickness + textGap
+                                    local hpVal = 0
+                                    if hum and hum.Health then hpVal = math.max(0, math.floor(hum.Health)) end
+                                    local hpStr = tostring(hpVal)
+                                    local dtext = string.format("[%d st]", math.floor(Dist))
+                                    local combined = hpStr .. "  " .. dtext
+                                    local centerX = barX + (fullWidth / 2)
+
+                                    espObj.HPText.Text = combined
+                                    espObj.HPText.Font = fontEnum
+                                    espObj.HPText.TextSize = scaledTextSize
+                                    espObj.HPText.Position = UDim2.new(0, centerX, 0, textY)
+                                    espObj.HPText.Visible = true
+                                else
+                                    espObj.HPText.Visible = false
+                                end
                             end
                             if espObj.Distance then espObj.Distance.Visible = false end
 
@@ -1392,18 +1400,20 @@ local function updateESP(deltaTime)
                             if espObj.HPText then espObj.HPText.Visible = false end
                         end
 
-                        -- Health text: place near the top of the filled portion and match gradient
-                        if getSetting("ShowHealthText", ESPSettings.ShowHealthText) and espObj.HealthText then
+                        -- Update gradient rotation every frame so it matches current position mode
+                        espObj.HealthBarGradient.Rotation = (posMode == "Bottom") and 0 or -90
+
+                        -- Health text: Left/Right modes only; Bottom uses HPText label instead
+                        if posMode ~= "Bottom" and getSetting("ShowHealthText", ESPSettings.ShowHealthText) and espObj.HealthText then
                             local healthPercent = math.floor((healthRatio or 0) * 100)
                             local textStr = string.format("%d%%", healthPercent)
                             espObj.HealthText.Text = textStr
                             espObj.HealthText.Font = fontEnum
                             espObj.HealthText.TextSize = scaledTextSize
-                            local hpPosMode = getSetting("HealthBarPosition", ESPSettings.HealthBarPosition)
-                            if hpPosMode == "Right" then
-                                espObj.HealthText.Position = UDim2.new(0, x + w + padding, 0, y + h - barHeight + 3)
+                            if posMode == "Right" then
+                                espObj.HealthText.Position = UDim2.new(0, x + w + padding + thickness + 3, 0, y + h - barHeight + 3)
                             else
-                                espObj.HealthText.Position = UDim2.new(0, x - (thickness + padding), 0, y + h - barHeight + 3)
+                                espObj.HealthText.Position = UDim2.new(0, x - (thickness + padding) - 5, 0, y + h - barHeight + 3)
                             end
                             espObj.HealthText.TextColor3 = healthTextColor or espObj.HealthText.TextColor3
                             espObj.HealthText.Visible = true
@@ -1415,6 +1425,7 @@ local function updateESP(deltaTime)
                         if espObj.HealthBar then espObj.HealthBar.Visible = false end
                         if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
                         if espObj.HealthText then espObj.HealthText.Visible = false end
+                        if espObj.HPText then espObj.HPText.Visible = false end
                     end
                 
                 -- Tracer
