@@ -355,7 +355,7 @@ do
     end
 
     --// GUI \\--
-    function ThemeManager:CreateThemeBox(groupbox)
+    function ThemeManager:CreateThemeManager(groupbox)
         groupbox
             :AddLabel("Background color")
             :AddColorPicker("BackgroundColor", { Default = self.Library.Scheme.BackgroundColor })
@@ -370,24 +370,6 @@ do
             Default = "Code",
             Values = { "BuilderSans", "Code", "Fantasy", "Gotham", "Jura", "Roboto", "RobotoMono", "SourceSans" },
         })
-
-        -- theme-related controls
-        groupbox:AddDivider()
-        groupbox:AddDropdown("WatermarkFields", { Text = "Watermark Settings", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
-            local fields = { Name = false, FPS = false, Ping = false, Executor = false }
-            if typeof(v) == "table" then
-                for key, val in pairs(v) do
-                    if typeof(key) == "string" then
-                        fields[key] = true
-                    elseif typeof(val) == "string" then
-                        fields[val] = true
-                    end
-                end
-            end
-            if typeof(self.Library.SetWatermarkFields) == "function" then
-                self.Library:SetWatermarkFields(fields)
-            end
-        end })
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do
@@ -510,37 +492,56 @@ do
         assert(self.Library, "Must set ThemeManager.Library first!")
         return tab:AddLeftGroupbox("Themes", "paintbrush")
     end
+    ThemeManager.CreateThemeBox = ThemeManager.CreateGroupBox
 
-    -- optional misc box for UI toggles
-    function ThemeManager:CreateMenuBox(tab)
+    -- optional UI Options box for UI toggles (alias: CreateMenuBox)
+    function ThemeManager:CreateMiscBox(tab)
         assert(self.Library, "Must set ThemeManager.Library first!")
-        local box = tab:AddRightGroupbox("Misc", "settings")
-        box:AddDivider()
+        local box = tab:AddLeftGroupbox("UI Settings", "settings")
         box:AddToggle("Watermark", { Text = "Watermark", Default = self.Library.Watermark or false, Callback = function(v)
             self.Library:ToggleWatermark(v)
             self.Library.Watermark = v
             if getgenv then
                 getgenv().watermark = v
             end
+            -- Auto-set watermark icon to Library.Icon (the window icon)
+            if v and typeof(self.Library.SetWatermarkIcon) == "function" and self.Library.WindowIconId then
+                self.Library:SetWatermarkIcon(self.Library.WindowIconId)
+            end
         end })
         box:AddToggle("ShowKeybindList", { Text = "Keybind list", Default = (self.Library.KeybindFrame and self.Library.KeybindFrame.Visible) or false, Callback = function(v)
-            if self.Library.ToggleKeybindList then
-                self.Library:ToggleKeybindList()
-            else
+            if self.Library.KeybindFrame then
                 self.Library.KeybindFrame.Visible = v
             end
             if self.Library.UpdateKeybindFrame then
                 self.Library:UpdateKeybindFrame()
             end
         end })
+        box:AddDivider()
+        box:AddDropdown("WatermarkFields", { Text = "Watermark Settings", Values = { "Name", "FPS", "Ping", "Executor" }, Multi = true, Default = { "Name", "FPS", "Ping" }, Callback = function(v)
+            local fields = { Name = false, FPS = false, Ping = false, Executor = false }
+            if typeof(v) == "table" then
+                for key, val in pairs(v) do
+                    if typeof(key) == "string" then
+                        fields[key] = true
+                    elseif typeof(val) == "string" then
+                        fields[val] = true
+                    end
+                end
+            end
+            if typeof(self.Library.SetWatermarkFields) == "function" then
+                self.Library:SetWatermarkFields(fields)
+            end
+        end })
         return box
     end
+    ThemeManager.CreateMenuBox = ThemeManager.CreateMiscBox
 
-    -- Combined factory: create both theme groupbox and menu groupbox in one call
+    -- Combined factory: create both theme groupbox and misc groupbox in one call
     function ThemeManager:CreateThemePanels(tab)
         assert(self.Library, "Must set ThemeManager.Library first!")
-        local left = self:CreateGroupBox(tab)
-        self:CreateThemeBox(left)
+        local left = self:CreateThemeBox(tab)
+        self:CreateThemeManager(left)
         local right = self:CreateMenuBox(tab)
         return left, right
     end
@@ -552,7 +553,7 @@ do
 
     function ThemeManager:ApplyToGroupbox(groupbox)
         assert(self.Library, "Must set ThemeManager.Library first!")
-        self:CreateThemeBox(groupbox)
+        self:CreateThemeManager(groupbox)
     end
 
     ThemeManager:BuildFolderTree()
