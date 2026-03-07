@@ -613,23 +613,35 @@ function Library:UpdateKeybindFrame()
     end
 
     local XSize = 0
+    local YSize = 0
+    local visibleCount = 0
     for _, KeybindToggle in pairs(Library.KeybindToggles) do
         if not KeybindToggle.Holder.Visible then
             continue
         end
 
+        visibleCount += 1
         local FullSize = KeybindToggle.Label.Size.X.Offset + KeybindToggle.Label.Position.X.Offset
         if FullSize > XSize then
             XSize = FullSize
         end
+
+        local h = KeybindToggle.Holder.Size.Y.Offset
+        if h > YSize then YSize = h end
     end
 
     -- Only update width if it needs to grow (don't shrink past user resize)
     local desiredW = math.ceil((XSize + 18) * Library.DPIScale)
     local currentW = Library.KeybindFrame.Size.X.Offset
+    local currentH = Library.KeybindFrame.Size.Y.Offset
     if desiredW > currentW then
-        local currentH = Library.KeybindFrame.Size.Y.Offset
         Library.KeybindFrame.Size = UDim2.fromOffset(desiredW, currentH)
+        currentW = desiredW
+    end
+    -- ensure height large enough to fit all entries + padding
+    local desiredH = math.ceil((visibleCount * (YSize > 0 and YSize or 16) + 18) * Library.DPIScale)
+    if desiredH > currentH then
+        Library.KeybindFrame.Size = UDim2.fromOffset(currentW, desiredH)
     end
 end
 
@@ -1580,6 +1592,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
     local FramePos
     local Dragging = false
     local Changed
+
     DragFrame.InputBegan:Connect(function(Input: InputObject)
         if not IsClickInput(Input) or IsMainWindow and Library.CantDragForced then
             return
@@ -1601,6 +1614,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
             end
         end)
     end)
+
     Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
         if
             (not IgnoreToggled and not Library.Toggled)
@@ -1618,6 +1632,16 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
 
         if Dragging and IsHoverInput(Input) then
             local Delta = Input.Position - StartPos
+            UI.Position =
+                UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
+        end
+    end))
+
+    -- add render step updater to eliminate input lag when dragging via container
+    Library:GiveSignal(RunService.RenderStepped:Connect(function()
+        if Dragging and not ((not IgnoreToggled and not Library.Toggled) or (IsMainWindow and Library.CantDragForced) or not (ScreenGui and ScreenGui.Parent)) then
+            local MousePos = UserInputService:GetMouseLocation()
+            local Delta = MousePos - StartPos
             UI.Position =
                 UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
         end
@@ -2702,6 +2726,21 @@ do
         LW.Enabled = not LW.Enabled
         LW.Holder.Visible = LW.Enabled
     end
+
+    -- monitor global setting and hide/show button accordingly
+    spawn(function()
+        while true do
+            local enabled = (_G.library and _G.library.luaenabled ~= false)
+            if Library._LuaToggleButton then
+                Library._LuaToggleButton.Visible = enabled
+            end
+            if not enabled and LW.Enabled then
+                LW.Enabled = false
+                if LW.Holder then LW.Holder.Visible = false end
+            end
+            task.wait(0.5)
+        end
+    end)
 end
 
 --// Download Assets System \\--
@@ -3502,35 +3541,9 @@ do
                 },
             })
 
-            local Checkbox = New("Frame", {
-                BackgroundColor3 = "MainColor",
-                Size = UDim2.fromOffset(14, 14),
-                SizeConstraint = Enum.SizeConstraint.RelativeYY,
-                Parent = Holder,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, Library.CornerRadius / 2),
-                Parent = Checkbox,
-            })
-            New("UIStroke", {
-                Color = "OutlineColor",
-                Parent = Checkbox,
-            })
-
-            local CheckImage = New("ImageLabel", {
-                Image = CheckIcon and CheckIcon.Url or "",
-                ImageColor3 = "FontColor",
-                ImageRectOffset = CheckIcon and CheckIcon.ImageRectOffset or Vector2.zero,
-                ImageRectSize = CheckIcon and CheckIcon.ImageRectSize or Vector2.zero,
-                ImageTransparency = 1,
-                Position = UDim2.fromOffset(2, 2),
-                Size = UDim2.new(1, -4, 1, -4),
-                Parent = Checkbox,
-            })
-
+            -- omit checkbox; display simply uses label color
             function KeybindsToggle:Display(State)
                 Label.TextTransparency = State and 0 or 0.5
-                CheckImage.ImageTransparency = State and 0 or 1
             end
 
             function KeybindsToggle:SetText(Text)
@@ -3547,8 +3560,7 @@ do
                 KeybindsToggle.Normal = Normal
 
                 Holder.Active = not Normal
-                Label.Position = Normal and UDim2.fromOffset(0, 0) or UDim2.fromOffset(22 * Library.DPIScale, 0)
-                Checkbox.Visible = not Normal
+                Label.Position = UDim2.fromOffset(0, 0)
             end
 
             KeyPicker.DoClick = function(...) end --// make luau lsp shut up
@@ -4563,6 +4575,26 @@ do
             return data
         end
 
+        -- programmatically replace gradient stops and refresh UI
+        function ColorPicker:SetGradientStops(stops)
+            if not Info.Gradient or type(stops) ~= "table" then return end
+            -- rebuild internal stops table
+            GradientStops = {}
+            for _, s in ipairs(stops) do
+                if type(s) == "table" and s.Position and s.Color then
+                    table.insert(GradientStops, { pos = s.Position, color = s.Color, transparency = s.Transparency or 0 })
+                end
+            end
+            -- update gradient bar visuals
+            if UpdateGradientRender then
+                UpdateGradientRender()
+            end
+            if HolderGradient then
+                stopsToUIGradient(HolderGradient, GradientStops, 0)
+            end
+            Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
+        end
+
         function ColorPicker:SampleColorAt(t)
             local seq = self:GetColorSequence()
             if not seq then return ColorPicker.Value end
@@ -5346,6 +5378,7 @@ do
             SizeConstraint = Enum.SizeConstraint.RelativeYY,
             Parent = Button,
         })
+        -- follow library rounding, half of overall corner radius
         New("UICorner", {
             CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = Checkbox,
@@ -8184,6 +8217,8 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.AnchorPoint = Vector2.new(0, 0.5)
         Library.KeybindFrame.Position = UDim2.new(0, 6, 0.5, 0)
         Library.KeybindFrame.Visible = false
+        -- add explicit black outline to keybind frame
+        Library:AddOutline(Library.KeybindFrame)
 
         MainFrame = New("TextButton", {
             BackgroundColor3 = function()
@@ -8553,20 +8588,6 @@ function Library:CreateWindow(WindowInfo)
             -- keep reference for dynamic toggling
             Library._LuaToggleButton = LuaBtn
         end
-        -- monitor global setting and hide/show button accordingly
-        spawn(function()
-            while true do
-                local enabled = (_G.library and _G.library.luaenabled ~= false)
-                if Library._LuaToggleButton then
-                    Library._LuaToggleButton.Visible = enabled
-                end
-                if not enabled and LW.Enabled then
-                    LW.Enabled = false
-                    if LW.Holder then LW.Holder.Visible = false end
-                end
-                task.wait(0.5)
-            end
-        end)
 
         --// Resize Button
         if WindowInfo.Resizable then
