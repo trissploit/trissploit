@@ -1025,8 +1025,14 @@ local function updateESP(deltaTime)
                 
                 if settings.ShowHealthText then
                     espObj.HealthText.Visible = true
-                    espObj.HealthText.Text = string.format("%d%%", math.floor(healthRatio * 100))
-                    espObj.HealthText.Position = UDim2.new(0, barX + barThickness + 5, 0, boxY + boxH - barHeight)
+                    local hv = humanoid.Health and math.max(0, math.floor(humanoid.Health)) or 0
+                    local mv = humanoid.MaxHealth or 0
+                    if mv > 0 then
+                        espObj.HealthText.Text = string.format("%d/%d", hv, math.floor(mv))
+                    else
+                        espObj.HealthText.Text = string.format("%d", hv)
+                    end
+                    espObj.HealthText.Position = UDim2.new(0, barX + barThickness + 5, 0, localY + localH - barHeight)
                 else
                     espObj.HealthText.Visible = false
                 end
@@ -1158,7 +1164,6 @@ local function updateESP(deltaTime)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
                         -- Outline color fallback (used when gradient disabled)
-                        espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
                         -- Force outline thickness to 1px per user request
                         espObj.BoxOutline.Thickness = 1
                         -- Gradient always enabled on the box outline (parented to UIStroke)
@@ -1170,7 +1175,11 @@ local function updateESP(deltaTime)
                             outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
                         end
                         if outlineStops then
+                            -- Set UIStroke Color to white so the UIGradient child is not multiplied by a dark color
+                            espObj.BoxOutline.Color = Color3.new(1, 1, 1)
                             stopsToUIGradient(espObj.OutlineGradient, outlineStops)
+                        else
+                            espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
                         end
                         espObj.OutlineGradient.Enabled = true
                         espObj.OutlineGradient.Rotation = -90
@@ -1354,15 +1363,14 @@ local function updateESP(deltaTime)
                         -- Build the shared below-box label text
                         local showHPTxt  = getSetting("ShowHealthText", ESPSettings.ShowHealthText)
                         local showDist   = getSetting("ShowDistance",   ESPSettings.ShowDistance)
-                        local hPercent   = math.floor((healthRatio or 0) * 100)
                         local hpVal      = hum.Health and math.max(0, math.floor(hum.Health)) or 0
                         local maxVal     = hum.MaxHealth or 0
-                        -- if max health isn't exactly 100, include raw values
+                        -- Show only raw health values, no percentage
                         local hpStr
-                        if maxVal > 0 and maxVal ~= 100 then
-                            hpStr = string.format("%d/%d (%d%%)", hpVal, maxVal, hPercent)
+                        if maxVal > 0 then
+                            hpStr = string.format("%d/%d", hpVal, math.floor(maxVal))
                         else
-                            hpStr = string.format("%d%%", hPercent)
+                            hpStr = string.format("%d", hpVal)
                         end
                         local distStr    = string.format("[%d st]", math.floor(Dist))
                         local hStops     = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
@@ -1846,4 +1854,3 @@ getgenv().TrisESP = {
 
 -- allow module-style loading
 return getgenv().TrisESP
-
