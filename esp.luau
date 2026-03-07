@@ -1355,14 +1355,23 @@ local function updateESP(deltaTime)
                         local showHPTxt  = getSetting("ShowHealthText", ESPSettings.ShowHealthText)
                         local showDist   = getSetting("ShowDistance",   ESPSettings.ShowDistance)
                         local hPercent   = math.floor((healthRatio or 0) * 100)
+                        local hpVal      = hum.Health and math.max(0, math.floor(hum.Health)) or 0
+                        local maxVal     = hum.MaxHealth or 0
+                        -- if max health isn't exactly 100, include raw values
+                        local hpStr
+                        if maxVal > 0 and maxVal ~= 100 then
+                            hpStr = string.format("%d/%d (%d%%)", hpVal, maxVal, hPercent)
+                        else
+                            hpStr = string.format("%d%%", hPercent)
+                        end
                         local distStr    = string.format("[%d st]", math.floor(Dist))
                         local hStops     = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
                         local hPhase     = espObj.HealthGradientPhase or 0
                         local belowText
                         if showHPTxt and showDist then
-                            belowText = string.format("HP:%d%%  %s", hPercent, distStr)
+                            belowText = hpStr .. "  " .. distStr
                         elseif showHPTxt then
-                            belowText = string.format("HP:%d%%", hPercent)
+                            belowText = hpStr
                         elseif showDist then
                             belowText = distStr
                         end
@@ -1393,7 +1402,7 @@ local function updateESP(deltaTime)
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
-                                    espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + nameGap)
+                                    espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + 2)
                                     espObj.HPText.Visible = true
                                 else
                                     espObj.HPText.Visible = false
@@ -1427,7 +1436,7 @@ local function updateESP(deltaTime)
                                     espObj.HPText.Text = makeGradientText(belowText, hStops, hPhase)
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
-                                    espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + nameGap)
+                                    espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
                                     espObj.HPText.Visible = true
                                 else
                                     espObj.HPText.Visible = false
@@ -1451,7 +1460,7 @@ local function updateESP(deltaTime)
                                 espObj.HPText.Text = textGradEnabled and makeGradientText(distOnly, distStops, textPhase) or distOnly
                                 espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
-                                espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + nameGap)
+                                espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
                                 espObj.HPText.Visible = true
                             else
                                 espObj.HPText.Visible = false
