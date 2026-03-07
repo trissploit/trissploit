@@ -3,7 +3,7 @@
     
     ScreenGui-based FOV circle with:
       • Per-segment gradient coloring (wrapping rainbow or custom stops)
-      • Gradient spin animation (phase shifts around circle over time)
+    • Smooth appearance by default (high segment count + rounded caps)
       • Pulse effect (radius oscillates with a sine wave)
       • Optional semi-transparent fill circle
       • Outline (black shadow circle drawn behind the main circle)
@@ -42,7 +42,7 @@ local Settings = {
 
     -- Geometry
     Radius   = 150,    -- base radius in pixels
-    Segments = 64,     -- line segments that form the circle (3–256)
+    Segments = 128,     -- base segment count (3–256); higher = smoother circle
     Thickness = 1.5,   -- pixel width of each segment
 
     -- Gradient coloring
@@ -189,6 +189,10 @@ local function getOrCreateSeg(pool, idx, isOutline)
     f.BackgroundColor3  = Color3.new(1, 1, 1)
     f.ZIndex            = isOutline and 100 or 101
     f.Parent            = circleContainer
+    -- add rounded corners so adjacent segments blend smoothly
+    local uc = Instance.new("UICorner")
+    uc.CornerRadius = UDim.new(0.5, 0)
+    uc.Parent = f
     pool[idx]           = f
     return f
 end
@@ -275,7 +279,12 @@ local function startLoop()
             PERSIST.GradientPhase = gradientPhase
         end
 
+        -- number of segments: use user value but ensure at least one per pixel of radius
         local segs      = math.clamp(math.floor(Settings.Segments), 3, MAX_SEGS)
+        -- if radius is large, boost segment count for smoothness
+        if radius > segs then
+            segs = math.clamp(math.ceil(radius), segs, MAX_SEGS)
+        end
         local thickness = math.max(1, Settings.Thickness)
         local outThick  = thickness + math.max(0, Settings.OutlineThickness)
         local TAU       = 2 * math.pi
