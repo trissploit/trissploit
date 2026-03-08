@@ -1608,9 +1608,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
             return
         end
 
-        -- use mouse location instead of Input.Position to avoid occasional offset
-        local mouse = UserInputService:GetMouseLocation()
-        StartPos = Vector2.new(mouse.X, mouse.Y)
+        StartPos = UserInputService:GetMouseLocation()
         FramePos = UI.Position
         Dragging = true
 
@@ -1643,8 +1641,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
         end
 
         if Dragging and IsHoverInput(Input) then
-            local mouse = UserInputService:GetMouseLocation()
-            local Delta = mouse - StartPos
+            local Delta = UserInputService:GetMouseLocation() - StartPos
             UI.Position =
                 UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
         end
@@ -1672,7 +1669,7 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
             return
         end
 
-        StartPos = Vector2.new(Input.Position.X, Input.Position.Y)  -- store as Vector2
+        StartPos = UserInputService:GetMouseLocation()
         FrameSize = UI.Size
         Dragging = true
 
@@ -1701,7 +1698,7 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
         end
 
         if Dragging and IsHoverInput(Input) then
-            local Delta = Input.Position - StartPos
+            local Delta = UserInputService:GetMouseLocation() - StartPos
             UI.Size = UDim2.new(
                 FrameSize.X.Scale,
                 math.clamp(FrameSize.X.Offset + Delta.X, Library.MinSize.X, math.huge),
