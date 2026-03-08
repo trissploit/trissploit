@@ -1608,7 +1608,9 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
             return
         end
 
-        StartPos = Vector2.new(Input.Position.X, Input.Position.Y)  -- store as Vector2 for GetMouseLocation delta
+        -- use mouse location instead of Input.Position to avoid occasional offset
+        local mouse = UserInputService:GetMouseLocation()
+        StartPos = Vector2.new(mouse.X, mouse.Y)
         FramePos = UI.Position
         Dragging = true
 
@@ -1641,7 +1643,8 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
         end
 
         if Dragging and IsHoverInput(Input) then
-            local Delta = Input.Position - StartPos
+            local mouse = UserInputService:GetMouseLocation()
+            local Delta = mouse - StartPos
             UI.Position =
                 UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
         end
