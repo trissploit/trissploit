@@ -595,10 +595,13 @@ function Library:GetAccentGradientSequence()
     local dark = Color3.fromHSV(H, math.min(S * 1.2, 1), math.max(V * 0.55, 0.15))
     -- lite variant: slightly hue-shifted, softer, brighter
     local lite = Color3.fromHSV((H + 0.08) % 1, math.max(S - 0.3, 0.05), math.min(V + 0.2, 1))
+    -- note: we order "lite" first so that when rotated 90° (vertical fills)
+    -- the bottom of controls is the darker color.  UIGradient multiplies the
+    -- base color so white backgrounds still render correctly.
     return ColorSequence.new({
-        ColorSequenceKeypoint.new(0, dark),
+        ColorSequenceKeypoint.new(0, lite),
         ColorSequenceKeypoint.new(0.5, accent),
-        ColorSequenceKeypoint.new(1, lite),
+        ColorSequenceKeypoint.new(1, dark),
     })
 end
 
@@ -1763,41 +1766,64 @@ function Library:AddHoverEffect(button, stroke, element)
 end
 
 function Library:AddShadowFrame(Frame: GuiObject)
-    -- Skip if the frame has a UIListLayout (shadow would become a layout member)
+    -- wrapper-based approach borrowed from LinoriaLib
+    -- create an outer frame that acts as the black border, then reparent
+    -- the original frame inside it so the dark outline always sits **inside**
+    -- the parent bounds (avoids ClipsDescendants clipping) and makes it
+    -- trivial to control padding/size changes.
+
+    -- Skip if the frame has a UIListLayout (wrapper would break layout)
     if Frame:FindFirstChildOfClass("UIListLayout") then
         return nil
     end
 
-    -- Transparent child frame with a dark UIStroke. Gives a black outer border
-    -- visible around the colored outline without stacking UIStrokes on the same object.
     local corner = Frame:FindFirstChildOfClass("UICorner")
     local shadowCornerRadius = corner
         and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 1)
         or UDim.new(0, Library.CornerRadius + 1)
 
-    local Shadow = Instance.new("Frame")
-    Shadow.BackgroundTransparency = 1
-    Shadow.Size = UDim2.new(1, 2, 1, 2)
-    Shadow.Position = UDim2.fromOffset(-1, -1)
-    Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
-    Shadow.Name = "_OutlineShadow"
-    Shadow.Parent = Frame
+    local parent = Frame.Parent
+    if not parent then
+        return nil
+    end
 
-    local ShadowCorner = Instance.new("UICorner")
-    ShadowCorner.CornerRadius = shadowCornerRadius
-    ShadowCorner.Parent = Shadow
-    -- track shadow corners so they can follow library rounding (+1 offset)
+    -- create the wrapper
+    local Wrapper = Instance.new("Frame")
+    Wrapper.Name = "_OutlineWrapper"
+    Wrapper.BackgroundColor3 = Library.Scheme.Dark or Color3.new(0, 0, 0)
+    Wrapper.BorderSizePixel = 0
+    Wrapper.ZIndex = Frame.ZIndex
+    Wrapper.Position = Frame.Position - UDim2.fromOffset(1, 1)
+    Wrapper.Size = Frame.Size + UDim2.fromOffset(2, 2)
+    Wrapper.Parent = parent
+    -- allow theme updates to dark color
+    Library.Registry[Wrapper] = { BackgroundColor3 = "Dark" }
+
+    local WrapperCorner = Instance.new("UICorner")
+    WrapperCorner.CornerRadius = shadowCornerRadius
+    WrapperCorner.Parent = Wrapper
     Library._ShadowCorners = Library._ShadowCorners or {}
-    table.insert(Library._ShadowCorners, ShadowCorner)
+    table.insert(Library._ShadowCorners, WrapperCorner)
+
+    -- reparent the original frame into wrapper and reposition
+    Frame.Parent = Wrapper
+    Frame.Position = UDim2.fromOffset(1, 1)
+
+    -- keep wrapper in sync with frame size/position changes
+    Frame:GetPropertyChangedSignal("Size"):Connect(function()
+        Wrapper.Size = Frame.Size + UDim2.fromOffset(2, 2)
+    end)
+    Frame:GetPropertyChangedSignal("Position"):Connect(function()
+        Wrapper.Position = Frame.Position - UDim2.fromOffset(1, 1)
+    end)
 
     local DarkStroke = Instance.new("UIStroke")
     DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
     DarkStroke.Thickness = 1
     DarkStroke.LineJoinMode = Enum.LineJoinMode.Round
-    DarkStroke.Parent = Shadow
+    DarkStroke.Parent = Wrapper
     Library.Registry[DarkStroke] = { Color = "Dark" }
 
-    -- If UIPadding exists now, counteract it. Also listen for future UIPadding.
     local function AdjustForPadding()
         local pad = Frame:FindFirstChildOfClass("UIPadding")
         if pad then
@@ -1805,8 +1831,11 @@ function Library:AddShadowFrame(Frame: GuiObject)
             local pr = pad.PaddingRight.Offset
             local pt = pad.PaddingTop.Offset
             local pb = pad.PaddingBottom.Offset
-            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
-            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
+            Wrapper.Position = Frame.Position - UDim2.fromOffset(1 + pl, 1 + pt)
+            Wrapper.Size = Frame.Size + UDim2.fromOffset(2 + pl + pr, 2 + pt + pb)
+        else
+            Wrapper.Position = Frame.Position - UDim2.fromOffset(1, 1)
+            Wrapper.Size = Frame.Size + UDim2.fromOffset(2, 2)
         end
     end
     AdjustForPadding()
@@ -1814,8 +1843,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
         if child:IsA("UIPadding") then
             task.defer(AdjustForPadding)
         elseif child:IsA("UIListLayout") then
-            -- UIListLayout added after shadow — remove shadow to prevent layout issues
-            pcall(function() Shadow:Destroy() end)
+            pcall(function() Wrapper:Destroy() end)
         end
     end)
 
