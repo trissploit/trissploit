@@ -42,7 +42,7 @@ end
 
 local ESPSettings = {
     Enabled = true,
-    MaxDistance = 1500,
+    MaxDistance = 150000,
     
     PlayerOverrides = {},
     
@@ -69,24 +69,21 @@ local ESPSettings = {
     ShowDistance = false,
     -- Font selection: "ProggyClean" | "Tahoma"
     TextFont = "ProggyClean",
-    -- Name label gradient
-    NameGradientEnabled = false,
+    -- Name label gradient (always enabled)
     NameGradientSpeed = 0.3,
     NameGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0},
     },
-    -- Distance label gradient
-    DistanceGradientEnabled = false,
+    -- Distance label gradient (always enabled)
     DistanceGradientSpeed = 0.3,
     DistanceGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB(255, 100,  50), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
     },
-    -- Health text label gradient (the HP/distance text shown below the bar)
-    HealthTextGradientEnabled = false,
+    -- Health text label gradient (always enabled)
     HealthTextGradientSpeed = 0.3,
     HealthTextGradientStops = {
         {pos = 0,   color = Color3.fromRGB(  0, 255,  80), transparency = 0},
@@ -112,7 +109,6 @@ local ESPSettings = {
     
     -- Box settings
     Boxes = false,
-    BoxType = "Square",
     -- Box sizing mode: "Static" uses a fixed width ratio, "Bounding" uses dynamic part projection
     BoxSizingMode = "Static",
     -- Width multiplier for Static sizing mode (ratio of height)
@@ -120,6 +116,9 @@ local ESPSettings = {
     BoxColor = Color3.fromRGB(0, 170, 255),
     Thickness = 2,
     BoxOutlineColor = Color3.new(0, 0, 0),
+    -- Box outline gradient rotation animation
+    AnimateBoxOutlineRotation = false,
+    BoxOutlineRotationSpeed = 300,
     
     -- Box fill
     BoxFill = false,
@@ -168,7 +167,7 @@ Settings (table: `getgenv().TrisESP.Settings`)
 - AnimateBoxRotation (bool): Rotate box-fill gradients when true.
 - BoxRotationSpeed (number): Rotation speed used when AnimateBoxRotation is enabled.
 - Boxes (bool): Enable box outlines.
-- BoxType (string): "Square" or "Corner".
+
 - BoxSizingMode (string): "Static" uses a fixed width ratio, "Bounding" uses dynamic part projection.
 - StaticBoxWidth (number): Width multiplier for Static sizing mode (ratio of height, default 0.6).
 - BoxOutlineColor (Color3): Outline color for box frames (outline stroke forced to 1px).
@@ -487,11 +486,12 @@ local function createESPObject()
         Container = container,
         Player = nil,
     }
-    espObj.GradientAngle = nil
+    espObj.GradientAngle = 0
+    espObj.BoxOutlineGradientAngle = 0
     espObj.HealthGradientPhase = nil
-    espObj.NameGradientPhase = nil
-    espObj.DistanceGradientPhase = nil
-    espObj.HealthTextGradientPhase = nil
+    espObj.NameGradRotation = 0
+    espObj.DistGradRotation = 0
+    espObj.HTGradRotation = 0
     
     -- Name label
     local initFont = getEnumFont(ESPSettings.TextFont)
@@ -505,10 +505,16 @@ local function createESPObject()
     espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Name.TextStrokeTransparency = 0
     espObj.Name.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    espObj.Name.RichText = true
+    espObj.Name.RichText = false
+    espObj.Name.TextColor3 = Color3.new(1, 1, 1)
     espObj.Name.Visible = false
     espObj.Name.ZIndex = 10
     espObj.Name.Parent = container
+    espObj.NameGradientUI = Instance.new("UIGradient")
+    espObj.NameGradientUI.Name = "NameGradient"
+    espObj.NameGradientUI.Enabled = true
+    espObj.NameGradientUI.Rotation = 0
+    espObj.NameGradientUI.Parent = espObj.Name
     
     -- Distance label (AnchorPoint top-center so text stays right below the box)
     espObj.Distance = Instance.new("TextLabel")
@@ -519,12 +525,18 @@ local function createESPObject()
     espObj.Distance.Font = initFont
     espObj.Distance.TextSize = 13
     espObj.Distance.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espObj.Distance.RichText = true
+    espObj.Distance.RichText = false
+    espObj.Distance.TextColor3 = Color3.new(1, 1, 1)
     espObj.Distance.TextStrokeTransparency = 0
     espObj.Distance.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.Distance.Visible = false
     espObj.Distance.ZIndex = 10
     espObj.Distance.Parent = container
+    espObj.DistanceGradientUI = Instance.new("UIGradient")
+    espObj.DistanceGradientUI.Name = "DistanceGradient"
+    espObj.DistanceGradientUI.Enabled = true
+    espObj.DistanceGradientUI.Rotation = 0
+    espObj.DistanceGradientUI.Parent = espObj.Distance
 
     -- Custom text entries (external scripts may populate `espObj.CustomTexts`)
     espObj.CustomTexts = {} -- array of strings
@@ -670,25 +682,48 @@ local function createESPObject()
     espObj.HPText.Font = initFont
     espObj.HPText.TextSize = 13
     espObj.HPText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espObj.HPText.RichText = true
+    espObj.HPText.RichText = false
+    espObj.HPText.TextColor3 = Color3.new(1, 1, 1)
     espObj.HPText.TextStrokeTransparency = 0
     espObj.HPText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.HPText.Visible = false
     espObj.HPText.ZIndex = 11
     espObj.HPText.Parent = container
+    espObj.HPTextGradientUI = Instance.new("UIGradient")
+    espObj.HPTextGradientUI.Name = "HPTextGradient"
+    espObj.HPTextGradientUI.Enabled = true
+    espObj.HPTextGradientUI.Rotation = 0
+    espObj.HPTextGradientUI.Parent = espObj.HPText
     
-    -- Corner boxes (8 frames)
-    espObj.Corners = {}
-    for i = 1, 8 do
-        local corner = Instance.new("Frame")
-        corner.Name = "Corner" .. i
-        corner.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        corner.BorderSizePixel = 0
-        corner.Visible = false
-        corner.ZIndex = 5
-        corner.Parent = container
-        espObj.Corners[i] = corner
-    end
+    -- Black outline frames for box ESP (inside and outside the gradient border)
+    espObj.BoxOuter = Instance.new("Frame")
+    espObj.BoxOuter.Name = "BoxOuter"
+    espObj.BoxOuter.BackgroundTransparency = 1
+    espObj.BoxOuter.BorderSizePixel = 0
+    espObj.BoxOuter.Visible = false
+    espObj.BoxOuter.ZIndex = 0
+    espObj.BoxOuter.Parent = container
+    espObj.BoxOuterStroke = Instance.new("UIStroke")
+    espObj.BoxOuterStroke.Name = "BoxOuterStroke"
+    espObj.BoxOuterStroke.Color = Color3.new(0, 0, 0)
+    espObj.BoxOuterStroke.Thickness = 1
+    espObj.BoxOuterStroke.Transparency = 0
+    espObj.BoxOuterStroke.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxOuterStroke.Parent = espObj.BoxOuter
+    espObj.BoxInner = Instance.new("Frame")
+    espObj.BoxInner.Name = "BoxInner"
+    espObj.BoxInner.BackgroundTransparency = 1
+    espObj.BoxInner.BorderSizePixel = 0
+    espObj.BoxInner.Visible = false
+    espObj.BoxInner.ZIndex = 2
+    espObj.BoxInner.Parent = container
+    espObj.BoxInnerStroke = Instance.new("UIStroke")
+    espObj.BoxInnerStroke.Name = "BoxInnerStroke"
+    espObj.BoxInnerStroke.Color = Color3.new(0, 0, 0)
+    espObj.BoxInnerStroke.Thickness = 1
+    espObj.BoxInnerStroke.Transparency = 0
+    espObj.BoxInnerStroke.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxInnerStroke.Parent = espObj.BoxInner
     
     -- Highlight/Chams
     espObj.Highlight = Instance.new("Highlight")
@@ -721,6 +756,8 @@ local function hideESP(espObj)
     if espObj.Distance then espObj.Distance.Visible = false end
     if espObj.Weapon then espObj.Weapon.Visible = false end
     if espObj.Box then espObj.Box.Visible = false end
+    if espObj.BoxOuter then espObj.BoxOuter.Visible = false end
+    if espObj.BoxInner then espObj.BoxInner.Visible = false end
     if espObj.BoxFill then espObj.BoxFill.Visible = false end
     if espObj.Tracer then espObj.Tracer.Visible = false end
     if espObj.TracerOutline then pcall(function() espObj.TracerOutline.Transparency = 1 end) end
@@ -731,11 +768,6 @@ local function hideESP(espObj)
     if espObj.CustomTextLabels then
         for _, lbl in ipairs(espObj.CustomTextLabels) do
             lbl.Visible = false
-        end
-    end
-    if espObj.Corners then
-        for _, corner in ipairs(espObj.Corners) do
-            corner.Visible = false
         end
     end
     if espObj.Highlight then espObj.Highlight.Enabled = false end
@@ -856,27 +888,10 @@ local function updateESP(deltaTime)
                 local scaledTextSize = math.max(9, math.floor(13 * textScale))
                 -- Consistent pixel gap used above AND below the box for all text labels
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
-                -- Per-frame text gradient phases
-                local nameGradEnabled = getSetting("NameGradientEnabled", ESPSettings.NameGradientEnabled)
+                -- Gradient stops for text labels (rendered via UIGradient rotation each frame)
                 local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
-                if nameGradEnabled then
-                    espObj.NameGradientPhase = ((espObj.NameGradientPhase or 0) + dt * (ESPSettings.NameGradientSpeed or 0.3)) % 1
-                end
-                local namePhase = espObj.NameGradientPhase or 0
-
-                local distGradEnabled = getSetting("DistanceGradientEnabled", ESPSettings.DistanceGradientEnabled)
                 local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
-                if distGradEnabled then
-                    espObj.DistanceGradientPhase = ((espObj.DistanceGradientPhase or 0) + dt * (ESPSettings.DistanceGradientSpeed or 0.3)) % 1
-                end
-                local distPhase = espObj.DistanceGradientPhase or 0
-
-                local htGradEnabled = getSetting("HealthTextGradientEnabled", ESPSettings.HealthTextGradientEnabled)
                 local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
-                if htGradEnabled then
-                    espObj.HealthTextGradientPhase = ((espObj.HealthTextGradientPhase or 0) + dt * (ESPSettings.HealthTextGradientSpeed or 0.3)) % 1
-                end
-                local htPhase = espObj.HealthTextGradientPhase or 0
 
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
@@ -888,7 +903,12 @@ local function updateESP(deltaTime)
                     else
                         nameText = (player.Name or player.DisplayName or "")
                     end
-                    espObj.Name.Text = nameGradEnabled and makeGradientText(nameText, nameStops, namePhase) or nameText
+                    espObj.Name.Text = nameText
+                    if espObj.NameGradientUI then
+                        stopsToUIGradient(espObj.NameGradientUI, nameStops)
+                        espObj.NameGradRotation = ((espObj.NameGradRotation or 0) + (ESPSettings.NameGradientSpeed or 0.3) * 360 * dt) % 360
+                        espObj.NameGradientUI.Rotation = espObj.NameGradRotation
+                    end
                     espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
@@ -908,68 +928,50 @@ local function updateESP(deltaTime)
                     espObj.Weapon.Visible = false
                 end
                 
-                -- Box outline (completely separate from BoxFill)
+                -- Box outline (square only)
                 if getSetting("Boxes", ESPSettings.Boxes) and espObj.Box then
-                    if getSetting("BoxType", ESPSettings.BoxType) == "Square" then
-                        espObj.Box.Position = UDim2.new(0, x, 0, y)
-                        espObj.Box.Size = UDim2.new(0, w, 0, h)
-                        espObj.Box.Visible = true
-                        -- Outline color fallback (used when gradient disabled)
-                        -- Force outline thickness to 1px per user request
-                        espObj.BoxOutline.Thickness = 1
-                        -- Gradient always enabled on the box outline (parented to UIStroke)
-                        local useFill = getSetting("BoxFill", ESPSettings.BoxFill)
-                        local outlineStops
-                        if useFill then
-                            outlineStops = espObj.BoxFillStops or ESPSettings.BoxFillGradientStops
-                        else
-                            outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
-                        end
-                        if outlineStops then
-                            -- Set UIStroke Color to white so the UIGradient child is not multiplied by a dark color
-                            espObj.BoxOutline.Color = Color3.new(1, 1, 1)
-                            stopsToUIGradient(espObj.OutlineGradient, outlineStops)
-                        else
-                            espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
-                        end
-                        espObj.OutlineGradient.Enabled = true
+                    espObj.Box.Position = UDim2.new(0, x, 0, y)
+                    espObj.Box.Size = UDim2.new(0, w, 0, h)
+                    espObj.Box.Visible = true
+                    -- Inner and outer black border frames
+                    if espObj.BoxOuter then
+                        espObj.BoxOuter.Position = UDim2.new(0, x - 1, 0, y - 1)
+                        espObj.BoxOuter.Size = UDim2.new(0, w + 2, 0, h + 2)
+                        espObj.BoxOuter.Visible = true
+                    end
+                    if espObj.BoxInner then
+                        espObj.BoxInner.Position = UDim2.new(0, x + 1, 0, y + 1)
+                        espObj.BoxInner.Size = UDim2.new(0, math.max(1, w - 2), 0, math.max(1, h - 2))
+                        espObj.BoxInner.Visible = true
+                    end
+                    -- Outline gradient stops
+                    espObj.BoxOutline.Thickness = 1
+                    local useFill = getSetting("BoxFill", ESPSettings.BoxFill)
+                    local outlineStops
+                    if useFill then
+                        outlineStops = espObj.BoxFillStops or ESPSettings.BoxFillGradientStops
+                    else
+                        outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
+                    end
+                    if outlineStops then
+                        espObj.BoxOutline.Color = Color3.new(1, 1, 1)
+                        stopsToUIGradient(espObj.OutlineGradient, outlineStops)
+                    else
+                        espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
+                    end
+                    espObj.OutlineGradient.Enabled = true
+                    -- Outline gradient rotation animation
+                    if getSetting("AnimateBoxOutlineRotation", ESPSettings.AnimateBoxOutlineRotation) then
+                        local outlineSpeed = getSetting("BoxOutlineRotationSpeed", ESPSettings.BoxOutlineRotationSpeed) or 300
+                        espObj.BoxOutlineGradientAngle = ((espObj.BoxOutlineGradientAngle or 0) + outlineSpeed * dt) % 360
+                        espObj.OutlineGradient.Rotation = espObj.BoxOutlineGradientAngle
+                    else
                         espObj.OutlineGradient.Rotation = -90
-                        -- Hide corner frames when square outline in use
-                        for _, corner in ipairs(espObj.Corners) do
-                            corner.Visible = false
-                        end
-                    elseif getSetting("BoxType", ESPSettings.BoxType) == "Corner" then
-                        espObj.Box.Visible = true
-                        espObj.Box.BackgroundTransparency = 1
-                        local cornerLen = math.min(w, h) * 0.25
-                        espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
-                        espObj.Corners[1].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[1].Visible = true
-                        espObj.Corners[2].Position = UDim2.new(0, x, 0, y)
-                        espObj.Corners[2].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[2].Visible = true
-                        espObj.Corners[3].Position = UDim2.new(0, x + w - cornerLen, 0, y)
-                        espObj.Corners[3].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[3].Visible = true
-                        espObj.Corners[4].Position = UDim2.new(0, x + w - 1, 0, y)
-                        espObj.Corners[4].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[4].Visible = true
-                        espObj.Corners[5].Position = UDim2.new(0, x, 0, y + h - 1)
-                        espObj.Corners[5].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[5].Visible = true
-                        espObj.Corners[6].Position = UDim2.new(0, x, 0, y + h - cornerLen)
-                        espObj.Corners[6].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[6].Visible = true
-                        espObj.Corners[7].Position = UDim2.new(0, x + w - cornerLen, 0, y + h - 1)
-                        espObj.Corners[7].Size = UDim2.new(0, cornerLen, 0, 1)
-                        espObj.Corners[7].Visible = true
-                        espObj.Corners[8].Position = UDim2.new(0, x + w - 1, 0, y + h - cornerLen)
-                        espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
-                        espObj.Corners[8].Visible = true
                     end
                 else
                     if espObj.Box then espObj.Box.Visible = false end
-                    for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
+                    if espObj.BoxOuter then espObj.BoxOuter.Visible = false end
+                    if espObj.BoxInner then espObj.BoxInner.Visible = false end
                 end
 
                 -- Box Fill (fully independent of Box outline)
@@ -1126,18 +1128,12 @@ local function updateESP(deltaTime)
                         local distStr    = string.format("[%d st]", math.floor(Dist))
                         -- Build below-box text with per-label gradients
                         local belowText
-                        local belowRich -- RichText version (used when any gradient is enabled)
                         if showHPTxt and showDist then
-                            local hpPart   = htGradEnabled  and makeGradientText(hpStr,  htGradStops,   htPhase)   or hpStr
-                            local distPart = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
                             belowText = hpStr .. "  " .. distStr
-                            belowRich = hpPart .. "  " .. distPart
                         elseif showHPTxt then
                             belowText = hpStr
-                            belowRich = htGradEnabled and makeGradientText(hpStr, htGradStops, htPhase) or hpStr
                         elseif showDist then
                             belowText = distStr
-                            belowRich = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
                         end
 
                         if posMode == "Bottom" then
@@ -1162,12 +1158,18 @@ local function updateESP(deltaTime)
                             -- HPText: same gap below bar as name text uses above box
                             if espObj.HPText then
                                 if belowText then
-                                    espObj.HPText.Text = belowRich or belowText
+                                    espObj.HPText.Text = belowText
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
                                     espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + 2)
                                     espObj.HPText.Visible = true
+                                    if espObj.HPTextGradientUI then
+                                        local hpStops = showHPTxt and htGradStops or distGradStops
+                                        if hpStops then stopsToUIGradient(espObj.HPTextGradientUI, hpStops) end
+                                        espObj.HTGradRotation = ((espObj.HTGradRotation or 0) + (ESPSettings.HealthTextGradientSpeed or 0.3) * 360 * dt) % 360
+                                        espObj.HPTextGradientUI.Rotation = espObj.HTGradRotation
+                                    end
                                 else
                                     espObj.HPText.Visible = false
                                 end
@@ -1197,11 +1199,17 @@ local function updateESP(deltaTime)
                             -- HPText: same gap below box as name text uses above box, always centered
                             if espObj.HPText then
                                 if belowText then
-                                    espObj.HPText.Text = belowRich or belowText
+                                    espObj.HPText.Text = belowText
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
                                     espObj.HPText.Visible = true
+                                    if espObj.HPTextGradientUI then
+                                        local hpStops = showHPTxt and htGradStops or distGradStops
+                                        if hpStops then stopsToUIGradient(espObj.HPTextGradientUI, hpStops) end
+                                        espObj.HTGradRotation = ((espObj.HTGradRotation or 0) + (ESPSettings.HealthTextGradientSpeed or 0.3) * 360 * dt) % 360
+                                        espObj.HPTextGradientUI.Rotation = espObj.HTGradRotation
+                                    end
                                 else
                                     espObj.HPText.Visible = false
                                 end
@@ -1220,11 +1228,16 @@ local function updateESP(deltaTime)
                             local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if showDist then
                                 local distOnly = string.format("[%d st]", math.floor(Dist))
-                                espObj.HPText.Text = distGradEnabled and makeGradientText(distOnly, distGradStops, distPhase) or distOnly
+                                espObj.HPText.Text = distOnly
                                 espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
                                 espObj.HPText.Visible = true
+                                if espObj.HPTextGradientUI then
+                                    stopsToUIGradient(espObj.HPTextGradientUI, distGradStops)
+                                    espObj.HTGradRotation = ((espObj.HTGradRotation or 0) + (ESPSettings.DistanceGradientSpeed or 0.3) * 360 * dt) % 360
+                                    espObj.HPTextGradientUI.Rotation = espObj.HTGradRotation
+                                end
                             else
                                 espObj.HPText.Visible = false
                             end
