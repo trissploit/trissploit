@@ -1641,7 +1641,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
         end
 
         if Dragging and IsHoverInput(Input) then
-            local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - StartPos
+            local Delta = Input.Position - StartPos
             UI.Position =
                 UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
         end
@@ -1669,7 +1669,7 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
             return
         end
 
-        StartPos = Input.Position
+        StartPos = Vector2.new(Input.Position.X, Input.Position.Y)  -- store as Vector2
         FrameSize = UI.Size
         Dragging = true
 
@@ -4581,12 +4581,12 @@ do
             if not Info.Gradient then return nil end
             local data = {}
             for _, s in ipairs(GradientStops) do
-                -- Serialize color as hex string so JSON encode/decode round-trips correctly
-                local colorHex = "ffffff"
-                if s.color and typeof(s.color) == "Color3" then
-                    colorHex = s.color:ToHex()
-                end
-                table.insert(data, { Position = s.pos, Color = colorHex, Transparency = s.transparency or 0 })
+                local col = s.color or Color3.new(1,1,1)
+                table.insert(data, {
+                    Position = s.pos,
+                    Color = {math.floor(col.R * 255 + 0.5), math.floor(col.G * 255 + 0.5), math.floor(col.B * 255 + 0.5)},
+                    Transparency = s.transparency,
+                })
             end
             return data
         end
@@ -4594,34 +4594,38 @@ do
         -- programmatically replace gradient stops and refresh UI
         function ColorPicker:SetGradientStops(stops)
             if not Info.Gradient or type(stops) ~= "table" then return end
-            -- rebuild internal stops table
+            -- clear existing dots
+            if DotsContainer then
+                for _, child in ipairs(DotsContainer:GetChildren()) do
+                    if child:IsA("ImageButton") then child:Destroy() end
+                end
+            end
+            -- rebuild internal stops table, supporting Color3, RGB array, and hex string
             GradientStops = {}
             for _, s in ipairs(stops) do
-                if type(s) == "table" and s.Position ~= nil and s.Color ~= nil then
-                    -- Handle Color as hex string (from JSON), Color3 userdata, or {R,G,B} table
-                    local color
-                    if type(s.Color) == "string" then
-                        local ok, c = pcall(Color3.fromHex, s.Color)
-                        color = ok and c or Color3.new(1, 1, 1)
-                    elseif typeof and typeof(s.Color) == "Color3" then
-                        color = s.Color
+                if type(s) == "table" and s.Position then
+                    local col
+                    if typeof and typeof(s.Color) == "Color3" then
+                        col = s.Color
                     elseif type(s.Color) == "table" then
-                        color = Color3.new(
-                            math.clamp(tonumber(s.Color.R) or 0, 0, 1),
-                            math.clamp(tonumber(s.Color.G) or 0, 0, 1),
-                            math.clamp(tonumber(s.Color.B) or 0, 0, 1)
-                        )
+                        col = Color3.fromRGB(s.Color[1] or 255, s.Color[2] or 255, s.Color[3] or 255)
+                    elseif type(s.Color) == "string" then
+                        local ok, c = pcall(Color3.fromHex, s.Color)
+                        col = ok and c or Color3.new(1,1,1)
                     else
-                        color = Color3.new(1, 1, 1)
+                        col = Color3.new(1,1,1)
                     end
-                    table.insert(GradientStops, { pos = s.Position, color = color, transparency = s.Transparency or 0 })
+                    table.insert(GradientStops, { pos = s.Position, color = col, transparency = s.Transparency or 0 })
                 end
+            end
+            -- recreate dots in gradient bar
+            for _, stop in ipairs(GradientStops) do
+                if DotsContainer then pcall(function() CreateDot(stop) end) end
             end
             -- update gradient bar visuals
             if UpdateGradientRender then
                 UpdateGradientRender()
             end
-            -- HolderGradient is already updated by UpdateGradientRender() above
             Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
         end
 
@@ -5859,7 +5863,7 @@ do
             Parent = Bar,
         })
         local barMain, BarShadowStroke = Library:AddSmallOutline(Bar)
-        barMain.Transparency = 1  -- hide colored outline; dark shadow border is enough
+        barMain.Transparency = 0  -- colored outline visible on unfilled portion
 
         Library:AddHoverEffect(Bar, BarShadowStroke, Slider)
 
@@ -5913,8 +5917,8 @@ do
             DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or 0
 
             FillGradient.Enabled = not Slider.Disabled
-            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Library.Scheme.AccentColor
-            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or "AccentColor"
+            Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Color3.new(1, 1, 1)
+            Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or function() return Color3.new(1, 1, 1) end
         end
 
         function Slider:Display()
@@ -5949,7 +5953,7 @@ do
             end
 
             local X = (Slider.Value - Slider.Min) / (Slider.Max - Slider.Min)
-            Fill.Size = UDim2.fromScale(X, 1)
+            TweenService:Create(Fill, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromScale(X, 1) }):Play()
         end
 
         function Slider:OnChanged(Func)
@@ -6152,7 +6156,7 @@ do
             Parent = Display,
         })
         local displayMain, DisplayShadowStroke = Library:AddSmallOutline(Display)
-        displayMain.Transparency = 1  -- hide colored outline; dark shadow border is enough
+        -- main outline always visible on dropdowns
 
         Library:AddHoverEffect(Display, DisplayShadowStroke, Dropdown)
 
