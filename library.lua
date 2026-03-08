@@ -630,19 +630,24 @@ function Library:UpdateKeybindFrame()
         if h > YSize then YSize = h end
     end
 
-    -- Only update width if it needs to grow (don't shrink past user resize)
+    -- compute minimum dimensions needed to fit current entries
     local desiredW = math.ceil((XSize + 18) * Library.DPIScale)
+    local desiredH = math.ceil((visibleCount * (YSize > 0 and YSize or 16) + 18) * Library.DPIScale)
     local currentW = Library.KeybindFrame.Size.X.Offset
     local currentH = Library.KeybindFrame.Size.Y.Offset
-    if desiredW > currentW then
-        Library.KeybindFrame.Size = UDim2.fromOffset(desiredW, currentH)
-        currentW = desiredW
+
+    -- adjust width and height to at least the computed minimums
+    -- shrinking is allowed so that the min size changes when items are removed
+    local newW = currentW
+    if desiredW ~= currentW then
+        newW = desiredW
     end
-    -- ensure height large enough to fit all entries + padding
-    local desiredH = math.ceil((visibleCount * (YSize > 0 and YSize or 16) + 18) * Library.DPIScale)
-    if desiredH > currentH then
-        Library.KeybindFrame.Size = UDim2.fromOffset(currentW, desiredH)
+    local newH = currentH
+    if desiredH ~= currentH then
+        newH = desiredH
     end
+
+    Library.KeybindFrame.Size = UDim2.fromOffset(newW, newH)
 end
 
 function Library:CreateMobileButton(Toggle)
@@ -4589,9 +4594,7 @@ do
             if UpdateGradientRender then
                 UpdateGradientRender()
             end
-            if HolderGradient then
-                stopsToUIGradient(HolderGradient, GradientStops, 0)
-            end
+            -- HolderGradient is already updated by UpdateGradientRender() above
             Library:SafeCallback(ColorPicker.Callback, { Stops = GradientStops })
         end
 
