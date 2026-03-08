@@ -90,6 +90,15 @@ local ESPSettings = {
         {pos = 0.5, color = Color3.fromRGB(255, 255,   0), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(255,  60,  60), transparency = 0},
     },
+
+    -- Custom text gradient settings (applied to ALL custom text labels)
+    CustomTextGradientEnabled = true,
+    CustomTextGradientRotation = 0,
+    CustomTextGradientStops = {
+        {pos = 0,   color = Color3.fromRGB(200, 160, 255), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(120, 200, 255), transparency = 0},
+        {pos = 1,   color = Color3.fromRGB(255, 140, 200), transparency = 0},
+    },
     
     -- Gradient settings (autorotate enabled internally)
     -- NOTE: UI gradient autorotation is handled internally; GUI animation controls removed
@@ -529,6 +538,7 @@ local function createESPObject()
     -- Custom text entries (external scripts may populate `espObj.CustomTexts`)
     espObj.CustomTexts = {} -- array of strings
     espObj.CustomTextLabels = {} -- generated TextLabel instances
+    espObj.CustomTextGradients = {} -- per-label UIGradient instances
     
     -- Weapon label
     espObj.Weapon = Instance.new("TextLabel")
@@ -607,10 +617,7 @@ local function createESPObject()
     espObj.NameGradientObj.Enabled = false
     espObj.NameGradientObj.Parent = espObj.Name
 
-    espObj.HPTextGradientObj = Instance.new("UIGradient")
-    espObj.HPTextGradientObj.Name = "HPTextGrad"
-    espObj.HPTextGradientObj.Enabled = false
-    espObj.HPTextGradientObj.Parent = espObj.HPText
+    -- NOTE: HPTextGradientObj is created AFTER espObj.HPText below (line order matters)
 
     -- Separate Box Fill frame (completely independent of Box outline)
     espObj.BoxFill = Instance.new("Frame")
@@ -717,6 +724,12 @@ local function createESPObject()
     espObj.HPText.Visible = false
     espObj.HPText.ZIndex = 11
     espObj.HPText.Parent = container
+
+    -- HP text gradient (MUST be created after espObj.HPText exists)
+    espObj.HPTextGradientObj = Instance.new("UIGradient")
+    espObj.HPTextGradientObj.Name = "HPTextGrad"
+    espObj.HPTextGradientObj.Enabled = false
+    espObj.HPTextGradientObj.Parent = espObj.HPText
 
     -- Separate distance label (below HPText)
     espObj.DistanceText = Instance.new("TextLabel")
@@ -1062,6 +1075,9 @@ local function updateESP(deltaTime)
                 
                 -- Health bar
                     -- Custom text ESP: create/update right-side stacked labels
+                    local ctGradEnabled = getSetting("CustomTextGradientEnabled", ESPSettings.CustomTextGradientEnabled)
+                    local ctGradStops = espObj.CustomTextStops or ESPSettings.CustomTextGradientStops
+                    local ctGradRot = getSetting("CustomTextGradientRotation", ESPSettings.CustomTextGradientRotation) or 0
                     if espObj.CustomTexts and #espObj.CustomTexts > 0 then
                         local startX = x + w + 6 -- place to the right of the box
                         local lineHeight = 16
@@ -1072,22 +1088,43 @@ local function updateESP(deltaTime)
                                 lbl = Instance.new("TextLabel")
                                 lbl.BackgroundTransparency = 1
                                 lbl.Font = fontEnum
-                                lbl.TextSize = 13
+                                lbl.TextSize = scaledTextSize
                                 lbl.TextColor3 = Color3.fromRGB(255,255,255)
                                 lbl.TextStrokeTransparency = 0
                                 lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+                                lbl.RichText = true
+                                lbl.Size = UDim2.new(0, 200, 0, 18)
                                 lbl.ZIndex = 11
                                 lbl.Parent = espObj.Container
                                 espObj.CustomTextLabels[i] = lbl
                             end
+                            -- Create per-label UIGradient on demand
+                            if not espObj.CustomTextGradients[i] then
+                                local grad = Instance.new("UIGradient")
+                                grad.Name = "CustomTextGrad" .. i
+                                grad.Enabled = false
+                                grad.Parent = lbl
+                                espObj.CustomTextGradients[i] = grad
+                            end
                             lbl.Font = fontEnum
+                            lbl.TextSize = scaledTextSize
                             lbl.Text = textStr
                             lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
                             lbl.Visible = true
+                            -- Apply gradient per custom text label
+                            local ctGrad = espObj.CustomTextGradients[i]
+                            if ctGrad and ctGradEnabled and ctGradStops and #ctGradStops > 0 then
+                                stopsToUIGradient(ctGrad, ctGradStops)
+                                ctGrad.Rotation = ctGradRot
+                                ctGrad.Enabled = true
+                            elseif ctGrad then
+                                ctGrad.Enabled = false
+                            end
                         end
                         -- hide any surplus GUI labels
                         for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
                             if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
+                            if espObj.CustomTextGradients[j] then espObj.CustomTextGradients[j].Enabled = false end
                         end
                     end
 
@@ -1528,6 +1565,22 @@ getgenv().TrisESP = {
         if not p or not ESPObjects[p] then return false end
         local esp = ESPObjects[p]
         esp.CustomTexts = {}
+        return true
+    end,
+
+    -- Override custom text gradient stops for a specific player
+    SetCustomTextGradient = function(playerRef, stops, rotation)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p or not ESPObjects[p] then return false end
+        local esp = ESPObjects[p]
+        if stops and type(stops) == "table" and #stops > 0 then
+            esp.CustomTextStops = stops
+        else
+            esp.CustomTextStops = nil
+        end
+        if type(rotation) == "number" then
+            esp.CustomTextGradientRotation = rotation
+        end
         return true
     end,
 
