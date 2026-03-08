@@ -583,7 +583,9 @@ end
 function Library:GetAccentGradientSequence()
     local accent = self.Scheme.AccentColor
     local s = typeof(accent) == "Color3" and accent or Color3.new(1, 1, 1)
-    local e = self:GetDarkerColor(s)
+    -- subtle darkening at the end point so the gradient matches the accent color closely
+    local H, S, V = s:ToHSV()
+    local e = Color3.fromHSV(H, S, math.max(V * 0.85, 0))
     return ColorSequence.new({
         ColorSequenceKeypoint.new(0, s),
         ColorSequenceKeypoint.new(1, e),
@@ -631,8 +633,11 @@ function Library:UpdateKeybindFrame()
     end
 
     -- compute minimum dimensions needed to fit current entries
-    local desiredW = math.ceil((XSize + 18) * Library.DPIScale)
-    local desiredH = math.ceil((visibleCount * (YSize > 0 and YSize or 16) + 18) * Library.DPIScale)
+    -- titleBarH=35, paddingY=14 (7 top+7 bot), itemSpacing=7
+    local itemH = YSize > 0 and YSize or 16
+    local totalContentH = visibleCount * itemH + math.max(0, visibleCount - 1) * 7 + 14
+    local desiredW = math.ceil((XSize + 18 + 14) * Library.DPIScale)
+    local desiredH = math.ceil((35 + totalContentH) * Library.DPIScale)
     local currentW = Library.KeybindFrame.Size.X.Offset
     local currentH = Library.KeybindFrame.Size.Y.Offset
 
@@ -1603,7 +1608,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
             return
         end
 
-        StartPos = Input.Position
+        StartPos = Vector2.new(Input.Position.X, Input.Position.Y)  -- store as Vector2 for GetMouseLocation delta
         FramePos = UI.Position
         Dragging = true
 
@@ -1636,7 +1641,7 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
         end
 
         if Dragging and IsHoverInput(Input) then
-            local Delta = Input.Position - StartPos
+            local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - StartPos
             UI.Position =
                 UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
         end
@@ -1736,14 +1741,14 @@ function Library:MakeLine(Frame: GuiObject, Info)
 end
 
 function Library:AddHoverEffect(button, stroke, element)
-    -- Hover effect tweens the single outline stroke
+    -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
         if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
     end)
 end
 
@@ -1804,18 +1809,18 @@ function Library:AddShadowFrame(Frame: GuiObject)
         end
     end)
 
-    return Shadow
+    return DarkStroke
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    Library:AddShadowFrame(Frame)
+    local DarkStroke = Library:AddShadowFrame(Frame)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
         LineJoinMode = Enum.LineJoinMode.Miter,
         Parent = Frame,
     })
-    return Stroke, Stroke
+    return Stroke, DarkStroke or Stroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
@@ -2508,7 +2513,8 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = LoadBtn,
         })
-        local LoadBtnStroke = Library:AddSmallOutline(LoadBtn)
+        local LoadBtnMain, LoadBtnDark = Library:AddSmallOutline(LoadBtn)
+        local LoadBtnStroke = LoadBtnDark or LoadBtnMain
 
         LoadBtn.MouseEnter:Connect(function()
             TweenService:Create(LoadBtn, Library.TweenInfo, { TextTransparency = 0 }):Play()
@@ -2516,7 +2522,7 @@ do
         end)
         LoadBtn.MouseLeave:Connect(function()
             TweenService:Create(LoadBtn, Library.TweenInfo, { TextTransparency = 0.3 }):Play()
-            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
+            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { Color = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
         end)
 
         LoadBtn.MouseButton1Click:Connect(function()
@@ -4575,7 +4581,12 @@ do
             if not Info.Gradient then return nil end
             local data = {}
             for _, s in ipairs(GradientStops) do
-                table.insert(data, { Position = s.pos, Color = s.color, Transparency = s.transparency })
+                -- Serialize color as hex string so JSON encode/decode round-trips correctly
+                local colorHex = "ffffff"
+                if s.color and typeof(s.color) == "Color3" then
+                    colorHex = s.color:ToHex()
+                end
+                table.insert(data, { Position = s.pos, Color = colorHex, Transparency = s.transparency or 0 })
             end
             return data
         end
@@ -4586,8 +4597,24 @@ do
             -- rebuild internal stops table
             GradientStops = {}
             for _, s in ipairs(stops) do
-                if type(s) == "table" and s.Position and s.Color then
-                    table.insert(GradientStops, { pos = s.Position, color = s.Color, transparency = s.Transparency or 0 })
+                if type(s) == "table" and s.Position ~= nil and s.Color ~= nil then
+                    -- Handle Color as hex string (from JSON), Color3 userdata, or {R,G,B} table
+                    local color
+                    if type(s.Color) == "string" then
+                        local ok, c = pcall(Color3.fromHex, s.Color)
+                        color = ok and c or Color3.new(1, 1, 1)
+                    elseif typeof and typeof(s.Color) == "Color3" then
+                        color = s.Color
+                    elseif type(s.Color) == "table" then
+                        color = Color3.new(
+                            math.clamp(tonumber(s.Color.R) or 0, 0, 1),
+                            math.clamp(tonumber(s.Color.G) or 0, 0, 1),
+                            math.clamp(tonumber(s.Color.B) or 0, 0, 1)
+                        )
+                    else
+                        color = Color3.new(1, 1, 1)
+                    end
+                    table.insert(GradientStops, { pos = s.Position, color = color, transparency = s.Transparency or 0 })
                 end
             end
             -- update gradient bar visuals
@@ -5055,7 +5082,7 @@ do
                 })
                 Button.Tween:Play()
                 TweenService:Create(Button.Stroke, Library.TweenInfo, {
-                    Color = Library.Scheme.OutlineColor,
+                    Color = Library.Scheme.Dark or Color3.new(0, 0, 0),
                 }):Play()
             end)
 
@@ -5386,7 +5413,7 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = Checkbox,
         })
-        Library:AddShadowFrame(Checkbox)
+        local CheckboxDarkStroke = Library:AddShadowFrame(Checkbox)
 
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
@@ -5394,7 +5421,7 @@ do
             Parent = Checkbox,
         })
 
-        Library:AddHoverEffect(Button, CheckboxStroke, Toggle)
+        Library:AddHoverEffect(Button, CheckboxDarkStroke or CheckboxStroke, Toggle)
 
         local CheckboxGradient = New("UIGradient", {
             Color = Library:GetAccentGradientSequence(),
@@ -5443,6 +5470,9 @@ do
             TweenService:Create(Label, Library.TweenInfo, {
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
+
+            -- Hide main outline when checked; only the dark shadow border shows
+            CheckboxStroke.Transparency = Toggle.Value and 1 or 0
 
             -- Enable gradient only when checked, restore accent gradient colors
             CheckboxGradient.Color = Library:GetAccentGradientSequence()
@@ -5828,7 +5858,8 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Bar,
         })
-        local _, BarShadowStroke = Library:AddSmallOutline(Bar)
+        local barMain, BarShadowStroke = Library:AddSmallOutline(Bar)
+        barMain.Transparency = 1  -- hide colored outline; dark shadow border is enough
 
         Library:AddHoverEffect(Bar, BarShadowStroke, Slider)
 
@@ -6120,7 +6151,8 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius),
             Parent = Display,
         })
-        local _, DisplayShadowStroke = Library:AddSmallOutline(Display)
+        local displayMain, DisplayShadowStroke = Library:AddSmallOutline(Display)
+        displayMain.Transparency = 1  -- hide colored outline; dark shadow border is enough
 
         Library:AddHoverEffect(Display, DisplayShadowStroke, Dropdown)
 
@@ -7351,9 +7383,6 @@ do
                     BackgroundTransparency = true,
                 },
             })
-            -- match standard groupbox styling
-            Library:AddOutline(DepboxContainer)
-            Library:UpdateDPI(DepboxContainer, { Size = false })
 
             DepboxList = New("UIListLayout", {
                 Padding = UDim.new(0, 8),
@@ -8689,6 +8718,9 @@ function Library:CreateWindow(WindowInfo)
         LayoutRefs.TabsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateTabBarSize)
         MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateTabBarSize)
+        -- also listen to Position (UDim2) which updates before AbsolutePosition renders,
+        -- so the tab bar follows dragging without a 1-frame lag
+        MainFrame:GetPropertyChangedSignal("Position"):Connect(UpdateTabBarSize)
 
         --// Container \\--
         Container = New("Frame", {
