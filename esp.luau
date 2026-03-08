@@ -20,13 +20,6 @@ local renderConn
 local ESPObjects = {}
 local ESPsCleared = false
 local RotationAngle = -90
--- Preview ESP (separate from main ESP system)
-local PreviewESPObject = nil
-local PreviewCharacter = nil
-local PreviewViewport = nil -- ViewportFrame inside the holder
-local PreviewViewportHolder = nil -- Frame that contains the ViewportFrame
-local PreviewScale = 1 -- multiplier to scale the computed box
-local PreviewPadding = 0 -- extra pixels to pad the computed box
 -- Persistent state across hot-reloads (if executor preserves getgenv)
 getgenv()._TrisESP_Persistent = getgenv()._TrisESP_Persistent or {}
 local PERSIST = getgenv()._TrisESP_Persistent
@@ -76,13 +69,29 @@ local ESPSettings = {
     ShowDistance = false,
     -- Font selection: "ProggyClean" | "Tahoma"
     TextFont = "ProggyClean",
-    -- Text gradient: applies to name, distance and health text labels
-    TextGradientEnabled = false,
-    TextGradientSpeed = 0.3,
-    TextGradientStops = {
+    -- Name label gradient
+    NameGradientEnabled = false,
+    NameGradientSpeed = 0.3,
+    NameGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0},
+    },
+    -- Distance label gradient
+    DistanceGradientEnabled = false,
+    DistanceGradientSpeed = 0.3,
+    DistanceGradientStops = {
+        {pos = 0,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(255, 100,  50), transparency = 0},
+        {pos = 1,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
+    },
+    -- Health text label gradient (the HP/distance text shown below the bar)
+    HealthTextGradientEnabled = false,
+    HealthTextGradientSpeed = 0.3,
+    HealthTextGradientStops = {
+        {pos = 0,   color = Color3.fromRGB(  0, 255,  80), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(255, 255,   0), transparency = 0},
+        {pos = 1,   color = Color3.fromRGB(255,  60,  60), transparency = 0},
     },
     
     -- Gradient settings (autorotate enabled internally)
@@ -480,7 +489,9 @@ local function createESPObject()
     }
     espObj.GradientAngle = nil
     espObj.HealthGradientPhase = nil
-    espObj.TextGradientPhase = nil
+    espObj.NameGradientPhase = nil
+    espObj.DistanceGradientPhase = nil
+    espObj.HealthTextGradientPhase = nil
     
     -- Name label
     local initFont = getEnumFont(ESPSettings.TextFont)
@@ -626,7 +637,6 @@ local function createESPObject()
         Color3.fromRGB(60, 60, 125),
         Color3.fromRGB(119, 120, 255)
     )
-                -- Preview: set gradient orientation based on health bar position
                 if ESPSettings.HealthBarPosition == "Bottom" then
                     espObj.HealthBarGradient.Rotation = 0
                 else
@@ -793,280 +803,6 @@ local function updateESP(deltaTime)
     PERSIST.SpinAngle = SpinAngle
     -- Note: gradient autorotation will be integrated per-object below using deltaTime
 
-    -- Update preview ESP if it exists
-    if PreviewESPObject and PreviewCharacter and PreviewViewport then
-        local success = pcall(function()
-            local espObj = PreviewESPObject
-            local char = PreviewCharacter
-
-            -- Get character parts / primary parts
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if not humanoid then
-                hideESP(espObj)
-                return
-            end
-
-            local camera = PreviewViewport.CurrentCamera
-            if not camera then
-                hideESP(espObj)
-                return
-            end
-
-            local boxX, boxY, boxW, boxH
-
-            -- Prefer HRP + extents method to avoid stray viewmodel "box" parts
-            if hrp then
-                local ok, extents = pcall(function() return char:GetExtentsSize() end)
-                if ok and extents and extents.Y > 0 then
-                    local halfH = extents.Y / 2
-                    local topWorld = hrp.Position + Vector3.new(0, halfH, 0)
-                    local bottomWorld = hrp.Position - Vector3.new(0, halfH, 0)
-                    local spTop = camera:WorldToViewportPoint(topWorld)
-                    local spBottom = camera:WorldToViewportPoint(bottomWorld)
-                    if spTop.Z > 0 and spBottom.Z > 0 then
-                        local h = math.abs(spBottom.Y - spTop.Y)
-                        local w = h * (ESPSettings.StaticBoxWidth or 0.6)
-                        local cx = (spTop.X + spBottom.X) / 2
-                        local x = cx - w / 2
-                        local y = spTop.Y
-                        boxX, boxY, boxW, boxH = x, y, w, h
-                    end
-                end
-            end
-
-            -- Fallback: compute bounds from parts but filter out large stray "box" parts
-            if not boxX then
-                local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
-                local ok, extents = pcall(function() return char:GetExtentsSize() end)
-                local extMag = (ok and extents) and extents.Magnitude or 0
-                for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        local nameLower = (part.Name or ""):lower()
-                        -- skip obvious viewmodel box parts or unusually large parts relative to the model
-                        if not nameLower:find("box") and not nameLower:find("view") and not (extMag > 0 and part.Size.Magnitude > extMag * 1.5) then
-                            local corners = {
-                                part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                                part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
-                                part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                                part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, -part.Size.Z/2),
-                                part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                                part.CFrame * CFrame.new(part.Size.X/2, -part.Size.Y/2, part.Size.Z/2),
-                                part.CFrame * CFrame.new(-part.Size.X/2, part.Size.Y/2, part.Size.Z/2),
-                                part.CFrame * CFrame.new(part.Size.X/2, part.Size.Y/2, part.Size.Z/2)
-                            }
-                            for _, corner in ipairs(corners) do
-                                local screenPos, onScreen = camera:WorldToViewportPoint(corner.Position)
-                                if onScreen then
-                                    minX = math.min(minX, screenPos.X)
-                                    minY = math.min(minY, screenPos.Y)
-                                    maxX = math.max(maxX, screenPos.X)
-                                    maxY = math.max(maxY, screenPos.Y)
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if minX == math.huge then
-                    hideESP(espObj)
-                    return
-                end
-
-                boxW = maxX - minX
-                boxH = maxY - minY
-                boxX = minX
-                boxY = minY
-            end
-
-            -- Apply preview scale and padding around the computed box (in screen-space)
-            local scale = PreviewScale or 1
-            local pad = PreviewPadding or 0
-            local cx = boxX + boxW / 2
-            local cy = boxY + boxH / 2
-            local scaledW = math.max(1, math.floor(boxW * scale))
-            local scaledH = math.max(1, math.floor(boxH * scale))
-            local adjX = cx - scaledW / 2 - pad
-            local adjY = cy - scaledH / 2 - pad
-            local adjW = scaledW + pad * 2
-            local adjH = scaledH + pad * 2
-
-            -- Convert screen coordinates to local coordinates relative to the viewport holder
-            local holderPos = PreviewViewportHolder and PreviewViewportHolder.AbsolutePosition or Vector2.new(0, 0)
-            local holderSize = PreviewViewportHolder and PreviewViewportHolder.AbsoluteSize or Vector2.new(1, 1)
-            local localX = math.floor(adjX - holderPos.X)
-            local localY = math.floor(adjY - holderPos.Y)
-            local localW = math.floor(adjW)
-            local localH = math.floor(adjH)
-
-            -- Clamp to holder bounds
-            if localX < 0 then
-                localW = math.max(0, localW + localX)
-                localX = 0
-            end
-            if localY < 0 then
-                localH = math.max(0, localH + localY)
-                localY = 0
-            end
-            if localX + localW > holderSize.X then
-                localW = math.max(0, holderSize.X - localX)
-            end
-            if localY + localH > holderSize.Y then
-                localH = math.max(0, holderSize.Y - localY)
-            end
-            
-            -- Apply same settings as normal ESP (use global settings)
-            local settings = ESPSettings
-            
-            -- Box Fill
-            if settings.BoxFill then
-                espObj.BoxFill.Visible = true
-                espObj.BoxFill.Position = UDim2.new(0, localX, 0, localY)
-                espObj.BoxFill.Size = UDim2.new(0, localW, 0, localH)
-                local fillStops = espObj.BoxFillStops or settings.BoxFillGradientStops
-                if fillStops then
-                    stopsToUIGradient(espObj.BoxGradient, fillStops)
-                    espObj.BoxFill.BackgroundTransparency = 0
-                else
-                    espObj.BoxFill.BackgroundTransparency = settings.BoxFillTransparency or 0.5
-                end
-                espObj.BoxGradient.Rotation = RotationAngle
-            else
-                espObj.BoxFill.Visible = false
-            end
-            
-            -- Box Outline
-            if settings.Boxes then
-                espObj.Box.Visible = true
-                espObj.Box.Position = UDim2.new(0, localX, 0, localY)
-                espObj.Box.Size = UDim2.new(0, localW, 0, localH)
-                espObj.BoxOutline.Color = settings.BoxOutlineColor
-                espObj.BoxOutline.Thickness = 1
-                
-                local outlineStops
-                if settings.BoxFill then
-                    outlineStops = espObj.BoxFillStops or settings.BoxFillGradientStops
-                else
-                    outlineStops = espObj.BoxStops or settings.BoxGradientStops
-                end
-                if outlineStops then
-                    stopsToUIGradient(espObj.OutlineGradient, outlineStops)
-                end
-                espObj.OutlineGradient.Enabled = true
-                espObj.OutlineGradient.Rotation = -90
-                
-                -- Hide corners for square mode
-                for _, corner in ipairs(espObj.Corners) do
-                    corner.Visible = false
-                end
-            else
-                espObj.Box.Visible = false
-            end
-            
-            -- Health Bar
-            if settings.HealthBarEnabled and humanoid then
-                local healthRatio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-                local barThickness = settings.HealthBarThickness or 2.5
-                local barHeight = localH * healthRatio
-
-                local barX = localX
-                -- Support horizontal Bottom position in preview
-                if settings.HealthBarPosition == "Bottom" then
-                    local barY = localY + localH + 4
-                    local fullW = localW
-                    local filledW = math.floor(fullW * (humanoid.Health / (humanoid.MaxHealth > 0 and humanoid.MaxHealth or 1)))
-                    espObj.HealthBarBG.Visible = true
-                    espObj.HealthBarBG.Position = UDim2.new(0, localX, 0, barY)
-                    espObj.HealthBarBG.Size = UDim2.new(0, fullW, 0, barThickness)
-                    espObj.HealthBar.Visible = true
-                    espObj.HealthBar.Position = UDim2.new(0, localX, 0, barY)
-                    espObj.HealthBar.Size = UDim2.new(0, filledW, 0, barThickness)
-                else
-                    if settings.HealthBarPosition == "Right" then
-                        barX = localX + localW + 2
-                    elseif settings.HealthBarPosition == "Left" then
-                        barX = localX - barThickness - 2
-                    end
-
-                    espObj.HealthBarBG.Visible = true
-                    espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, localY)
-                    espObj.HealthBarBG.Size = UDim2.new(0, barThickness, 0, localH)
-
-                    espObj.HealthBar.Visible = true
-                    espObj.HealthBar.Position = UDim2.new(0, barX, 0, localY + localH - barHeight)
-                    espObj.HealthBar.Size = UDim2.new(0, barThickness, 0, barHeight)
-                end
-                
-                -- Animate health gradient
-                if settings.HealthGradientEnabled then
-                    espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0) + dt * (settings.HealthGradientSpeed or 0.5)
-                    if espObj.HealthGradientPhase > 1 then
-                        espObj.HealthGradientPhase = espObj.HealthGradientPhase - 1
-                    end
-                end
-                
-                local phase = espObj.HealthGradientPhase or 0
-                local hStops = espObj.HealthBarStops or settings.HealthBarGradientStops
-                local samples = 12
-                local keypoints = {}
-                for i = 0, samples do
-                    local t = i / samples
-                    local offsetT = (t + phase) % 1
-                    local c = sampleStopsAtPosition(hStops, offsetT)
-                    table.insert(keypoints, ColorSequenceKeypoint.new(t, c))
-                end
-                        espObj.HealthBarGradient.Color = ColorSequence.new(keypoints)
-                        -- orient health gradient horizontally for Bottom mode so phase moves left->right
-                        if settings.HealthBarPosition == "Bottom" then
-                            espObj.HealthBarGradient.Rotation = 0
-                        else
-                            espObj.HealthBarGradient.Rotation = -90
-                        end
-                
-                if settings.ShowHealthText then
-                    espObj.HealthText.Visible = true
-                    local hv = humanoid.Health and math.max(0, math.floor(humanoid.Health)) or 0
-                    local mv = humanoid.MaxHealth or 0
-                    if mv > 0 then
-                        espObj.HealthText.Text = string.format("%d/%d", hv, math.floor(mv))
-                    else
-                        espObj.HealthText.Text = string.format("%d", hv)
-                    end
-                    espObj.HealthText.Position = UDim2.new(0, barX + barThickness + 5, 0, localY + localH - barHeight)
-                else
-                    espObj.HealthText.Visible = false
-                end
-            else
-                espObj.HealthBarBG.Visible = false
-                espObj.HealthBar.Visible = false
-                espObj.HealthText.Visible = false
-            end
-            
-            -- Name (position relative to the viewport holder for preview)
-            if settings.ShowName then
-                espObj.Name.Visible = true
-                espObj.Name.Text = "Preview"
-                espObj.Name.Position = UDim2.new(0, localX + (localW/2), 0, localY - 20)
-            else
-                espObj.Name.Visible = false
-            end
-            
-            -- Hide other elements for preview
-            espObj.Distance.Visible = false
-            espObj.Weapon.Visible = false
-            espObj.Tracer.Visible = false
-            if espObj.Highlight then
-                espObj.Highlight.Enabled = false
-            end
-        end)
-        
-        if not success then
-            -- If update failed, hide the preview ESP
-            if PreviewESPObject then
-                hideESP(PreviewESPObject)
-            end
-        end
-    end
 
     for player, espObj in pairs(ESPObjects) do
         pcall(function()
@@ -1120,13 +856,28 @@ local function updateESP(deltaTime)
                 local scaledTextSize = math.max(9, math.floor(13 * textScale))
                 -- Consistent pixel gap used above AND below the box for all text labels
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
-                -- Per-frame text gradient phase
-                local textGradEnabled = getSetting("TextGradientEnabled", ESPSettings.TextGradientEnabled)
-                local textStops = ESPSettings.TextGradientStops
-                if textGradEnabled then
-                    espObj.TextGradientPhase = ((espObj.TextGradientPhase or 0) + dt * (ESPSettings.TextGradientSpeed or 0.3)) % 1
+                -- Per-frame text gradient phases
+                local nameGradEnabled = getSetting("NameGradientEnabled", ESPSettings.NameGradientEnabled)
+                local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
+                if nameGradEnabled then
+                    espObj.NameGradientPhase = ((espObj.NameGradientPhase or 0) + dt * (ESPSettings.NameGradientSpeed or 0.3)) % 1
                 end
-                local textPhase = espObj.TextGradientPhase or 0
+                local namePhase = espObj.NameGradientPhase or 0
+
+                local distGradEnabled = getSetting("DistanceGradientEnabled", ESPSettings.DistanceGradientEnabled)
+                local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
+                if distGradEnabled then
+                    espObj.DistanceGradientPhase = ((espObj.DistanceGradientPhase or 0) + dt * (ESPSettings.DistanceGradientSpeed or 0.3)) % 1
+                end
+                local distPhase = espObj.DistanceGradientPhase or 0
+
+                local htGradEnabled = getSetting("HealthTextGradientEnabled", ESPSettings.HealthTextGradientEnabled)
+                local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
+                if htGradEnabled then
+                    espObj.HealthTextGradientPhase = ((espObj.HealthTextGradientPhase or 0) + dt * (ESPSettings.HealthTextGradientSpeed or 0.3)) % 1
+                end
+                local htPhase = espObj.HealthTextGradientPhase or 0
+
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
                     local nameText = ""
@@ -1137,7 +888,7 @@ local function updateESP(deltaTime)
                     else
                         nameText = (player.Name or player.DisplayName or "")
                     end
-                    espObj.Name.Text = textGradEnabled and makeGradientText(nameText, textStops, textPhase) or nameText
+                    espObj.Name.Text = nameGradEnabled and makeGradientText(nameText, nameStops, namePhase) or nameText
                     espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
@@ -1373,15 +1124,20 @@ local function updateESP(deltaTime)
                             hpStr = string.format("%d", hpVal)
                         end
                         local distStr    = string.format("[%d st]", math.floor(Dist))
-                        local hStops     = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
-                        local hPhase     = espObj.HealthGradientPhase or 0
+                        -- Build below-box text with per-label gradients
                         local belowText
+                        local belowRich -- RichText version (used when any gradient is enabled)
                         if showHPTxt and showDist then
+                            local hpPart   = htGradEnabled  and makeGradientText(hpStr,  htGradStops,   htPhase)   or hpStr
+                            local distPart = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
                             belowText = hpStr .. "  " .. distStr
+                            belowRich = hpPart .. "  " .. distPart
                         elseif showHPTxt then
                             belowText = hpStr
+                            belowRich = htGradEnabled and makeGradientText(hpStr, htGradStops, htPhase) or hpStr
                         elseif showDist then
                             belowText = distStr
+                            belowRich = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
                         end
 
                         if posMode == "Bottom" then
@@ -1406,7 +1162,7 @@ local function updateESP(deltaTime)
                             -- HPText: same gap below bar as name text uses above box
                             if espObj.HPText then
                                 if belowText then
-                                    espObj.HPText.Text = makeGradientText(belowText, hStops, hPhase)
+                                    espObj.HPText.Text = belowRich or belowText
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
@@ -1441,7 +1197,7 @@ local function updateESP(deltaTime)
                             -- HPText: same gap below box as name text uses above box, always centered
                             if espObj.HPText then
                                 if belowText then
-                                    espObj.HPText.Text = makeGradientText(belowText, hStops, hPhase)
+                                    espObj.HPText.Text = belowRich or belowText
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
@@ -1464,8 +1220,7 @@ local function updateESP(deltaTime)
                             local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if showDist then
                                 local distOnly = string.format("[%d st]", math.floor(Dist))
-                                local distStops = ESPSettings.TextGradientStops
-                                espObj.HPText.Text = textGradEnabled and makeGradientText(distOnly, distStops, textPhase) or distOnly
+                                espObj.HPText.Text = distGradEnabled and makeGradientText(distOnly, distGradStops, distPhase) or distOnly
                                 espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
@@ -1534,6 +1289,9 @@ addESP = function(player)
     espObj.BoxFillStops = ESPSettings.BoxFillGradientStops
     espObj.BoxStops = ESPSettings.BoxGradientStops
     espObj.HealthBarStops = ESPSettings.HealthBarGradientStops
+    espObj.NameStops = ESPSettings.NameGradientStops
+    espObj.DistanceStops = ESPSettings.DistanceGradientStops
+    espObj.HealthTextStops = ESPSettings.HealthTextGradientStops
     ESPObjects[player] = espObj
 end
 
@@ -1606,6 +1364,9 @@ getgenv().TrisESP = {
         local stopsKey = (settingPrefix == "BoxFill" and "BoxFillStops")
             or (settingPrefix == "Box" and "BoxStops")
             or (settingPrefix == "HealthBar" and "HealthBarStops")
+            or (settingPrefix == "Name" and "NameStops")
+            or (settingPrefix == "Distance" and "DistanceStops")
+            or (settingPrefix == "HealthText" and "HealthTextStops")
             or nil
         if stopsKey then
             for _, espObj in pairs(ESPObjects) do
@@ -1739,76 +1500,7 @@ getgenv().TrisESP = {
         return true
     end,
 
-    -- Preview ESP functions (for viewport character models)
-    CreatePreviewESP = function(character, viewportHolder, opts)
-        if not character or not viewportHolder then return false end
 
-        -- Find the ViewportFrame inside the holder
-        local viewportFrame = nil
-        for _, v in ipairs(viewportHolder:GetChildren()) do
-            if v:IsA("ViewportFrame") then
-                viewportFrame = v
-                break
-            end
-        end
-
-        if not viewportFrame then return false end
-
-        -- Remove existing preview ESP if any
-        if PreviewESPObject then
-            removeESP(PreviewESPObject)
-            PreviewESPObject = nil
-        end
-
-        -- Create new ESP object for preview
-        PreviewESPObject = createESPObject()
-        PreviewCharacter = character
-        PreviewViewport = viewportFrame
-        PreviewViewportHolder = viewportHolder
-        PreviewESPObject.HealthGradientPhase = 0
-        PreviewESPObject.GradientAngle = 0
-
-        -- Apply optional sizing options
-        if opts then
-            if type(opts.Scale) == "number" and opts.Scale > 0 then
-                PreviewScale = opts.Scale
-            end
-            if type(opts.Padding) == "number" and opts.Padding >= 0 then
-                PreviewPadding = math.floor(opts.Padding)
-            end
-        end
-
-        -- Parent the ESP container to the viewport holder so 2D overlays render atop the viewport
-        if PreviewESPObject.Container then
-            PreviewESPObject.Container.Parent = viewportHolder
-        end
-
-        return true
-    end,
-
-        RemovePreviewESP = function()
-        if PreviewESPObject then
-            removeESP(PreviewESPObject)
-            PreviewESPObject = nil
-        end
-        PreviewCharacter = nil
-        PreviewViewport = nil
-        PreviewViewportHolder = nil
-        return true
-    end,
-
-    -- Preview sizing helpers
-    SetPreviewScale = function(scale)
-        if type(scale) ~= "number" or scale <= 0 then return false end
-        PreviewScale = scale
-        return true
-    end,
-
-    SetPreviewPadding = function(pixels)
-        if type(pixels) ~= "number" or pixels < 0 then return false end
-        PreviewPadding = math.floor(pixels)
-        return true
-    end,
 
     -- Player-specific overrides helpers
     AddPlayerOverride = function(playerRef, overrides)
@@ -1854,3 +1546,4 @@ getgenv().TrisESP = {
 
 -- allow module-style loading
 return getgenv().TrisESP
+
