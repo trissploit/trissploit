@@ -7342,6 +7342,7 @@ do
 
         do
             DepboxContainer = New("Frame", {
+                BackgroundColor3 = "BackgroundColor",
                 BackgroundTransparency = 0,
                 Size = UDim2.fromScale(1, 1),
                 Visible = false,
@@ -7350,6 +7351,9 @@ do
                     BackgroundTransparency = true,
                 },
             })
+            -- match standard groupbox styling
+            Library:AddOutline(DepboxContainer)
+            Library:UpdateDPI(DepboxContainer, { Size = false })
 
             DepboxList = New("UIListLayout", {
                 Padding = UDim.new(0, 8),
