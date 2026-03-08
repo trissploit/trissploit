@@ -69,22 +69,22 @@ local ESPSettings = {
     ShowDistance = false,
     -- Font selection: "ProggyClean" | "Tahoma"
     TextFont = "ProggyClean",
-    -- Name label gradient (always enabled)
-    NameGradientSpeed = 0.3,
+    -- Name label gradient rotation (degrees, static, no animation)
+    NameGradientRotation = 0,
     NameGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0},
     },
-    -- Distance label gradient (always enabled)
-    DistanceGradientSpeed = 0.3,
+    -- Distance label gradient rotation (degrees, static, no animation)
+    DistanceGradientRotation = 0,
     DistanceGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB(255, 100,  50), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
     },
-    -- Health text label gradient (always enabled)
-    HealthTextGradientSpeed = 0.3,
+    -- Health text label gradient rotation (degrees, static, no animation)
+    HealthTextGradientRotation = 0,
     HealthTextGradientStops = {
         {pos = 0,   color = Color3.fromRGB(  0, 255,  80), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB(255, 255,   0), transparency = 0},
@@ -113,9 +113,9 @@ local ESPSettings = {
     BoxSizingMode = "Static",
     -- Width multiplier for Static sizing mode (ratio of height)
     StaticBoxWidth = 0.6,
-    BoxColor = Color3.fromRGB(0, 170, 255), -- outline color when gradient disabled
+    BoxColor = Color3.fromRGB(0, 170, 255),
     Thickness = 2,
-    BoxOutlineColor = Color3.new(0, 0, 0), -- inner+outer black borders (always 1px)
+    BoxOutlineColor = Color3.new(0, 0, 0),
     -- Box outline gradient rotation animation
     BoxOutlineRotation = false,
     BoxOutlineRotationSpeed = 300,
@@ -171,12 +171,10 @@ Settings (table: `getgenv().TrisESP.Settings`)
 - BoxOutlineRotation (bool): Animate box outline gradient rotation.
 - BoxOutlineRotationSpeed (number): Degrees per second for outline rotation.
 - StaticBoxWidth (number): Width multiplier for Static sizing mode (ratio of height, default 0.6).
-- BoxColor (Color3): Outline color used when no gradient is active.
-- BoxOutlineColor (Color3): Color of the fixed inner/outer 1px black borders (usually black).
+- BoxOutlineColor (Color3): Outline color for box frames (outline stroke forced to 1px).
 - BoxGradientStops (table): Gradient stops for box outlines ({pos, color, transparency} arrays).
 - BoxFill (bool): Enable gradient-filled boxes (independent of `Boxes`).
 - BoxFillGradientStops (table): Gradient stops for box fill.
-- BoxFillColor (Color3): Fill color used when no gradient is active.
 - BoxFillTransparency (number 0-1): Transparency for the box fill layer.
 
 - Tracers (bool), TracerFrom ("Top"|"Bottom"|"Center"), TracerThickness, TracerColor
@@ -719,6 +717,26 @@ local function createESPObject()
     espObj.HPText.Visible = false
     espObj.HPText.ZIndex = 11
     espObj.HPText.Parent = container
+
+    -- Separate distance label (below HPText)
+    espObj.DistanceText = Instance.new("TextLabel")
+    espObj.DistanceText.Name = "DistanceText"
+    espObj.DistanceText.BackgroundTransparency = 1
+    espObj.DistanceText.Size = UDim2.new(0, 120, 0, 18)
+    espObj.DistanceText.AnchorPoint = Vector2.new(0.5, 0)
+    espObj.DistanceText.Font = initFont
+    espObj.DistanceText.TextSize = 13
+    espObj.DistanceText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.DistanceText.TextStrokeTransparency = 0
+    espObj.DistanceText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.DistanceText.Visible = false
+    espObj.DistanceText.ZIndex = 11
+    espObj.DistanceText.Parent = container
+
+    espObj.DistanceGradientObj = Instance.new("UIGradient")
+    espObj.DistanceGradientObj.Name = "DistanceGrad"
+    espObj.DistanceGradientObj.Enabled = false
+    espObj.DistanceGradientObj.Parent = espObj.DistanceText
     
     -- Corner boxes (8 frames)
     espObj.Corners = {}
@@ -773,6 +791,7 @@ local function hideESP(espObj)
     if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
     if espObj.HealthText then espObj.HealthText.Visible = false end
     if espObj.HPText then espObj.HPText.Visible = false end
+    if espObj.DistanceText then espObj.DistanceText.Visible = false end
     if espObj.CustomTextLabels then
         for _, lbl in ipairs(espObj.CustomTextLabels) do
             lbl.Visible = false
@@ -903,13 +922,13 @@ local function updateESP(deltaTime)
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
                 -- Per-frame text gradient rotation (always active, UIGradient-based)
                 local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
-                espObj.NameGradientPhase = ((espObj.NameGradientPhase or 0) + dt * (ESPSettings.NameGradientSpeed or 0.3) * 360) % 360
+                local nameRotation = getSetting("NameGradientRotation", ESPSettings.NameGradientRotation) or 0
 
                 local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
-                espObj.DistanceGradientPhase = ((espObj.DistanceGradientPhase or 0) + dt * (ESPSettings.DistanceGradientSpeed or 0.3) * 360) % 360
+                local distRotation = getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation) or 0
 
                 local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
-                espObj.HealthTextGradientPhase = ((espObj.HealthTextGradientPhase or 0) + dt * (ESPSettings.HealthTextGradientSpeed or 0.3) * 360) % 360
+                local htRotation = getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation) or 0
 
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
@@ -930,7 +949,7 @@ local function updateESP(deltaTime)
                     -- Apply UIGradient rotation for name
                     if espObj.NameGradientObj then
                         stopsToUIGradient(espObj.NameGradientObj, nameStops)
-                        espObj.NameGradientObj.Rotation = espObj.NameGradientPhase
+                        espObj.NameGradientObj.Rotation = nameRotation
                         espObj.NameGradientObj.Enabled = true
                     end
                 else
@@ -955,19 +974,13 @@ local function updateESP(deltaTime)
                     espObj.Box.Size = UDim2.new(0, w, 0, h)
                     espObj.Box.Visible = true
                     espObj.BoxOutline.Thickness = 1
-                    -- Gradient on the box outline
-                    local useFill = getSetting("BoxFill", ESPSettings.BoxFill)
-                    local outlineStops
-                    if useFill then
-                        outlineStops = espObj.BoxFillStops or ESPSettings.BoxFillGradientStops
-                    else
-                        outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
-                    end
+                    -- Gradient on the box outline — always uses box outline stops regardless of BoxFill state
+                    local outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
                     if outlineStops then
                         espObj.BoxOutline.Color = Color3.new(1, 1, 1)
                         stopsToUIGradient(espObj.OutlineGradient, outlineStops)
                     else
-                        espObj.BoxOutline.Color = getSetting("BoxColor", ESPSettings.BoxColor) or Color3.new(1,1,1)
+                        espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
                     end
                     espObj.OutlineGradient.Enabled = true
                     -- Box outline gradient rotation
@@ -1078,6 +1091,11 @@ local function updateESP(deltaTime)
                         end
                     end
 
+                    -- Distance/HP text common values (used in both health-bar and no-health-bar paths)
+                    local showHPTxt_pre = getSetting("ShowHealthText", ESPSettings.ShowHealthText)
+                    local showDist_pre  = getSetting("ShowDistance",   ESPSettings.ShowDistance)
+                    local distStr_pre   = string.format("[%d st]", math.floor(Dist))
+
                     if getSetting("HealthBarEnabled", ESPSettings.HealthBarEnabled) and espObj.HealthBar then
                         local healthRatio = 1
                         if hum.MaxHealth and hum.MaxHealth > 0 then
@@ -1141,28 +1159,18 @@ local function updateESP(deltaTime)
                         -- Gradient rotation every frame
                         espObj.HealthBarGradient.Rotation = (posMode == "Bottom") and 0 or -90
 
-                        -- Build the shared below-box label text
+                        -- Build separate HP and distance texts
                         local showHPTxt  = getSetting("ShowHealthText", ESPSettings.ShowHealthText)
                         local showDist   = getSetting("ShowDistance",   ESPSettings.ShowDistance)
                         local hpVal      = hum.Health and math.max(0, math.floor(hum.Health)) or 0
                         local maxVal     = hum.MaxHealth or 0
-                        -- Show only raw health values, no percentage
                         local hpStr
                         if maxVal > 0 then
                             hpStr = string.format("%d/%d", hpVal, math.floor(maxVal))
                         else
                             hpStr = string.format("%d", hpVal)
                         end
-                        local distStr    = string.format("[%d st]", math.floor(Dist))
-                        -- Build below-box text (plain text; UIGradient handles coloring)
-                        local belowText
-                        if showHPTxt and showDist then
-                            belowText = hpStr .. "  " .. distStr
-                        elseif showHPTxt then
-                            belowText = hpStr
-                        elseif showDist then
-                            belowText = distStr
-                        end
+                        local distStr = string.format("[%d st]", math.floor(Dist))
 
                         if posMode == "Bottom" then
                             -- Horizontal bar below the box
@@ -1183,25 +1191,44 @@ local function updateESP(deltaTime)
                             espObj.HealthBarBG.Visible = true
                             espObj.HealthBar.Visible = true
 
-                            -- HPText: same gap below bar as name text uses above box
+                            -- HPText: health value below bar
                             if espObj.HPText then
-                                if belowText then
-                                    espObj.HPText.Text = belowText
+                                if showHPTxt then
+                                    espObj.HPText.Text = hpStr
                                     espObj.HPText.TextColor3 = Color3.new(1, 1, 1)
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
                                     espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + 2)
                                     espObj.HPText.Visible = true
-                                    -- UIGradient for HP/distance text
                                     if espObj.HPTextGradientObj then
                                         stopsToUIGradient(espObj.HPTextGradientObj, htGradStops)
-                                        espObj.HPTextGradientObj.Rotation = espObj.HealthTextGradientPhase
+                                        espObj.HPTextGradientObj.Rotation = htRotation
                                         espObj.HPTextGradientObj.Enabled = true
                                     end
                                 else
                                     espObj.HPText.Visible = false
                                     if espObj.HPTextGradientObj then espObj.HPTextGradientObj.Enabled = false end
+                                end
+                            end
+                            -- DistanceText: distance below HPText (or below bar if no HP text)
+                            if espObj.DistanceText then
+                                if showDist then
+                                    espObj.DistanceText.Text = distStr
+                                    espObj.DistanceText.TextColor3 = Color3.new(1, 1, 1)
+                                    espObj.DistanceText.Font = fontEnum
+                                    espObj.DistanceText.TextSize = scaledTextSize
+                                    local distOffsetY = barY + thickness + 2 + (showHPTxt and (scaledTextSize + 2) or 0)
+                                    espObj.DistanceText.Position = UDim2.new(0, barX + fullWidth / 2, 0, distOffsetY)
+                                    espObj.DistanceText.Visible = true
+                                    if espObj.DistanceGradientObj then
+                                        stopsToUIGradient(espObj.DistanceGradientObj, distGradStops)
+                                        espObj.DistanceGradientObj.Rotation = distRotation
+                                        espObj.DistanceGradientObj.Enabled = true
+                                    end
+                                else
+                                    espObj.DistanceText.Visible = false
+                                    if espObj.DistanceGradientObj then espObj.DistanceGradientObj.Enabled = false end
                                 end
                             end
 
@@ -1226,10 +1253,10 @@ local function updateESP(deltaTime)
                             espObj.HealthBarBG.Visible = true
                             espObj.HealthBar.Visible = true
 
-                            -- HPText: same gap below box as name text uses above box, always centered
+                            -- HPText: health value below box, centered
                             if espObj.HPText then
-                                if belowText then
-                                    espObj.HPText.Text = belowText
+                                if showHPTxt then
+                                    espObj.HPText.Text = hpStr
                                     espObj.HPText.TextColor3 = Color3.new(1, 1, 1)
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
@@ -1237,7 +1264,7 @@ local function updateESP(deltaTime)
                                     espObj.HPText.Visible = true
                                     if espObj.HPTextGradientObj then
                                         stopsToUIGradient(espObj.HPTextGradientObj, htGradStops)
-                                        espObj.HPTextGradientObj.Rotation = espObj.HealthTextGradientPhase
+                                        espObj.HPTextGradientObj.Rotation = htRotation
                                         espObj.HPTextGradientObj.Enabled = true
                                     end
                                 else
@@ -1245,34 +1272,54 @@ local function updateESP(deltaTime)
                                     if espObj.HPTextGradientObj then espObj.HPTextGradientObj.Enabled = false end
                                 end
                             end
+                            -- DistanceText: below HPText (or below box if no HP text)
+                            if espObj.DistanceText then
+                                if showDist then
+                                    espObj.DistanceText.Text = distStr
+                                    espObj.DistanceText.TextColor3 = Color3.new(1, 1, 1)
+                                    espObj.DistanceText.Font = fontEnum
+                                    espObj.DistanceText.TextSize = scaledTextSize
+                                    local distOffsetY = y + h + 2 + (showHPTxt and (scaledTextSize + 2) or 0)
+                                    espObj.DistanceText.Position = UDim2.new(0, x + w / 2, 0, distOffsetY)
+                                    espObj.DistanceText.Visible = true
+                                    if espObj.DistanceGradientObj then
+                                        stopsToUIGradient(espObj.DistanceGradientObj, distGradStops)
+                                        espObj.DistanceGradientObj.Rotation = distRotation
+                                        espObj.DistanceGradientObj.Enabled = true
+                                    end
+                                else
+                                    espObj.DistanceText.Visible = false
+                                    if espObj.DistanceGradientObj then espObj.DistanceGradientObj.Enabled = false end
+                                end
+                            end
                         end
 
-                        -- HealthText retired: always hidden (everything is in HPText now)
+                        -- HealthText retired: always hidden
                         if espObj.HealthText then espObj.HealthText.Visible = false end
                     else
-                        -- Health bar disabled
+                        -- Health bar disabled: hide bar, show distance in DistanceText if enabled
                         if espObj.HealthBar then espObj.HealthBar.Visible = false end
                         if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
                         if espObj.HealthText then espObj.HealthText.Visible = false end
-                        -- HPText: show distance-only if ShowDistance enabled (no health bar available)
-                        if espObj.HPText then
-                            local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
-                            if showDist then
-                                local distOnly = string.format("[%d st]", math.floor(Dist))
-                                espObj.HPText.Text = distOnly
-                                espObj.HPText.TextColor3 = Color3.new(1, 1, 1)
-                                espObj.HPText.Font = fontEnum
-                                espObj.HPText.TextSize = scaledTextSize
-                                espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
-                                espObj.HPText.Visible = true
-                                if espObj.HPTextGradientObj then
-                                    stopsToUIGradient(espObj.HPTextGradientObj, distGradStops)
-                                    espObj.HPTextGradientObj.Rotation = espObj.DistanceGradientPhase
-                                    espObj.HPTextGradientObj.Enabled = true
+                        if espObj.HPText then espObj.HPText.Visible = false end
+                        if espObj.HPTextGradientObj then espObj.HPTextGradientObj.Enabled = false end
+                        -- Distance: show independently in DistanceText
+                        if espObj.DistanceText then
+                            if showDist_pre then
+                                espObj.DistanceText.Text = distStr_pre
+                                espObj.DistanceText.TextColor3 = Color3.new(1, 1, 1)
+                                espObj.DistanceText.Font = fontEnum
+                                espObj.DistanceText.TextSize = scaledTextSize
+                                espObj.DistanceText.Position = UDim2.new(0, x + w / 2, 0, y + h + 2)
+                                espObj.DistanceText.Visible = true
+                                if espObj.DistanceGradientObj then
+                                    stopsToUIGradient(espObj.DistanceGradientObj, distGradStops)
+                                    espObj.DistanceGradientObj.Rotation = distRotation
+                                    espObj.DistanceGradientObj.Enabled = true
                                 end
                             else
-                                espObj.HPText.Visible = false
-                                if espObj.HPTextGradientObj then espObj.HPTextGradientObj.Enabled = false end
+                                espObj.DistanceText.Visible = false
+                                if espObj.DistanceGradientObj then espObj.DistanceGradientObj.Enabled = false end
                             end
                         end
                     end
