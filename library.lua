@@ -583,19 +583,22 @@ end
 function Library:GetAccentGradientSequence()
     local accent = self.Scheme.AccentColor
     if typeof(accent) ~= "Color3" then
-        accent = Color3.new(1, 1, 1)
+        accent = Color3.fromRGB(125, 85, 255)
     end
-    -- produce a high-contrast gradient so it is clearly visible on controls
-    -- start with the accent color and fade to white (or a lighter variant)
     local H, S, V = accent:ToHSV()
-    local light = Color3.fromHSV(H, S, math.min(V + 0.3, 1))
-    -- if accent is very light already, fallback to pure white
-    if light == accent then
-        light = Color3.new(1, 1, 1)
+    -- If near-achromatic (white/grey theme), fall back to a visible purple
+    if S < 0.2 and V > 0.8 then
+        H, S, V = Color3.fromRGB(125, 85, 255):ToHSV()
+        accent = Color3.fromHSV(H, S, V)
     end
+    -- dark variant: more saturated, dimmer
+    local dark = Color3.fromHSV(H, math.min(S * 1.2, 1), math.max(V * 0.55, 0.15))
+    -- lite variant: slightly hue-shifted, softer, brighter
+    local lite = Color3.fromHSV((H + 0.08) % 1, math.max(S - 0.3, 0.05), math.min(V + 0.2, 1))
     return ColorSequence.new({
-        ColorSequenceKeypoint.new(0, accent),
-        ColorSequenceKeypoint.new(1, light),
+        ColorSequenceKeypoint.new(0, dark),
+        ColorSequenceKeypoint.new(0.5, accent),
+        ColorSequenceKeypoint.new(1, lite),
     })
 end
 
@@ -1790,7 +1793,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
     local DarkStroke = Instance.new("UIStroke")
     DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
     DarkStroke.Thickness = 1
-    DarkStroke.LineJoinMode = Enum.LineJoinMode.Miter
+    DarkStroke.LineJoinMode = Enum.LineJoinMode.Round
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
 
@@ -1824,7 +1827,7 @@ function Library:AddSmallOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        LineJoinMode = Enum.LineJoinMode.Miter,
+        LineJoinMode = Enum.LineJoinMode.Round,
         Parent = Frame,
     })
     return Stroke, DarkStroke or Stroke
@@ -1835,7 +1838,7 @@ function Library:AddOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        LineJoinMode = Enum.LineJoinMode.Miter,
+        LineJoinMode = Enum.LineJoinMode.Round,
         Parent = Frame,
     })
     return Stroke, Stroke, Stroke
@@ -5424,17 +5427,6 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = Checkbox,
         })
-        -- fill frame sits above the outline so its gradient can cover stroke edges
-        local FillFrame = New("Frame", {
-            BackgroundColor3 = Library.Scheme.MainColor,
-            Size = UDim2.fromScale(1,1),
-            ZIndex = 2,
-            Parent = Checkbox,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius / 2),
-            Parent = FillFrame,
-        })
         local CheckboxDarkStroke = Library:AddShadowFrame(Checkbox)
 
         local CheckboxStroke = New("UIStroke", {
@@ -5449,14 +5441,13 @@ do
             Color = Library:GetAccentGradientSequence(),
             Rotation = 60,
             Enabled = false,
-            Parent = FillFrame,
+            Parent = Checkbox,
         })
         Library.Registry[CheckboxGradient] = {
             Color = function()
                 return Library:GetAccentGradientSequence()
             end,
         }
-        Library.Registry[FillFrame] = { BackgroundColor3 = "MainColor" }
 
         local CheckImage = New("ImageLabel", {
             Image = CheckIcon and CheckIcon.Url or "",
@@ -5480,16 +5471,13 @@ do
             end
 
             CheckboxStroke.Transparency = Toggle.Disabled and 0.5 or 0
-            if CheckboxDarkStroke then
-                CheckboxDarkStroke.Transparency = Toggle.Disabled and 0.5 or 0
-            end
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
                 -- Disable gradient and use dark background when disabled
                 CheckboxGradient.Enabled = false
-                FillFrame.BackgroundColor3 = Library.Scheme.BackgroundColor
-                Library.Registry[FillFrame].BackgroundColor3 = "BackgroundColor"
+                Checkbox.BackgroundColor3 = Library.Scheme.BackgroundColor
+                Library.Registry[Checkbox].BackgroundColor3 = "BackgroundColor"
                 return
             end
 
@@ -5497,19 +5485,16 @@ do
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
 
-            -- Hide main outline when checked; also hide shadow stroke
+            -- Hide main outline when checked; only the dark shadow border shows
             CheckboxStroke.Transparency = Toggle.Value and 1 or 0
-            if CheckboxDarkStroke then
-                CheckboxDarkStroke.Transparency = Toggle.Value and 1 or 0
-            end
 
             -- Enable gradient only when checked, restore accent gradient colors
             CheckboxGradient.Color = Library:GetAccentGradientSequence()
             CheckboxGradient.Enabled = Toggle.Value
 
             -- Use white when checked so the UIGradient shows pure accent colors without MainColor tinting
-            FillFrame.BackgroundColor3 = Toggle.Value and Color3.new(1, 1, 1) or Library.Scheme.MainColor
-            Library.Registry[FillFrame].BackgroundColor3 = Toggle.Value and function() return Color3.new(1, 1, 1) end or "MainColor"
+            Checkbox.BackgroundColor3 = Toggle.Value and Color3.new(1, 1, 1) or Library.Scheme.MainColor
+            Library.Registry[Checkbox].BackgroundColor3 = Toggle.Value and function() return Color3.new(1, 1, 1) end or "MainColor"
         end
 
         return FinishToggleSetup(Toggle, Button, Label, Groupbox, Idx)
@@ -5888,8 +5873,7 @@ do
             Parent = Bar,
         })
         local barMain, BarShadowStroke = Library:AddSmallOutline(Bar)
-        -- hide outline when slider has any value, leaving only unfilled border via shadow
-        barMain.Transparency = (Slider.Value ~= Slider.Min) and 1 or 0  -- colored outline visible on unfilled portion
+        barMain.Transparency = 1  -- hide colored outline so Fill gradient overlaps cleanly; black shadow always shows
 
         Library:AddHoverEffect(Bar, BarShadowStroke, Slider)
 
@@ -5912,7 +5896,7 @@ do
             BackgroundColor3 = "AccentColor",
             Size = UDim2.fromScale(0.5, 1),
             Parent = Bar,
-            ZIndex = 2,
+
             DPIExclude = {
                 Size = true,
             },
@@ -5980,8 +5964,6 @@ do
 
             local X = (Slider.Value - Slider.Min) / (Slider.Max - Slider.Min)
             TweenService:Create(Fill, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromScale(X, 1) }):Play()
-            -- main outline remains visible; fill is drawn above it (ZIndex of Fill is higher)
-            -- barMain.Transparency = (Slider.Value ~= Slider.Min) and 1 or 0
         end
 
         function Slider:OnChanged(Func)
