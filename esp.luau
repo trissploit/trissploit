@@ -113,9 +113,9 @@ local ESPSettings = {
     BoxSizingMode = "Static",
     -- Width multiplier for Static sizing mode (ratio of height)
     StaticBoxWidth = 0.6,
-    BoxColor = Color3.fromRGB(0, 170, 255),
+    BoxColor = Color3.fromRGB(0, 170, 255), -- outline color when gradient disabled
     Thickness = 2,
-    BoxOutlineColor = Color3.new(0, 0, 0),
+    BoxOutlineColor = Color3.new(0, 0, 0), -- inner+outer black borders (always 1px)
     -- Box outline gradient rotation animation
     BoxOutlineRotation = false,
     BoxOutlineRotationSpeed = 300,
@@ -171,10 +171,12 @@ Settings (table: `getgenv().TrisESP.Settings`)
 - BoxOutlineRotation (bool): Animate box outline gradient rotation.
 - BoxOutlineRotationSpeed (number): Degrees per second for outline rotation.
 - StaticBoxWidth (number): Width multiplier for Static sizing mode (ratio of height, default 0.6).
-- BoxOutlineColor (Color3): Outline color for box frames (outline stroke forced to 1px).
+- BoxColor (Color3): Outline color used when no gradient is active.
+- BoxOutlineColor (Color3): Color of the fixed inner/outer 1px black borders (usually black).
 - BoxGradientStops (table): Gradient stops for box outlines ({pos, color, transparency} arrays).
 - BoxFill (bool): Enable gradient-filled boxes (independent of `Boxes`).
 - BoxFillGradientStops (table): Gradient stops for box fill.
+- BoxFillColor (Color3): Fill color used when no gradient is active.
 - BoxFillTransparency (number 0-1): Transparency for the box fill layer.
 
 - Tracers (bool), TracerFrom ("Top"|"Bottom"|"Center"), TracerThickness, TracerColor
@@ -965,7 +967,7 @@ local function updateESP(deltaTime)
                         espObj.BoxOutline.Color = Color3.new(1, 1, 1)
                         stopsToUIGradient(espObj.OutlineGradient, outlineStops)
                     else
-                        espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
+                        espObj.BoxOutline.Color = getSetting("BoxColor", ESPSettings.BoxColor) or Color3.new(1,1,1)
                     end
                     espObj.OutlineGradient.Enabled = true
                     -- Box outline gradient rotation
