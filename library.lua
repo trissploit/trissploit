@@ -5912,7 +5912,9 @@ do
             Parent = Bar,
         })
         local barMain, BarShadowStroke = Library:AddSmallOutline(Bar)
-        barMain.Transparency = 1  -- hide colored outline so Fill gradient overlaps cleanly; black shadow always shows
+        -- keep the main outline visible so sliders have a border
+        -- (previously hidden by setting Transparency=1)
+        --barMain.Transparency = 1  -- hide colored outline so Fill gradient overlaps cleanly; black shadow always shows
 
         Library:AddHoverEffect(Bar, BarShadowStroke, Slider)
 
