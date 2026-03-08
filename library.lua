@@ -636,7 +636,10 @@ function Library:UpdateKeybindFrame()
         end
 
         visibleCount += 1
-        local FullSize = KeybindToggle.Label.Size.X.Offset + KeybindToggle.Label.Position.X.Offset
+        -- Measure text live with the current font so the frame resizes correctly when
+        -- the user switches to a font with different glyph widths.
+        local textW = Library:GetTextBounds(KeybindToggle.Label.Text or "", Library.Scheme.Font, 14)
+        local FullSize = textW + KeybindToggle.Label.Position.X.Offset
         if FullSize > XSize then
             XSize = FullSize
         end
@@ -1766,85 +1769,80 @@ function Library:AddHoverEffect(button, stroke, element)
 end
 
 function Library:AddShadowFrame(Frame: GuiObject)
-    -- wrapper-based approach borrowed from LinoriaLib
-    -- create an outer frame that acts as the black border, then reparent
-    -- the original frame inside it so the dark outline always sits **inside**
-    -- the parent bounds (avoids ClipsDescendants clipping) and makes it
-    -- trivial to control padding/size changes.
-
-    -- Skip if the frame has a UIListLayout (wrapper would break layout)
+    -- Skip if the frame has a UIListLayout
     if Frame:FindFirstChildOfClass("UIListLayout") then
         return nil
     end
 
+    -- Linoria-inspired approach: parent the shadow to ScreenGui (not the Frame).
+    -- Parenting inside the Frame caused two problems:
+    --   1. UICorner on the Frame clips children, cutting off shadow corners.
+    --   2. Ancestor ClipsDescendants (e.g. scrolling frames) clipped the 1px extension.
+    -- By living in ScreenGui we avoid both. AbsolutePosition signals keep it in sync.
+    -- Corner radius matches the Frame exactly (no +1 offset) so borders align perfectly.
     local corner = Frame:FindFirstChildOfClass("UICorner")
-    local shadowCornerRadius = corner
-        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 1)
-        or UDim.new(0, Library.CornerRadius + 1)
+    local cornerRadius = corner
+        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset)
+        or UDim.new(0, Library.CornerRadius)
 
-    local parent = Frame.Parent
-    if not parent then
-        return nil
-    end
+    local Shadow = Instance.new("Frame")
+    Shadow.BackgroundTransparency = 1
+    Shadow.ZIndex = math.max(1, Frame.ZIndex)
+    Shadow.Name = "_OutlineShadow"
+    Shadow.Parent = ScreenGui
 
-    -- create the wrapper
-    local Wrapper = Instance.new("Frame")
-    Wrapper.Name = "_OutlineWrapper"
-    Wrapper.BackgroundColor3 = Library.Scheme.Dark or Color3.new(0, 0, 0)
-    Wrapper.BorderSizePixel = 0
-    Wrapper.ZIndex = Frame.ZIndex
-    Wrapper.Position = Frame.Position - UDim2.fromOffset(1, 1)
-    Wrapper.Size = Frame.Size + UDim2.fromOffset(2, 2)
-    Wrapper.Parent = parent
-    -- allow theme updates to dark color
-    Library.Registry[Wrapper] = { BackgroundColor3 = "Dark" }
-
-    local WrapperCorner = Instance.new("UICorner")
-    WrapperCorner.CornerRadius = shadowCornerRadius
-    WrapperCorner.Parent = Wrapper
+    local ShadowCorner = Instance.new("UICorner")
+    ShadowCorner.CornerRadius = cornerRadius
+    ShadowCorner.Parent = Shadow
     Library._ShadowCorners = Library._ShadowCorners or {}
-    table.insert(Library._ShadowCorners, WrapperCorner)
-
-    -- reparent the original frame into wrapper and reposition
-    Frame.Parent = Wrapper
-    Frame.Position = UDim2.fromOffset(1, 1)
-
-    -- keep wrapper in sync with frame size/position changes
-    Frame:GetPropertyChangedSignal("Size"):Connect(function()
-        Wrapper.Size = Frame.Size + UDim2.fromOffset(2, 2)
-    end)
-    Frame:GetPropertyChangedSignal("Position"):Connect(function()
-        Wrapper.Position = Frame.Position - UDim2.fromOffset(1, 1)
-    end)
+    table.insert(Library._ShadowCorners, ShadowCorner)
 
     local DarkStroke = Instance.new("UIStroke")
     DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
     DarkStroke.Thickness = 1
     DarkStroke.LineJoinMode = Enum.LineJoinMode.Round
-    DarkStroke.Parent = Wrapper
+    DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
 
-    local function AdjustForPadding()
-        local pad = Frame:FindFirstChildOfClass("UIPadding")
-        if pad then
-            local pl = pad.PaddingLeft.Offset
-            local pr = pad.PaddingRight.Offset
-            local pt = pad.PaddingTop.Offset
-            local pb = pad.PaddingBottom.Offset
-            Wrapper.Position = Frame.Position - UDim2.fromOffset(1 + pl, 1 + pt)
-            Wrapper.Size = Frame.Size + UDim2.fromOffset(2 + pl + pr, 2 + pt + pb)
-        else
-            Wrapper.Position = Frame.Position - UDim2.fromOffset(1, 1)
-            Wrapper.Size = Frame.Size + UDim2.fromOffset(2, 2)
+    local conns = {}
+    local function syncShadow()
+        if not Shadow.Parent then return end
+        if not Frame or not Frame.Parent then
+            Shadow.Visible = false
+            return
+        end
+        -- When the Frame or any ancestor is invisible, AbsoluteSize collapses to 0
+        local absSize = Frame.AbsoluteSize
+        if absSize.X <= 0 and absSize.Y <= 0 then
+            Shadow.Visible = false
+            return
+        end
+        local absPos = Frame.AbsolutePosition
+        Shadow.Visible = true
+        Shadow.Position = UDim2.fromOffset(absPos.X - 1, absPos.Y - 1)
+        Shadow.Size = UDim2.fromOffset(absSize.X + 2, absSize.Y + 2)
+        Shadow.ZIndex = math.max(1, Frame.ZIndex)
+        -- Keep corner radius in sync (e.g. after a theme radius change)
+        if ShadowCorner then
+            local cr = corner
+                and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset)
+                or UDim.new(0, Library.CornerRadius)
+            ShadowCorner.CornerRadius = cr
         end
     end
-    AdjustForPadding()
-    Frame.ChildAdded:Connect(function(child)
-        if child:IsA("UIPadding") then
-            task.defer(AdjustForPadding)
-        elseif child:IsA("UIListLayout") then
-            pcall(function() Wrapper:Destroy() end)
-        end
+
+    table.insert(conns, Frame:GetPropertyChangedSignal("AbsolutePosition"):Connect(syncShadow))
+    table.insert(conns, Frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncShadow))
+    table.insert(conns, Frame:GetPropertyChangedSignal("ZIndex"):Connect(syncShadow))
+    if corner then
+        table.insert(conns, corner:GetPropertyChangedSignal("CornerRadius"):Connect(syncShadow))
+    end
+    task.defer(syncShadow)
+
+    Frame.Destroying:Connect(function()
+        for _, c in ipairs(conns) do pcall(c.Disconnect, c) end
+        conns = {}
+        pcall(Shadow.Destroy, Shadow)
     end)
 
     return DarkStroke
@@ -2128,15 +2126,29 @@ do
         })
         WM.Corner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
 
-        -- restore outlines for watermark
+        -- Outlines: use AccentColor for the outer UIStroke (Linoria watermark style)
         WM.OutlineStroke, WM.ShadowStroke, WM.OuterBlackStroke = Library:AddOutline(WM.Holder)
+        -- Override the default outline colour to AccentColor for a unique watermark look
+        WM.OutlineStroke.Color = Library.Scheme.AccentColor
+        Library.Registry[WM.OutlineStroke] = { Color = "AccentColor" }
+
+        -- Subtle gradient background: darker at top, base colour at bottom
+        -- (UIGradient multiplies with BackgroundColor3; Color3(0.7…) = ~30% darker)
+        New("UIGradient", {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.new(0.72, 0.72, 0.72)),
+                ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1)),
+            }),
+            Rotation = 90,
+            Parent = WM.Holder,
+        })
 
         -- optional icon support
         WM.IconName = nil
         WM.IconSize = 14
         WM.IconLabel = nil
 
-        -- Accent line at top of watermark (plain accent color, no gradient)
+        -- Top accent line (1 px, full width)
         WM.AccentLine = New("Frame", {
             BackgroundColor3 = "AccentColor",
             Size = UDim2.new(1, 0, 0, 1),
@@ -2144,6 +2156,15 @@ do
             Parent = WM.Holder,
         })
         WM.AccentLine.Visible = WM.ShowAccentLine
+
+        -- Left vertical accent strip (3 px, full height) — Linoria notification bar style
+        WM.LeftBar = New("Frame", {
+            BackgroundColor3 = "AccentColor",
+            Size = UDim2.new(0, 3, 1, 0),
+            ZIndex = 1001,
+            Parent = WM.Holder,
+        })
+        Library.Registry[WM.LeftBar] = { BackgroundColor3 = "AccentColor" }
 
         WM.Label = New("TextLabel", {
             BackgroundTransparency = 1,
@@ -2212,12 +2233,13 @@ do
                 iconOffset = WM.IconSize + 6
             end
 
-            WM.Holder.Size = UDim2.fromOffset((X + 16 + iconOffset) * Library.DPIScale, (Y + 8) * Library.DPIScale)
-            Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(X + 16 + iconOffset, Y + 8) })
+            -- 3px left bar + 4px gap = 7px extra left padding vs original 8px; use 14px from left edge
+            WM.Holder.Size = UDim2.fromOffset((X + 22 + iconOffset) * Library.DPIScale, (Y + 8) * Library.DPIScale)
+            Library:UpdateDPI(WM.Holder, { Size = UDim2.fromOffset(X + 22 + iconOffset, Y + 8) })
 
-            -- position label and optional icon
+            -- position label and optional icon (offset past the left accent bar)
             local holderHeight = (Y + 8)
-            WM.Label.Position = UDim2.fromOffset(8 + (WM.IconName and (WM.IconSize + 6) or 0), holderHeight / 2)
+            WM.Label.Position = UDim2.fromOffset(14 + (WM.IconName and (WM.IconSize + 6) or 0), holderHeight / 2)
             WM.Label.Size = UDim2.fromOffset(X, Y)
 
             if WM.IconName then
