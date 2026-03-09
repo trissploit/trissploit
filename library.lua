@@ -5594,38 +5594,46 @@ do
             Parent = Label,
         })
 
-        -- make switch slightly larger and offset so its fill extends beneath the outline
-        local Switch = New("Frame", {
+        -- outer/inner frames for toggle border
+        local ToggleOuter = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
-            BackgroundColor3 = "MainColor",
-            Position = UDim2.new(1, 0, 0, -1),
-            Size = UDim2.fromOffset(34, 20), -- 2px bigger each dimension
+            BackgroundColor3 = "Black",
+            BorderColor3 = "Black",
+            BorderSizePixel = 1,
+            Position = UDim2.fromScale(1, 0),
+            Size = UDim2.fromOffset(32, 18),
             Parent = Button,
         })
         New("UICorner", {
             CornerRadius = UDim.new(1, 0),
-            Parent = Switch,
+            Parent = ToggleOuter,
+        })
+
+        local ToggleSwitch = New("Frame", {
+            BackgroundColor3 = "MainColor",
+            BorderColor3 = "OutlineColor",
+            BorderSizePixel = 1,
+            BorderMode = Enum.BorderMode.Inset,
+            Size = UDim2.fromScale(1, 1),
+            Parent = ToggleOuter,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = ToggleSwitch,
         })
         New("UIPadding", {
             PaddingBottom = UDim.new(0, 2),
             PaddingLeft = UDim.new(0, 2),
             PaddingRight = UDim.new(0, 2),
             PaddingTop = UDim.new(0, 2),
-            Parent = Switch,
-        })
-        Library:AddShadowFrame(Switch)
-        local SwitchStroke = New("UIStroke", {
-            Color = "OutlineColor",
-            Thickness = 2,
-            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-            Parent = Switch,
+            Parent = ToggleSwitch,
         })
 
         local Ball = New("Frame", {
             BackgroundColor3 = "FontColor",
             Size = UDim2.fromScale(1, 1),
             SizeConstraint = Enum.SizeConstraint.RelativeYY,
-            Parent = Switch,
+            Parent = ToggleSwitch,
         })
         New("UICorner", {
             CornerRadius = UDim.new(1, 0),
@@ -5643,14 +5651,10 @@ do
 
             local Offset = Toggle.Value and 1 or 0
 
-            Switch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
-            SwitchStroke.Transparency = Toggle.Disabled and 0.75 or 0
-
-            Switch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
-            SwitchStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
-
-            Library.Registry[Switch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
-            Library.Registry[SwitchStroke].Color = Toggle.Value and "AccentColor" or "OutlineColor"
+            ToggleSwitch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
+            ToggleSwitch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
+            Library.Registry[ToggleSwitch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
+            -- stroke removed; border color controlled via ToggleSwitch properties
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
@@ -5897,27 +5901,43 @@ do
             })
         end
 
-        local Bar = New("TextButton", {
-            Active = not Slider.Disabled,
-            AnchorPoint = Vector2.new(0, 1),
-            BackgroundColor3 = "MainColor",
-            BorderColor3 = "OutlineColor",
-            BorderSizePixel = 0,
-            Position = UDim2.fromScale(0, 1),
+        -- Outer/inner frames for slider border (Linoria style)
+        local BarOuter = New("Frame", {
+            BackgroundColor3 = "Black",
+            BorderColor3 = "Black",
+            BorderSizePixel = 1,
             Size = UDim2.new(1, 0, 0, 13),
-            Text = "",
+            Position = UDim2.fromScale(0, 1),
+            AnchorPoint = Vector2.new(0, 1),
             Parent = Holder,
         })
         New("UICorner", {
             CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = BarOuter,
+        })
+
+        local Bar = New("TextButton", {
+            Active = not Slider.Disabled,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0),
+            Text = "",
+            Parent = BarOuter,
+        })
+
+        local BarInner = New("Frame", {
+            BackgroundColor3 = "MainColor",
+            BorderColor3 = "OutlineColor",
+            BorderSizePixel = 1,
+            BorderMode = Enum.BorderMode.Inset,
+            Size = UDim2.new(1, 0, 1, 0),
             Parent = Bar,
         })
-        local barMain, BarShadowStroke = Library:AddSmallOutline(Bar)
-        -- keep the main outline visible so sliders have a border
-        -- (previously hidden by setting Transparency=1)
-        --barMain.Transparency = 1  -- hide colored outline so Fill gradient overlaps cleanly; black shadow always shows
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = BarInner,
+        })
 
-        Library:AddHoverEffect(Bar, BarShadowStroke, Slider)
+        Library:AddHoverEffect(Bar, nil, Slider)
 
         local DisplayLabel = New("TextLabel", {
             BackgroundTransparency = 1,
@@ -5925,7 +5945,7 @@ do
             Text = "",
             TextSize = 14,
             ZIndex = 2,
-            Parent = Bar,
+            Parent = BarInner,
         })
         New("UIStroke", {
             ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
@@ -5934,16 +5954,13 @@ do
             Parent = DisplayLabel,
         })
 
-        -- fill bar extended by 1px around to overlap outline
         local Fill = New("Frame", {
             BackgroundColor3 = "AccentColor",
-            Position = UDim2.fromOffset(-1, -1),
-            Size = UDim2.fromScale(0.5, 1) + UDim2.fromOffset(2, 2),
-            Parent = Bar,
+            Size = UDim2.fromScale(0.5, 1),
+            Parent = BarInner,
 
             DPIExclude = {
                 Size = true,
-                Position = true,
             },
         })
         New("UICorner", {
@@ -9670,9 +9687,7 @@ function Library:CreateWindow(WindowInfo)
 
                     local denom = (SliderMax - SliderMin)
                     if denom <= 0 then denom = 1 end
-                    local frac = (SliderValueNum - SliderMin) / denom
-                    Fill.Size = UDim2.new(frac, 2, 1, 2)  -- expand by 2px total
-                    Fill.Position = UDim2.fromOffset(-1, -1)
+                    Fill.Size = UDim2.fromScale((SliderValueNum - SliderMin) / denom, 1)
                     DisplayLabel.Text = tostring(SliderValueNum) .. "%"
 
                     AimbotBox.HitChances[AimbotBox.SelectedPart] = SliderValueNum
@@ -9807,9 +9822,7 @@ function Library:CreateWindow(WindowInfo)
 
                             local denom = (SliderMax - SliderMin)
                             if denom <= 0 then denom = 1 end
-                            local frac = (chance - SliderMin) / denom
-                            Fill.Size = UDim2.new(frac, 2, 1, 2)
-                            Fill.Position = UDim2.fromOffset(-1, -1)
+                            Fill.Size = UDim2.fromScale((chance - SliderMin) / denom, 1)
                             DisplayLabel.Text = chance .. "%"
                             SliderLabel.Text = partInfo.Name
 
@@ -9916,9 +9929,7 @@ function Library:CreateWindow(WindowInfo)
                                 SliderMax = allowed
                                 local denom = (SliderMax - SliderMin)
                                 if denom <= 0 then denom = 1 end
-                                local frac2 = (numeric - SliderMin) / denom
-                                Fill.Size = UDim2.new(frac2, 2, 1, 2)
-                                Fill.Position = UDim2.fromOffset(-1, -1)
+                                Fill.Size = UDim2.fromScale((numeric - SliderMin) / denom, 1)
                                 DisplayLabel.Text = numeric .. "%"
                                 SliderValueNum = numeric
                             end
