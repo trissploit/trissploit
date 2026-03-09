@@ -5594,11 +5594,12 @@ do
             Parent = Label,
         })
 
+        -- make switch slightly larger and offset so its fill extends beneath the outline
         local Switch = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
             BackgroundColor3 = "MainColor",
-            Position = UDim2.fromScale(1, 0),
-            Size = UDim2.fromOffset(32, 18),
+            Position = UDim2.new(1, 0, 0, -1),
+            Size = UDim2.fromOffset(34, 20), -- 2px bigger each dimension
             Parent = Button,
         })
         New("UICorner", {
@@ -5933,13 +5934,16 @@ do
             Parent = DisplayLabel,
         })
 
+        -- fill bar extended by 1px around to overlap outline
         local Fill = New("Frame", {
             BackgroundColor3 = "AccentColor",
-            Size = UDim2.fromScale(0.5, 1),
+            Position = UDim2.fromOffset(-1, -1),
+            Size = UDim2.fromScale(0.5, 1) + UDim2.fromOffset(2, 2),
             Parent = Bar,
 
             DPIExclude = {
                 Size = true,
+                Position = true,
             },
         })
         New("UICorner", {
@@ -9666,7 +9670,9 @@ function Library:CreateWindow(WindowInfo)
 
                     local denom = (SliderMax - SliderMin)
                     if denom <= 0 then denom = 1 end
-                    Fill.Size = UDim2.fromScale((SliderValueNum - SliderMin) / denom, 1)
+                    local frac = (SliderValueNum - SliderMin) / denom
+                    Fill.Size = UDim2.new(frac, 2, 1, 2)  -- expand by 2px total
+                    Fill.Position = UDim2.fromOffset(-1, -1)
                     DisplayLabel.Text = tostring(SliderValueNum) .. "%"
 
                     AimbotBox.HitChances[AimbotBox.SelectedPart] = SliderValueNum
@@ -9801,7 +9807,9 @@ function Library:CreateWindow(WindowInfo)
 
                             local denom = (SliderMax - SliderMin)
                             if denom <= 0 then denom = 1 end
-                            Fill.Size = UDim2.fromScale((chance - SliderMin) / denom, 1)
+                            local frac = (chance - SliderMin) / denom
+                            Fill.Size = UDim2.new(frac, 2, 1, 2)
+                            Fill.Position = UDim2.fromOffset(-1, -1)
                             DisplayLabel.Text = chance .. "%"
                             SliderLabel.Text = partInfo.Name
 
@@ -9908,7 +9916,9 @@ function Library:CreateWindow(WindowInfo)
                                 SliderMax = allowed
                                 local denom = (SliderMax - SliderMin)
                                 if denom <= 0 then denom = 1 end
-                                Fill.Size = UDim2.fromScale((numeric - SliderMin) / denom, 1)
+                                local frac2 = (numeric - SliderMin) / denom
+                                Fill.Size = UDim2.new(frac2, 2, 1, 2)
+                                Fill.Position = UDim2.fromOffset(-1, -1)
                                 DisplayLabel.Text = numeric .. "%"
                                 SliderValueNum = numeric
                             end
