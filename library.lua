@@ -5594,46 +5594,37 @@ do
             Parent = Label,
         })
 
-        -- outer/inner frames for toggle border
-        local ToggleOuter = New("Frame", {
+        local Switch = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
-            BackgroundColor3 = "Black",
-            BorderColor3 = "Black",
-            BorderSizePixel = 1,
+            BackgroundColor3 = "MainColor",
             Position = UDim2.fromScale(1, 0),
             Size = UDim2.fromOffset(32, 18),
             Parent = Button,
         })
         New("UICorner", {
             CornerRadius = UDim.new(1, 0),
-            Parent = ToggleOuter,
-        })
-
-        local ToggleSwitch = New("Frame", {
-            BackgroundColor3 = "MainColor",
-            BorderColor3 = "OutlineColor",
-            BorderSizePixel = 1,
-            BorderMode = Enum.BorderMode.Inset,
-            Size = UDim2.fromScale(1, 1),
-            Parent = ToggleOuter,
-        })
-        New("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = ToggleSwitch,
+            Parent = Switch,
         })
         New("UIPadding", {
             PaddingBottom = UDim.new(0, 2),
             PaddingLeft = UDim.new(0, 2),
             PaddingRight = UDim.new(0, 2),
             PaddingTop = UDim.new(0, 2),
-            Parent = ToggleSwitch,
+            Parent = Switch,
+        })
+        Library:AddShadowFrame(Switch)
+        local SwitchStroke = New("UIStroke", {
+            Color = "OutlineColor",
+            Thickness = 2,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+            Parent = Switch,
         })
 
         local Ball = New("Frame", {
             BackgroundColor3 = "FontColor",
             Size = UDim2.fromScale(1, 1),
             SizeConstraint = Enum.SizeConstraint.RelativeYY,
-            Parent = ToggleSwitch,
+            Parent = Switch,
         })
         New("UICorner", {
             CornerRadius = UDim.new(1, 0),
@@ -5651,10 +5642,14 @@ do
 
             local Offset = Toggle.Value and 1 or 0
 
-            ToggleSwitch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
-            ToggleSwitch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
-            Library.Registry[ToggleSwitch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
-            -- stroke removed; border color controlled via ToggleSwitch properties
+            Switch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
+            SwitchStroke.Transparency = Toggle.Disabled and 0.75 or 0
+
+            Switch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
+            SwitchStroke.Color = Toggle.Value and Library:GetDarkerColor(Library.Scheme.AccentColor) or Library.Scheme.OutlineColor
+
+            Library.Registry[Switch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
+            Library.Registry[SwitchStroke].Color = Toggle.Value and function() return Library:GetDarkerColor(Library.Scheme.AccentColor) end or "OutlineColor"
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
@@ -5901,43 +5896,27 @@ do
             })
         end
 
-        -- Outer/inner frames for slider border (Linoria style)
-        local BarOuter = New("Frame", {
-            BackgroundColor3 = "Black",
-            BorderColor3 = "Black",
-            BorderSizePixel = 1,
-            Size = UDim2.new(1, 0, 0, 13),
-            Position = UDim2.fromScale(0, 1),
+        local Bar = New("TextButton", {
+            Active = not Slider.Disabled,
             AnchorPoint = Vector2.new(0, 1),
+            BackgroundColor3 = "MainColor",
+            BorderColor3 = "OutlineColor",
+            BorderSizePixel = 0,
+            Position = UDim2.fromScale(0, 1),
+            Size = UDim2.new(1, 0, 0, 13),
+            Text = "",
             Parent = Holder,
         })
         New("UICorner", {
             CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = BarOuter,
-        })
-
-        local Bar = New("TextButton", {
-            Active = not Slider.Disabled,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 1, 0),
-            Text = "",
-            Parent = BarOuter,
-        })
-
-        local BarInner = New("Frame", {
-            BackgroundColor3 = "MainColor",
-            BorderColor3 = "OutlineColor",
-            BorderSizePixel = 1,
-            BorderMode = Enum.BorderMode.Inset,
-            Size = UDim2.new(1, 0, 1, 0),
             Parent = Bar,
         })
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = BarInner,
-        })
+        local barMain, BarShadowStroke = Library:AddSmallOutline(Bar)
+        -- keep the main outline visible so sliders have a border
+        -- (previously hidden by setting Transparency=1)
+        --barMain.Transparency = 1  -- hide colored outline so Fill gradient overlaps cleanly; black shadow always shows
 
-        Library:AddHoverEffect(Bar, nil, Slider)
+        Library:AddHoverEffect(Bar, BarShadowStroke, Slider)
 
         local DisplayLabel = New("TextLabel", {
             BackgroundTransparency = 1,
@@ -5945,7 +5924,7 @@ do
             Text = "",
             TextSize = 14,
             ZIndex = 2,
-            Parent = BarInner,
+            Parent = Bar,
         })
         New("UIStroke", {
             ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
@@ -5957,7 +5936,7 @@ do
         local Fill = New("Frame", {
             BackgroundColor3 = "AccentColor",
             Size = UDim2.fromScale(0.5, 1),
-            Parent = BarInner,
+            Parent = Bar,
 
             DPIExclude = {
                 Size = true,
@@ -5978,6 +5957,18 @@ do
             end,
         }
 
+        -- LinoriaLib-style: fill edge outline in a darker shade of accent
+        local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+        local FillStroke = New("UIStroke", {
+            Color = Library:GetDarkerColor(Library.Scheme.AccentColor),
+            Thickness = 1,
+            LineJoinMode = joinMode,
+            Parent = Fill,
+        })
+        Library.Registry[FillStroke] = {
+            Color = function() return Library:GetDarkerColor(Library.Scheme.AccentColor) end,
+        }
+
         function Slider:UpdateColors()
             if Library.Unloaded then
                 return
@@ -5989,6 +5980,7 @@ do
             DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or 0
 
             FillGradient.Enabled = not Slider.Disabled
+            FillStroke.Enabled = not Slider.Disabled
             Fill.BackgroundColor3 = Slider.Disabled and Library.Scheme.OutlineColor or Color3.new(1, 1, 1)
             Library.Registry[Fill].BackgroundColor3 = Slider.Disabled and "OutlineColor" or function() return Color3.new(1, 1, 1) end
         end
