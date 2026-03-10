@@ -1847,6 +1847,10 @@ function Library:AddShadowFrame(Frame: GuiObject)
         end
     end)
 
+    -- update on size changes so outline follows the element
+    Frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(AdjustForPadding)
+    Frame:GetPropertyChangedSignal("Size"):Connect(AdjustForPadding)
+
     return DarkStroke
 end
 
@@ -8104,9 +8108,9 @@ function Library:CreateWindow(WindowInfo)
             if sc and sc.Parent and sc:IsA("UICorner") then
                 local base = sc.Parent:FindFirstChildOfClass("UICorner")
                 if base then
-                    sc.CornerRadius = UDim.new(base.CornerRadius.Scale, base.CornerRadius.Offset + 1)
+                    sc.CornerRadius = UDim.new(base.CornerRadius.Scale, base.CornerRadius.Offset)
                 else
-                    sc.CornerRadius = UDim.new(0, Library.CornerRadius + 1)
+                    sc.CornerRadius = UDim.new(0, Library.CornerRadius)
                 end
             end
         end
