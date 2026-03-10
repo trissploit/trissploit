@@ -144,16 +144,14 @@ do
         getgenv().TrisNotifyDuration = getgenv().TrisNotifyDuration or 5
         library.NotifyOffsetX = library.NotifyOffsetX or 0
         library.NotifyOffsetY = library.NotifyOffsetY or 0
-        library.NotifyAlignment = library.NotifyAlignment or Enum.HorizontalAlignment.Right
+        library.NotifyAlignment = library.NotifyAlignment or Enum.HorizontalAlignment.Left
 
-        -- patch notifications: strip icons and update position/alignment
+        -- patch notifications: apply default duration and position/alignment
         if library.Notify then
             local _orig = library.Notify
             library.Notify = function(self, ...)
                 local info = select(1, ...)
                 if type(info) == "table" then
-                    info.Icon = nil
-                    info.IconName = nil
                     if not info.Time and getgenv().TrisNotifyDuration then
                         info.Time = getgenv().TrisNotifyDuration
                     end
@@ -660,17 +658,21 @@ do
         box:AddDropdown("NotifyAlignment", {
             Text    = "Alignment",
             Values  = {"Left", "Center", "Right"},
-            Default = (lib.NotifyAlignment == Enum.HorizontalAlignment.Right and "Right") or
-                      (lib.NotifyAlignment == Enum.HorizontalAlignment.Center and "Center") or
-                      "Left",
+            Default = "Left",
             Callback = function(val)
                 lib.NotifyAlignment = Enum.HorizontalAlignment[val]
                 if lib.NotificationList then
                     lib.NotificationList.HorizontalAlignment = lib.NotifyAlignment
                 end
-                if lib.RefreshNotificationAccent then
-                    pcall(function() lib:RefreshNotificationAccent() end)
-                end
+            end
+        })
+        box:AddDropdown("NotifyAccentSide", {
+            Text    = "Accent Bar Side",
+            Values  = {"Left", "Right", "Top", "Bottom"},
+            Default = lib.NotifyAccentSide or "Left",
+            Tooltip = "Side the accent color bar appears on notifications",
+            Callback = function(val)
+                lib.NotifyAccentSide = val
             end
         })
 
