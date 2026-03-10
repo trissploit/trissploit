@@ -1796,9 +1796,11 @@ function Library:AddShadowFrame(Frame: GuiObject)
     -- visible around the colored outline without stacking UIStrokes on the same object.
     local corner = Frame:FindFirstChildOfClass("UICorner")
     local baseRadius = corner and corner.CornerRadius.Offset or Library.CornerRadius
+    -- shadow radius matches the element's radius exactly; previous +1 offset caused
+    -- corner bulging when the gap was only 1px, making the outline look uneven.
     local shadowCornerRadius = corner
-        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + (baseRadius > 0 and 1 or 0))
-        or UDim.new(0, Library.CornerRadius + (Library.CornerRadius > 0 and 1 or 0))
+        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset)
+        or UDim.new(0, Library.CornerRadius)
 
     local Shadow = Instance.new("Frame")
     Shadow.BackgroundTransparency = 1
@@ -1819,6 +1821,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
     local DarkStroke = Instance.new("UIStroke")
     DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
     DarkStroke.Thickness = 1
+    DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
@@ -1854,6 +1857,7 @@ function Library:AddSmallOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
         Parent = Frame,
     })
@@ -1866,6 +1870,7 @@ function Library:AddOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
         Parent = Frame,
     })
