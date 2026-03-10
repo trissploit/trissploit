@@ -144,7 +144,7 @@ do
         getgenv().TrisNotifyDuration = getgenv().TrisNotifyDuration or 5
         library.NotifyOffsetX = library.NotifyOffsetX or 0
         library.NotifyOffsetY = library.NotifyOffsetY or 0
-        library.NotifyAlignment = library.NotifyAlignment or Enum.HorizontalAlignment.Left
+        library.NotifyAlignment = library.NotifyAlignment or Enum.HorizontalAlignment.Right
 
         -- patch notifications: strip icons and update position/alignment
         if library.Notify then
@@ -660,11 +660,16 @@ do
         box:AddDropdown("NotifyAlignment", {
             Text    = "Alignment",
             Values  = {"Left", "Center", "Right"},
-            Default = "Left",
+            Default = (lib.NotifyAlignment == Enum.HorizontalAlignment.Right and "Right") or
+                      (lib.NotifyAlignment == Enum.HorizontalAlignment.Center and "Center") or
+                      "Left",
             Callback = function(val)
                 lib.NotifyAlignment = Enum.HorizontalAlignment[val]
                 if lib.NotificationList then
                     lib.NotificationList.HorizontalAlignment = lib.NotifyAlignment
+                end
+                if lib.RefreshNotificationAccent then
+                    pcall(function() lib:RefreshNotificationAccent() end)
                 end
             end
         })
