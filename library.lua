@@ -7917,7 +7917,7 @@ function Library:Notify(...)
     Library.Notifications[FakeBackground] = Data
 
     -- attach accent bar updater to global list (optional)
-    Data:_updateAccent = function()
+    Data._updateAccent = function()
         if Holder and Holder:GetChildren() then
             for _, child in ipairs(Holder:GetChildren()) do
                 if child.Name == "AccentBar" then
