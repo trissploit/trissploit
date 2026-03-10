@@ -1821,7 +1821,6 @@ function Library:AddShadowFrame(Frame: GuiObject)
     local DarkStroke = Instance.new("UIStroke")
     DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
     DarkStroke.Thickness = 1
-    DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
@@ -6370,6 +6369,8 @@ do
                     if scrollLabel then
                         scrollLabel:Destroy()
                     end
+                    -- Recalculate list size using current absolute position now that menu is visible
+                    Dropdown:RecalculateListSize()
                 elseif not Active then
                     -- Resume scrolling when menu closes
                     Dropdown:Display()
@@ -6390,23 +6391,31 @@ do
         function Dropdown:RecalculateListSize(Count)
             local actualCount = Count or GetTableSize(Dropdown.Values)
             local itemHeight = 21 * Library.DPIScale
-            local actualHeight = actualCount * itemHeight
-            local maxHeight = Info.MaxVisibleDropdownItems * itemHeight
+            local totalItemHeight = actualCount * itemHeight
 
             -- include menu padding so the bottom item is fully visible when not scrolling
             local pad = MenuTable.Menu:FindFirstChildOfClass("UIPadding")
             local padTop = (pad and pad.PaddingTop.Offset or 0) * Library.DPIScale
             local padBottom = (pad and pad.PaddingBottom.Offset or 0) * Library.DPIScale
+            local totalPad = padTop + padBottom
 
-            local Y = math.clamp(actualHeight + padTop + padBottom, 0, maxHeight)
+            -- max height: fill available screen space below the display button,
+            -- only scroll when the list would go off-screen
+            local function computeY()
+                local viewportH = workspace.CurrentCamera.ViewportSize.Y
+                local dispBottom = Display.AbsolutePosition.Y + Display.AbsoluteSize.Y
+                local available = math.max(60, viewportH - dispBottom - 6)
+                return math.min(totalItemHeight + totalPad, available)
+            end
 
             MenuTable:SetSize(function()
-                return UDim2.fromOffset(Display.AbsoluteSize.X, Y)
+                return UDim2.fromOffset(Display.AbsoluteSize.X, computeY())
             end)
 
-            -- enable scrolling only if content overflows menu height
+            -- enable scrolling only if content overflows available space
             if MenuTable.Menu:IsA("ScrollingFrame") then
-                MenuTable.Menu.ScrollingEnabled = actualHeight > Y
+                local Y = computeY()
+                MenuTable.Menu.ScrollingEnabled = (totalItemHeight + totalPad) > Y
             end
         end
 
