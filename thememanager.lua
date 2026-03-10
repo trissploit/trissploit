@@ -141,28 +141,17 @@ do
         end)
 
         -- default notify globals/fields
-        getgenv().TrisNotifyDuration = getgenv().TrisNotifyDuration or 5
         library.NotifyOffsetX = library.NotifyOffsetX or 0
         library.NotifyOffsetY = library.NotifyOffsetY or 0
         library.NotifyAlignment = library.NotifyAlignment or Enum.HorizontalAlignment.Left
 
-        -- patch notifications: apply default duration and position/alignment
+        -- patch notifications: apply position/alignment before each notification
         if library.Notify then
             local _orig = library.Notify
             library.Notify = function(self, ...)
-                local info = select(1, ...)
-                if type(info) == "table" then
-                    if not info.Time and getgenv().TrisNotifyDuration then
-                        info.Time = getgenv().TrisNotifyDuration
-                    end
-                end
                 pcall(function()
-                    if library.NotificationArea then
-                        local pos = library.NotificationArea.Position
-                        library.NotificationArea.Position = UDim2.new(
-                            pos.X.Scale, library.NotifyOffsetX or 0,
-                            pos.Y.Scale, library.NotifyOffsetY or 0
-                        )
+                    if library.SetNotifySide then
+                        library:SetNotifySide(library.NotifySide or "Right")
                     end
                     if library.NotificationList then
                         library.NotificationList.HorizontalAlignment = library.NotifyAlignment
@@ -587,38 +576,12 @@ do
         -- notification settings
         box:AddDivider()
         box:AddDropdown("NotifyBarSide", {
-            Text    = "Bar Side",
+            Text    = "Notification Side",
             Values  = {"Right", "Left"},
             Default = lib.NotifySide or "Right",
-            Tooltip = "Side the accent color bar appears on",
+            Tooltip = "Which side of the screen notifications appear on",
             Callback = function(val)
                 pcall(function() lib:SetNotifySide(val) end)
-            end
-        })
-        box:AddSlider("NotifyDuration", {
-            Text     = "Duration",
-            Default  = getgenv().TrisNotifyDuration or 5,
-            Min      = 1,
-            Max      = 20,
-            Rounding = 0,
-            Suffix   = "s",
-            Callback = function(val)
-                getgenv().TrisNotifyDuration = val
-            end
-        })
-        box:AddSlider("NotifyWidth", {
-            Text     = "Width",
-            Default  = (lib.NotificationArea and lib.NotificationArea.Size.X.Offset) or 300,
-            Min      = 150,
-            Max      = 500,
-            Rounding = 0,
-            Suffix   = "px",
-            Callback = function(val)
-                pcall(function()
-                    if lib.NotificationArea then
-                        lib.NotificationArea.Size = UDim2.new(0, val, 1, -6)
-                    end
-                end)
             end
         })
         box:AddSlider("NotifyPosX", {
@@ -630,12 +593,7 @@ do
             Suffix   = "px",
             Callback = function(val)
                 lib.NotifyOffsetX = val
-                pcall(function()
-                    if lib.NotificationArea then
-                        local pos = lib.NotificationArea.Position
-                        lib.NotificationArea.Position = UDim2.new(pos.X.Scale, val, pos.Y.Scale, lib.NotifyOffsetY or 0)
-                    end
-                end)
+                pcall(function() lib:SetNotifySide(lib.NotifySide or "Right") end)
             end
         })
         box:AddSlider("NotifyPosY", {
@@ -647,38 +605,41 @@ do
             Suffix   = "px",
             Callback = function(val)
                 lib.NotifyOffsetY = val
-                pcall(function()
-                    if lib.NotificationArea then
-                        local pos = lib.NotificationArea.Position
-                        lib.NotificationArea.Position = UDim2.new(pos.X.Scale, lib.NotifyOffsetX or 0, pos.Y.Scale, val)
-                    end
-                end)
+                pcall(function() lib:SetNotifySide(lib.NotifySide or "Right") end)
             end
         })
         box:AddDropdown("NotifyAlignment", {
-            Text    = "Alignment",
-            Values  = {"Left", "Center", "Right"},
-            Default = "Left",
+            Text    = "Accent Bar / Alignment",
+            Values  = {"Left", "Right", "Top", "Bottom"},
+            Default = lib.NotifyAccentSide or "Left",
+            Tooltip = "Controls accent bar position and notification alignment",
             Callback = function(val)
-                lib.NotifyAlignment = Enum.HorizontalAlignment[val]
+                lib.NotifyAccentSide = val
+                -- Map alignment: Left/Top → Left, Right/Bottom → Right
+                local align = (val == "Right" or val == "Bottom") and "Right" or "Left"
+                lib.NotifyAlignment = Enum.HorizontalAlignment[align]
                 if lib.NotificationList then
                     lib.NotificationList.HorizontalAlignment = lib.NotifyAlignment
                 end
             end
         })
-        box:AddDropdown("NotifyAccentSide", {
-            Text    = "Accent Bar Side",
-            Values  = {"Left", "Right", "Top", "Bottom"},
-            Default = lib.NotifyAccentSide or "Left",
-            Tooltip = "Side the accent color bar appears on notifications",
+        box:AddDivider()
+        box:AddSlider("MenuTransparency", {
+            Text     = "Menu Transparency",
+            Default  = lib.MenuTransparency or 0,
+            Min      = 0,
+            Max      = 0.95,
+            Rounding = 2,
             Callback = function(val)
-                lib.NotifyAccentSide = val
+                if lib.SetMenuTransparency then
+                    lib:SetMenuTransparency(val)
+                end
             end
         })
         box:AddButton("Test Notification", function()
             lib:Notify({
                 Description = "This is an example notification!",
-                Time = getgenv().TrisNotifyDuration or 5,
+                Time = 5,
             })
         end)
 
