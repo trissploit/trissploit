@@ -1857,7 +1857,6 @@ function Library:AddSmallOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
         Parent = Frame,
     })
@@ -1870,7 +1869,6 @@ function Library:AddOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
         Parent = Frame,
     })
