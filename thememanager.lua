@@ -675,6 +675,12 @@ do
                 lib.NotifyAccentSide = val
             end
         })
+        box:AddButton("Test Notification", function()
+            lib:Notify({
+                Description = "This is an example notification!",
+                Time = getgenv().TrisNotifyDuration or 5,
+            })
+        end)
 
         return box
     end
