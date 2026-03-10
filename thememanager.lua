@@ -123,6 +123,56 @@ do
 
     function ThemeManager:SetLibrary(library)
         self.Library = library
+
+        -- ensure watermark exists and is visible
+        pcall(function()
+            if library.CreateWatermark then
+                library:CreateWatermark("tris.rocks")
+                library:ToggleWatermark(true)
+                if library.SetWatermarkAccentLine then
+                    library:SetWatermarkAccentLine(true)
+                end
+            elseif library.SetWatermark then
+                library:SetWatermark("tris.rocks")
+                if library.SetWatermarkVisibility then
+                    library:SetWatermarkVisibility(true)
+                end
+            end
+        end)
+
+        -- default notify globals/fields
+        getgenv().TrisNotifyDuration = getgenv().TrisNotifyDuration or 5
+        library.NotifyOffsetX = library.NotifyOffsetX or 0
+        library.NotifyOffsetY = library.NotifyOffsetY or 0
+        library.NotifyAlignment = library.NotifyAlignment or Enum.HorizontalAlignment.Left
+
+        -- patch notifications: strip icons and update position/alignment
+        if library.Notify then
+            local _orig = library.Notify
+            library.Notify = function(self, ...)
+                local info = select(1, ...)
+                if type(info) == "table" then
+                    info.Icon = nil
+                    info.IconName = nil
+                    if not info.Time and getgenv().TrisNotifyDuration then
+                        info.Time = getgenv().TrisNotifyDuration
+                    end
+                end
+                pcall(function()
+                    if library.NotificationArea then
+                        local pos = library.NotificationArea.Position
+                        library.NotificationArea.Position = UDim2.new(
+                            pos.X.Scale, library.NotifyOffsetX or 0,
+                            pos.Y.Scale, library.NotifyOffsetY or 0
+                        )
+                    end
+                    if library.NotificationList then
+                        library.NotificationList.HorizontalAlignment = library.NotifyAlignment
+                    end
+                end)
+                return _orig(self, ...)
+            end
+        end
     end
 
     --// Folders \\--
@@ -497,24 +547,26 @@ do
     -- optional UI Options box for UI toggles (alias: CreateMenuBox)
     function ThemeManager:CreateMiscBox(tab)
         assert(self.Library, "Must set ThemeManager.Library first!")
+        local lib = self.Library
         local box = tab:AddLeftGroupbox("UI Settings", "settings")
-        box:AddToggle("Watermark", { Text = "Watermark", Default = self.Library.Watermark or false, Callback = function(v)
-            self.Library:ToggleWatermark(v)
-            self.Library.Watermark = v
+
+        -- watermark toggle and fields
+        box:AddToggle("Watermark", { Text = "Watermark", Default = lib.Watermark or false, Callback = function(v)
+            lib:ToggleWatermark(v)
+            lib.Watermark = v
             if getgenv then
                 getgenv().watermark = v
             end
-            -- Auto-set watermark icon to Library.Icon (the window icon)
-            if v and typeof(self.Library.SetWatermarkIcon) == "function" and self.Library.WindowIconId then
-                self.Library:SetWatermarkIcon(self.Library.WindowIconId)
+            if v and typeof(lib.SetWatermarkIcon) == "function" and lib.WindowIconId then
+                lib:SetWatermarkIcon(lib.WindowIconId)
             end
         end })
-        box:AddToggle("ShowKeybindList", { Text = "Keybind list", Default = (self.Library.KeybindFrame and self.Library.KeybindFrame.Visible) or false, Callback = function(v)
-            if self.Library.KeybindFrame then
-                self.Library.KeybindFrame.Visible = v
+        box:AddToggle("ShowKeybindList", { Text = "Keybind list", Default = (lib.KeybindFrame and lib.KeybindFrame.Visible) or false, Callback = function(v)
+            if lib.KeybindFrame then
+                lib.KeybindFrame.Visible = v
             end
-            if self.Library.UpdateKeybindFrame then
-                self.Library:UpdateKeybindFrame()
+            if lib.UpdateKeybindFrame then
+                lib:UpdateKeybindFrame()
             end
         end })
         box:AddDivider()
@@ -529,10 +581,94 @@ do
                     end
                 end
             end
-            if typeof(self.Library.SetWatermarkFields) == "function" then
-                self.Library:SetWatermarkFields(fields)
+            if typeof(lib.SetWatermarkFields) == "function" then
+                lib:SetWatermarkFields(fields)
             end
         end })
+
+        -- notification settings
+        box:AddDivider()
+        box:AddDropdown("NotifyBarSide", {
+            Text    = "Bar Side",
+            Values  = {"Right", "Left"},
+            Default = lib.NotifySide or "Right",
+            Tooltip = "Side the accent color bar appears on",
+            Callback = function(val)
+                pcall(function() lib:SetNotifySide(val) end)
+            end
+        })
+        box:AddSlider("NotifyDuration", {
+            Text     = "Duration",
+            Default  = getgenv().TrisNotifyDuration or 5,
+            Min      = 1,
+            Max      = 20,
+            Rounding = 0,
+            Suffix   = "s",
+            Callback = function(val)
+                getgenv().TrisNotifyDuration = val
+            end
+        })
+        box:AddSlider("NotifyWidth", {
+            Text     = "Width",
+            Default  = (lib.NotificationArea and lib.NotificationArea.Size.X.Offset) or 300,
+            Min      = 150,
+            Max      = 500,
+            Rounding = 0,
+            Suffix   = "px",
+            Callback = function(val)
+                pcall(function()
+                    if lib.NotificationArea then
+                        lib.NotificationArea.Size = UDim2.new(0, val, 1, -6)
+                    end
+                end)
+            end
+        })
+        box:AddSlider("NotifyPosX", {
+            Text     = "X Offset",
+            Default  = lib.NotifyOffsetX or 0,
+            Min      = -500,
+            Max      = 500,
+            Rounding = 0,
+            Suffix   = "px",
+            Callback = function(val)
+                lib.NotifyOffsetX = val
+                pcall(function()
+                    if lib.NotificationArea then
+                        local pos = lib.NotificationArea.Position
+                        lib.NotificationArea.Position = UDim2.new(pos.X.Scale, val, pos.Y.Scale, lib.NotifyOffsetY or 0)
+                    end
+                end)
+            end
+        })
+        box:AddSlider("NotifyPosY", {
+            Text     = "Y Offset",
+            Default  = lib.NotifyOffsetY or 0,
+            Min      = -500,
+            Max      = 500,
+            Rounding = 0,
+            Suffix   = "px",
+            Callback = function(val)
+                lib.NotifyOffsetY = val
+                pcall(function()
+                    if lib.NotificationArea then
+                        local pos = lib.NotificationArea.Position
+                        lib.NotificationArea.Position = UDim2.new(pos.X.Scale, lib.NotifyOffsetX or 0, pos.Y.Scale, val)
+                    end
+                end)
+            end
+        })
+        box:AddDropdown("NotifyAlignment", {
+            Text    = "Alignment",
+            Values  = {"Left", "Center", "Right"},
+            Default = "Left",
+            Callback = function(val)
+                lib.NotifyAlignment = Enum.HorizontalAlignment[val]
+                if lib.NotificationList then
+                    lib.NotificationList.HorizontalAlignment = lib.NotifyAlignment
+                end
+            end
+        })
+
         return box
     end
     ThemeManager.CreateMenuBox = ThemeManager.CreateMiscBox
