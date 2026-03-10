@@ -164,6 +164,10 @@ local Library = {
     MobileButtons = {},
 
     Notifications = {},
+    -- notification positioning helpers
+    NotifyOffsetX = 0,
+    NotifyOffsetY = 0,
+    NotifyAlignment = Enum.HorizontalAlignment.Right,
 
     ToggleKeybind = Enum.KeyCode.RightControl,
     TweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
@@ -7630,13 +7634,16 @@ end
 function Library:SetNotifySide(Side: string)
     Library.NotifySide = Side
 
+    local offx = Library.NotifyOffsetX or 0
+    local offy = Library.NotifyOffsetY or 0
+
     if Side:lower() == "left" then
         NotificationArea.AnchorPoint = Vector2.new(0, 0)
-        NotificationArea.Position = UDim2.fromOffset(6, 6)
+        NotificationArea.Position = UDim2.fromOffset(6 + offx, 6 + offy)
         NotificationList.HorizontalAlignment = Enum.HorizontalAlignment.Left
     else
         NotificationArea.AnchorPoint = Vector2.new(1, 0)
-        NotificationArea.Position = UDim2.new(1, -6, 0, 6)
+        NotificationArea.Position = UDim2.new(1, -6 + offx, 0, 6 + offy)
         NotificationList.HorizontalAlignment = Enum.HorizontalAlignment.Right
     end
 end
@@ -7715,12 +7722,11 @@ function Library:Notify(...)
 
     -- Determine notification style (default = MainColor).
     local notifyColorName = "MainColor"
-    local iconData = nil
     if Data.Type then
         local t = tostring(Data.Type):lower()
         if t == "warning" or t == "warn" then
             notifyColorName = "Red"
-            -- intentionally no icon for warning notifications
+            -- no icon will ever be shown
         end
     end
 
@@ -7728,39 +7734,32 @@ function Library:Notify(...)
         Holder.BackgroundColor3 = Library.Scheme[notifyColorName]
     end
 
-    -- Decide icon for the notification (allow override via Info.Icon or Info.IconName)
-    local iconData = nil
-    do
-        local iconName = nil
-        if Info.IconName then
-            iconName = Info.IconName
-        elseif Info.Icon then
-            iconName = Info.Icon
-        else
-            local t = Data.Type and tostring(Data.Type):lower() or "info"
-            local TypeIconMap = {
-                info = "bell",
-                notice = "bell",
-                success = "check-circle",
-                ok = "check-circle",
-                error = "x-circle",
-                fail = "x-circle",
-                warning = "alert-triangle",
-                warn = "alert-triangle",
-            }
-            iconName = TypeIconMap[t] or "bell"
-        end
+    -- add accent bar aligned to current setting
+    local AccentBar = New("Frame", {
+        BackgroundColor3 = "AccentColor",
+        Size = UDim2.new(0, 3, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
+        Parent = Holder,
+    })
+    Library.Registry[AccentBar] = { BackgroundColor3 = function() return Library.Scheme.AccentColor end }
 
-        if iconName then
-            -- prefer custom URL if provided; otherwise try lucide asset
-            local ok, data = pcall(function() return Library:GetCustomIcon(iconName) end)
-            if ok and data then
-                iconData = data
-            else
-                pcall(function() iconData = Library:GetIcon(iconName) end)
-            end
+    local function _updateBar()
+        if not AccentBar or not Holder then return end
+        local align = Library.NotifyAlignment or Enum.HorizontalAlignment.Right
+        local w = Holder.AbsoluteSize.X
+        if align == Enum.HorizontalAlignment.Left then
+            AccentBar.Position = UDim2.new(0, 0, 0, 0)
+            AccentBar.Size = UDim2.new(0, 3, 1, 0)
+        elseif align == Enum.HorizontalAlignment.Right then
+            AccentBar.Position = UDim2.new(1, -3, 0, 0)
+            AccentBar.Size = UDim2.new(0, 3, 1, 0)
+        else -- center
+            AccentBar.Position = UDim2.new(0.5, -1.5, 0, 0)
+            AccentBar.Size = UDim2.new(0, 3, 1, 0)
         end
     end
+    Holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(_updateBar)
+    _updateBar()
 
     local Title
     local Desc
@@ -7858,21 +7857,6 @@ function Library:Notify(...)
         if DeleteConnection then
             DeleteConnection:Disconnect()
         end
-        -- cleanup icon and its connections if present
-        if Data._icon_conns then
-            pcall(function()
-                for _, c in pairs(Data._icon_conns) do
-                    if c and c.Connected then
-                        c:Disconnect()
-                    end
-                end
-            end)
-            Data._icon_conns = nil
-        end
-        if Data._icon then
-            Data._icon:Destroy()
-            Data._icon = nil
-        end
 
         TweenService
             :Create(Holder, Library.NotifyTweenInfo, {
@@ -7888,48 +7872,6 @@ function Library:Notify(...)
 
     Data:Resize()
 
-    -- Create icon inside the Holder after sizing so it moves with the notification
-    if iconData then
-        local Img = New("ImageLabel", {
-            Size = UDim2.fromOffset(14 * Library.DPIScale, 14 * Library.DPIScale),
-            BackgroundTransparency = 1,
-            Image = iconData.Url,
-            Parent = ScreenGui, -- use absolute positioning relative to screen
-            AnchorPoint = Vector2.new(0, 0),
-            Position = UDim2.fromOffset(0, 0),
-            ZIndex = 10,
-            ScaleType = Enum.ScaleType.Crop,
-            Visible = false, -- Start invisible until notification slides in
-        })
-        -- store reference
-        Data._icon = Img
-
-        local function UpdateIconPosition()
-            if not (FakeBackground and FakeBackground.Parent and Img and Img.Parent) then return end
-            local fbPos = FakeBackground.AbsolutePosition
-            local fbSize = FakeBackground.AbsoluteSize
-            local imgSizeX = Img.AbsoluteSize.X
-            local padding = math.floor(8 * Library.DPIScale)
-            local x = fbPos.X + fbSize.X - padding - imgSizeX
-            local y = fbPos.Y + padding
-            Img.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
-        end
-
-        -- Connect updates and run once
-        local conn1 = FakeBackground:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateIconPosition)
-        local conn2 = FakeBackground:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateIconPosition)
-        local conn3 = Img:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateIconPosition)
-        UpdateIconPosition()
-        -- Store connections so they can be cleaned up when notification is destroyed
-        Data._icon_conns = { conn1, conn2, conn3 }
-        if iconData.ImageRectOffset then Img.ImageRectOffset = iconData.ImageRectOffset end
-        if iconData.ImageRectSize then Img.ImageRectSize = iconData.ImageRectSize end
-        if iconData.ImageRectOffset or iconData.ImageRectSize then
-            local g = New("UIGradient", { Name = "LucideAccentGradient", Parent = Img })
-            g.Color = Library:GetAccentGradientSequence()
-            Library.Registry[g] = { Color = function() return Library:GetAccentGradientSequence() end }
-        end
-    end
 
     local TimerHolder = New("Frame", {
         BackgroundTransparency = 1,
@@ -7974,19 +7916,30 @@ function Library:Notify(...)
 
     Library.Notifications[FakeBackground] = Data
 
+    -- attach accent bar updater to global list (optional)
+    Data:_updateAccent = function()
+        if Holder and Holder:GetChildren() then
+            for _, child in ipairs(Holder:GetChildren()) do
+                if child.Name == "AccentBar" then
+                    -- reposition bar according to current alignment
+                    local align = Library.NotifyAlignment or Enum.HorizontalAlignment.Right
+                    if align == Enum.HorizontalAlignment.Left then
+                        child.Position = UDim2.new(0,0,0,0)
+                    elseif align == Enum.HorizontalAlignment.Right then
+                        child.Position = UDim2.new(1,-3,0,0)
+                    else
+                        child.Position = UDim2.new(0.5,-1.5,0,0)
+                    end
+                end
+            end
+        end
+    end
+
     FakeBackground.Visible = true
     local showTween = TweenService:Create(Holder, Library.NotifyTweenInfo, {
         Position = UDim2.fromOffset(0, 0),
     })
     showTween:Play()
-    -- Show icon after notification slides in
-    if Data._icon then
-        showTween.Completed:Connect(function()
-            if Data._icon and Data._icon.Parent then
-                Data._icon.Visible = true
-            end
-        end)
-    end
 
     task.delay(Library.NotifyTweenInfo.Time, function()
         if Data.Persist then
@@ -8010,6 +7963,15 @@ function Library:Notify(...)
     end)
 
     return Data
+end
+
+-- update position of accent bars for all notifications
+function Library:RefreshNotificationAccent()
+    for _, Data in pairs(self.Notifications) do
+        if Data._updateAccent then
+            pcall(function() Data:_updateAccent() end)
+        end
+    end
 end
 
 function Library:CreateWindow(WindowInfo)
