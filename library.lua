@@ -6355,15 +6355,20 @@ do
         })
 
         function Dropdown:RecalculateListSize(Count)
-            local Y = math.clamp(
-                (Count or GetTableSize(Dropdown.Values)) * (21 * Library.DPIScale),
-                0,
-                Info.MaxVisibleDropdownItems * (21 * Library.DPIScale)
-            )
+            local actualCount = Count or GetTableSize(Dropdown.Values)
+            local itemHeight = 21 * Library.DPIScale
+            local actualHeight = actualCount * itemHeight
+            local maxHeight = Info.MaxVisibleDropdownItems * itemHeight
+            local Y = math.clamp(actualHeight, 0, maxHeight)
 
             MenuTable:SetSize(function()
                 return UDim2.fromOffset(Display.AbsoluteSize.X, Y)
             end)
+
+            -- enable scrolling only if content overflows menu height
+            if MenuTable.Menu:IsA("ScrollingFrame") then
+                MenuTable.Menu.ScrollingEnabled = actualHeight > Y
+            end
         end
 
         function Dropdown:UpdateColors()
@@ -7893,6 +7898,7 @@ function Library:Notify(...)
         Size = UDim2.new(0, 2, 1, 0),
         Position = UDim2.new(0, 0, 0, 0),
         ZIndex = 10,
+        LayoutOrder = -1,
         Parent = Holder,
     })
     New("UICorner", {
@@ -7915,7 +7921,7 @@ function Library:Notify(...)
     local accentSide = Library.NotifyAccentSide or "Left"
     if accentSide == "Right" then
         AccentBar.AnchorPoint = Vector2.new(1, 0)
-        AccentBar.Position = UDim2.new(1, 0, 0, 0)
+        AccentBar.Position = UDim2.new(1, -2, 0, 0)
         AccentBar.Size = UDim2.new(0, 2, 1, 0)
         AccentBarGradient.Rotation = 90
     elseif accentSide == "Top" then
