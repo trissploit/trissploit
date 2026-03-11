@@ -9459,9 +9459,10 @@ Library.Registry[WarningBoxOutline][ WarningBoxOutline:IsA("UIStroke") and "Colo
 		end
 
         -- Connect to TabContainer size changes to refresh sides automatically
+        local _thisTab = Tab -- capture current iteration Tab so closure doesn't see later nil
         TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if Tab == Library.ActiveTab then
-                Tab:RefreshSides()
+            if _thisTab == Library.ActiveTab then
+                _thisTab:RefreshSides()
             end
         end)
 
