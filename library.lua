@@ -1966,6 +1966,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
     table.insert(Library._ShadowCorners, ShadowCorner)
 
     local DarkStroke = Instance.new("UIStroke")
+    DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
     DarkStroke.Thickness = 1
     DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
@@ -2012,6 +2013,12 @@ end
 function Library:AddSmallOutline(Frame: GuiObject)
     local parent = Frame.Parent
     local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
+    -- Also check grandparent: if the Holder is inside a UIListLayout, sibling
+    -- borders would protrude past Holder bounds and be overlapped by the next item.
+    if not inLayout and parent then
+        local gp = parent.Parent
+        inLayout = gp and gp:FindFirstChildOfClass("UIListLayout")
+    end
     if inLayout then
         local DarkStroke = Library:AddShadowFrame(Frame)
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
@@ -2030,6 +2037,10 @@ end
 function Library:AddOutline(Frame: GuiObject)
     local parent = Frame.Parent
     local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
+    if not inLayout and parent then
+        local gp = parent.Parent
+        inLayout = gp and gp:FindFirstChildOfClass("UIListLayout")
+    end
     if inLayout then
         local DarkStroke = Library:AddShadowFrame(Frame)
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
@@ -2148,8 +2159,19 @@ function Library:AddDraggableMenu(Name: string)
         CornerRadius = UDim.new(0, Library.CornerRadius),
         Parent = Holder,
     })
-    Library:AddOutline(Holder)
+    local _menuOutRef, _menuDarkRef, _ = Library:AddOutline(Holder)
     Library:RegisterMenuTransparencyTarget(Holder)
+    -- Sync outlines and sub-elements with menu transparency
+    Library:RegisterMenuTransparencyCallback(function(alpha)
+        if _menuOutRef then
+            if _menuOutRef:IsA("UIStroke") then _menuOutRef.Transparency = alpha
+            elseif _menuOutRef:IsA("GuiObject") then _menuOutRef.BackgroundTransparency = alpha end
+        end
+        if _menuDarkRef and _menuDarkRef ~= _menuOutRef then
+            if _menuDarkRef:IsA("UIStroke") then _menuDarkRef.Transparency = alpha
+            elseif _menuDarkRef:IsA("GuiObject") then _menuDarkRef.BackgroundTransparency = alpha end
+        end
+    end)
     Library:UpdateDPI(Holder, {
         Position = false,
         Size = false,
@@ -2271,6 +2293,25 @@ function Library:AddDraggableMenu(Name: string)
     end
 
     Library:MakeDraggable(Holder, Label, true)
+
+    -- Sync inner elements with menu transparency
+    Library:RegisterMenuTransparencyCallback(function(alpha)
+        if AccentLine and AccentLine.Parent then
+            AccentLine.BackgroundTransparency = alpha
+        end
+        if Label and Label.Parent then
+            Label.TextTransparency = alpha
+        end
+        -- Apply to all text/frame children inside Container
+        for _, child in ipairs(Container:GetDescendants()) do
+            if child:IsA("TextLabel") then
+                child.TextTransparency = math.max(child.TextTransparency, alpha)
+            elseif child:IsA("Frame") and child.BackgroundTransparency < 1 then
+                child.BackgroundTransparency = math.max(child.BackgroundTransparency, alpha)
+            end
+        end
+    end)
+
     return Holder, Container
 end
 
@@ -2311,22 +2352,7 @@ do
         -- restore outlines for watermark
         WM.OutlineStroke, WM.ShadowStroke, WM.OuterBlackStroke = Library:AddOutline(WM.Holder)
 
-        -- Subtle accent gradient overlay on the watermark background
-        WM.BGGradient = New("UIGradient", {
-            Name = "WatermarkBGGradient",
-            Rotation = 90,
-            Parent = WM.Holder,
-        })
-        pcall(function()
-            WM.BGGradient.Color = Library:GetAccentGradientSequence()
-            WM.BGGradient.Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.05),
-                NumberSequenceKeypoint.new(1, 0.15),
-            })
-        end)
-        Library.Registry[WM.BGGradient] = {
-            Color = function() return Library:GetAccentGradientSequence() end,
-        }
+        -- No accent gradient overlay; watermark matches plain UI background color
 
         -- optional icon support
         WM.IconName = nil
@@ -2374,9 +2400,8 @@ do
             if WM.AccentLine and WM.AccentLine.Parent then
                 WM.AccentLine.BackgroundTransparency = alpha
             end
-            if WM.Label and WM.Label.Parent then
-                WM.Label.TextTransparency = alpha
-            end
+            -- Do NOT change label text transparency with menu transparency
+            -- so the watermark text stays readable
             if WM.OutlineStroke then
                 if WM.OutlineStroke:IsA("UIStroke") then
                     WM.OutlineStroke.Transparency = alpha
@@ -6513,7 +6538,7 @@ do
             Size = UDim2.new(1, 0, 0, 21),
             Text = "---",
             TextSize = 14,
-            FontFace = Library.Scheme.Font,
+            FontFace = "Font",
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Holder,
         })
@@ -8619,8 +8644,7 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.AnchorPoint = Vector2.new(0, 0.5)
         Library.KeybindFrame.Position = UDim2.new(0, 6, 0.5, 0)
         Library.KeybindFrame.Visible = false
-        -- add explicit black outline to keybind frame
-        Library:AddOutline(Library.KeybindFrame)
+        -- outline already added inside AddDraggableMenu
 
         MainFrame = New("TextButton", {
             BackgroundColor3 = function()
