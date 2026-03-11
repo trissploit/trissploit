@@ -1859,20 +1859,23 @@ end
 function Library:AddHoverEffect(button, stroke, element)
     -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
     -- Track hover state so it persists across toggle value changes
+    -- stroke may be a UIStroke (Color) or a sibling Frame (BackgroundColor3)
+    local isStroke = stroke and stroke:IsA("UIStroke")
+    local colorProp = isStroke and "Color" or "BackgroundColor3"
     element._hovered = false
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         element._hovered = true
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
+        TweenService:Create(stroke, Library.TweenInfo, { [colorProp] = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
         element._hovered = false
         if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
+        TweenService:Create(stroke, Library.TweenInfo, { [colorProp] = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
     end)
     -- Override registry entry so UpdateColorsUsingRegistry respects hover state
     if Library.Registry[stroke] then
-        Library.Registry[stroke].Color = function()
+        Library.Registry[stroke][colorProp] = function()
             return element._hovered and Library.Scheme.AccentColor or (Library.Scheme.Dark or Color3.new(0, 0, 0))
         end
     end
