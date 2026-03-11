@@ -153,8 +153,8 @@ local ESPSettings = {
     HealthOutlineFollow = false,
     
     -- Minimum box size (pixels) to prevent tiny boxes at long range
-    MinBoxWidth = 8,
-    MinBoxHeight = 12,
+    MinBoxWidth = 6,
+    MinBoxHeight = 10,
 
     -- Skeleton ESP
     SkeletonEnabled = false,
@@ -499,8 +499,8 @@ local function getScreenRectForCharacter(char)
         local h = maxY - minY
         if w < 1 or h < 1 then return nil end
         -- Enforce minimum box size
-        local minW = ESPSettings.MinBoxWidth or 8
-        local minH = ESPSettings.MinBoxHeight or 12
+        local minW = ESPSettings.MinBoxWidth or 6
+        local minH = ESPSettings.MinBoxHeight or 10
         if w < minW then
             local diff = minW - w
             minX = minX - diff / 2
@@ -532,8 +532,8 @@ local function getScreenRectForCharacter(char)
                 local widthRatio = ESPSettings.StaticBoxWidth or 0.6
                 local w = h * widthRatio
                 -- Enforce minimum box size
-                local minW = ESPSettings.MinBoxWidth or 8
-                local minH = ESPSettings.MinBoxHeight or 12
+                local minW = ESPSettings.MinBoxWidth or 6
+                local minH = ESPSettings.MinBoxHeight or 10
                 if w < minW then w = minW end
                 if h < minH then h = minH end
                 local cx = (spTop.X + spBottom.X) / 2
