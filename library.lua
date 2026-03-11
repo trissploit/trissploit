@@ -10887,7 +10887,8 @@ Library.Registry[WarningBoxOutline][ WarningBoxOutline:IsA("UIStroke") and "Colo
     end))
 
     return Window
-end
+end -- close do block (line 8520)
+end -- close function Library:CreateWindow
 
 local function OnPlayerChange()
     if Library.Unloaded then
@@ -10911,9 +10912,9 @@ local function OnTeamChange()
     for _, Dropdown in Options do
         if Dropdown.Type == "Dropdown" and Dropdown.SpecialType == "Team" then
             Dropdown:SetValues(TeamList)
-        end
-    end
-end
+        end -- close inner if
+    end -- close for loop
+end -- close OnTeamChange
 
 Library:GiveSignal(Players.PlayerAdded:Connect(OnPlayerChange))
 Library:GiveSignal(Players.PlayerRemoving:Connect(OnPlayerChange))
@@ -10921,5 +10922,6 @@ Library:GiveSignal(Players.PlayerRemoving:Connect(OnPlayerChange))
 Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
+-- all functions closed above; library ready to return
 getgenv().Library = Library
 return Library
