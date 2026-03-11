@@ -187,7 +187,6 @@ local Library = {
 
     NotifySide = "Right",
     NotifyAccentSide = "Left",
-    MenuTransparency = 0,
     ShowCustomCursor = true,
     ForceCheckbox = false,
     ShowToggleFrameInKeybinds = true,
@@ -1545,22 +1544,6 @@ do
 end
 
 --// Lib Functions \\--
-
--- Menu transparency: apply Library.MenuTransparency to floating menu backgrounds
-Library._menuTransparencyTargets = {}
-function Library:SetMenuTransparency(alpha)
-    Library.MenuTransparency = math.clamp(alpha or 0, 0, 0.95)
-    for _, target in ipairs(Library._menuTransparencyTargets) do
-        if target and target.Parent then
-            target.BackgroundTransparency = Library.MenuTransparency
-        end
-    end
-end
-function Library:RegisterMenuTransparencyTarget(frame)
-    table.insert(Library._menuTransparencyTargets, frame)
-    frame.BackgroundTransparency = Library.MenuTransparency
-end
-
 function Library:GetBetterColor(Color: Color3, Add: number): Color3
     Add = Add * (Library.IsLightTheme and -4 or 2)
     return Color3.fromRGB(
@@ -1666,9 +1649,15 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
 
             return
         end
+
+        if Dragging and IsHoverInput(Input) then
+            local Delta = UserInputService:GetMouseLocation() - StartPos
+            UI.Position =
+                UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
+        end
     end))
 
-    -- RenderStepped for smooth, lag-free dragging
+    -- add render step updater to eliminate input lag when dragging via container
     Library:GiveSignal(RunService.RenderStepped:Connect(function()
         if Dragging and not ((not IgnoreToggled and not Library.Toggled) or (IsMainWindow and Library.CantDragForced) or not (ScreenGui and ScreenGui.Parent)) then
             local MousePos = UserInputService:GetMouseLocation()
@@ -1717,11 +1706,8 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
 
             return
         end
-    end))
 
-    -- RenderStepped for smooth resizing
-    Library:GiveSignal(RunService.RenderStepped:Connect(function()
-        if Dragging and UI.Visible and (ScreenGui and ScreenGui.Parent) then
+        if Dragging and IsHoverInput(Input) then
             local Delta = UserInputService:GetMouseLocation() - StartPos
             UI.Size = UDim2.new(
                 FrameSize.X.Scale,
@@ -1766,24 +1752,14 @@ end
 
 function Library:AddHoverEffect(button, stroke, element)
     -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
-    -- Track hover state so it persists across toggle value changes
-    element._hovered = false
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
-        element._hovered = true
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
-        element._hovered = false
         if element.Disabled then return end
         TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
     end)
-    -- Override registry entry so UpdateColorsUsingRegistry respects hover state
-    if Library.Registry[stroke] then
-        Library.Registry[stroke].Color = function()
-            return element._hovered and Library.Scheme.AccentColor or (Library.Scheme.Dark or Color3.new(0, 0, 0))
-        end
-    end
 end
 
 function Library:AddShadowFrame(Frame: GuiObject)
@@ -1795,6 +1771,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
     -- Transparent child frame with a dark UIStroke. Gives a black outer border
     -- visible around the colored outline without stacking UIStrokes on the same object.
     local corner = Frame:FindFirstChildOfClass("UICorner")
+    -- Only offset shadow corner radius +1 when corners are rounded; at 0 keep sharp
     local baseRadius = corner and corner.CornerRadius.Offset or Library.CornerRadius
     local shadowCornerRadius = corner
         and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + (baseRadius > 0 and 1 or 0))
@@ -1802,8 +1779,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
 
     local Shadow = Instance.new("Frame")
     Shadow.BackgroundTransparency = 1
-    Shadow.Size = UDim2.new(1, 4, 1, 4)
-    Shadow.Position = UDim2.fromOffset(-2, -2)
+    Shadow.Size = UDim2.new(1, 2, 1, 2)
+    Shadow.Position = UDim2.fromOffset(-1, -1)
     Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
     Shadow.Name = "_OutlineShadow"
     Shadow.Parent = Frame
@@ -1830,8 +1807,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
             local pr = pad.PaddingRight.Offset
             local pt = pad.PaddingTop.Offset
             local pb = pad.PaddingBottom.Offset
-            Shadow.Position = UDim2.fromOffset(-2 - pl, -2 - pt)
-            Shadow.Size = UDim2.new(1, 4 + pl + pr, 1, 4 + pt + pb)
+            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
+            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
         end
     end
     AdjustForPadding()
@@ -1977,7 +1954,6 @@ function Library:AddDraggableMenu(Name: string)
         Parent = Holder,
     })
     Library:AddOutline(Holder)
-    Library:RegisterMenuTransparencyTarget(Holder)
     Library:UpdateDPI(Holder, {
         Position = false,
         Size = false,
@@ -2127,9 +2103,6 @@ do
             Parent = ScreenGui,
         })
         WM.Corner = New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = WM.Holder })
-
-        -- Register for menu transparency
-        Library:RegisterMenuTransparencyTarget(WM.Holder)
 
         -- restore outlines for watermark
         WM.OutlineStroke, WM.ShadowStroke, WM.OuterBlackStroke = Library:AddOutline(WM.Holder)
@@ -2939,7 +2912,7 @@ function Library:AddContextMenu(
         })
         New("UIPadding", {
             PaddingTop = UDim.new(0, 2),
-            PaddingBottom = UDim.new(0, 4),
+            PaddingBottom = UDim.new(0, 2),
             PaddingLeft = UDim.new(0, 2),
             PaddingRight = UDim.new(0, 2),
             Parent = Menu,
@@ -2965,7 +2938,7 @@ function Library:AddContextMenu(
         })
         New("UIPadding", {
             PaddingTop = UDim.new(0, 2),
-            PaddingBottom = UDim.new(0, 4),
+            PaddingBottom = UDim.new(0, 2),
             PaddingLeft = UDim.new(0, 2),
             PaddingRight = UDim.new(0, 2),
             Parent = Menu,
@@ -3643,8 +3616,6 @@ do
                 Text = "",
                 TextSize = 14,
                 TextTransparency = 0.5,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                TextYAlignment = Enum.TextYAlignment.Center,
                 Parent = Holder,
 
                 DPIExclude = {
@@ -3660,9 +3631,9 @@ do
             function KeybindsToggle:SetText(Text)
                 local X, Y = Library:GetTextBounds(Text, Label.FontFace, Label.TextSize)
                 Label.Text = Text
-                Label.Size = UDim2.new(0, math.ceil(X) + 4, 1, 0)
+                Label.Size = UDim2.new(0, X, 1, 0)
                 -- Dynamically size holder height to fit font metrics
-                local newH = math.max(16, math.ceil(Y) + 4)
+                local newH = math.max(16, Y + 2)
                 Holder.Size = UDim2.new(1, 0, 0, newH)
             end
 
@@ -6631,13 +6602,29 @@ do
                         Selected = Dropdown.Value == Value
                     end
 
-                    Button.BackgroundTransparency = 1
+                    -- Selected items change text color to accent, unselected stay default
+                    if not Table._hovered then
+                        Button.BackgroundTransparency = 1
+                    end
                     Button.BackgroundColor3 = Library.Scheme.MainColor
                     Library.Registry[Button].BackgroundColor3 = "MainColor"
                     Button.TextColor3 = Selected and Library.Scheme.AccentColor or Library.Scheme.FontColor
                     Library.Registry[Button].TextColor3 = Selected and "AccentColor" or "FontColor"
                     Button.TextTransparency = IsDisabled and 0.8 or Selected and 0 or 0.5
                     ButtonGradient.Enabled = false
+                end
+
+                -- Hover effect: subtle background highlight
+                Table._hovered = false
+                if not IsDisabled then
+                    Button.MouseEnter:Connect(function()
+                        Table._hovered = true
+                        TweenService:Create(Button, TweenInfo.new(0.15), { BackgroundTransparency = 0.7 }):Play()
+                    end)
+                    Button.MouseLeave:Connect(function()
+                        Table._hovered = false
+                        TweenService:Create(Button, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
+                    end)
                 end
 
                 if not IsDisabled then
@@ -7698,23 +7685,16 @@ end
 function Library:SetNotifySide(Side: string)
     Library.NotifySide = Side
 
-    local ox = Library.NotifyOffsetX or 0
-    local oy = Library.NotifyOffsetY or 0
-
     if Side:lower() == "left" then
         NotificationArea.AnchorPoint = Vector2.new(0, 0)
-        NotificationArea.Position = UDim2.fromOffset(6 + ox, 6 + oy)
+        NotificationArea.Position = UDim2.fromOffset(6, 6)
         NotificationList.HorizontalAlignment = Enum.HorizontalAlignment.Left
     else
         NotificationArea.AnchorPoint = Vector2.new(1, 0)
-        NotificationArea.Position = UDim2.new(1, -6 + ox, 0, 6 + oy)
+        NotificationArea.Position = UDim2.new(1, -6, 0, 6)
         NotificationList.HorizontalAlignment = Enum.HorizontalAlignment.Right
     end
 end
-
--- Expose notification area for external access (offsets, etc.)
-Library.NotificationArea = NotificationArea
-Library.NotificationList = NotificationList
 
 function Library:Notify(...)
     local Data = {}
@@ -7762,8 +7742,7 @@ function Library:Notify(...)
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundColor3 = "MainColor",
         Position = Library.NotifySide:lower() == "left" and UDim2.new(-1, -8, 0, -2) or UDim2.new(1, 8, 0, -2),
-        Size = UDim2.fromScale(1, 0),
-        ClipsDescendants = true,
+        Size = UDim2.fromScale(1, 1),
         ZIndex = 5,
         Parent = FakeBackground,
 
@@ -7776,28 +7755,18 @@ function Library:Notify(...)
         CornerRadius = UDim.new(0, Library.CornerRadius),
         Parent = Holder,
     })
-    Library:AddOutline(Holder)
-    Library:RegisterMenuTransparencyTarget(Holder)
-
-    -- Content frame inside Holder (has UIListLayout); AccentBar lives outside this
-    local ContentFrame = New("Frame", {
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        Size = UDim2.fromScale(1, 0),
-        ZIndex = 5,
-        Parent = Holder,
-    })
     New("UIListLayout", {
         Padding = UDim.new(0, 4),
-        Parent = ContentFrame,
+        Parent = Holder,
     })
     New("UIPadding", {
         PaddingBottom = UDim.new(0, 8),
         PaddingLeft = UDim.new(0, 8),
         PaddingRight = UDim.new(0, 8),
         PaddingTop = UDim.new(0, 8),
-        Parent = ContentFrame,
+        Parent = Holder,
     })
+    Library:AddOutline(Holder)
 
     -- Determine notification style (default = MainColor).
     local notifyColorName = "MainColor"
@@ -7826,7 +7795,7 @@ function Library:Notify(...)
             TextSize = 15,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextWrapped = true,
-            Parent = ContentFrame,
+            Parent = Holder,
 
             DPIExclude = {
                 Size = true,
@@ -7841,7 +7810,7 @@ function Library:Notify(...)
             TextSize = 14,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextWrapped = true,
-            Parent = ContentFrame,
+            Parent = Holder,
 
             DPIExclude = {
                 Size = true,
@@ -7923,33 +7892,22 @@ function Library:Notify(...)
 
     Data:Resize()
 
-    -- Accent bar line on notification - parented to Holder but outside ContentFrame's UIListLayout
-    local accentSide = Library.NotifyAccentSide or "Left"
-    local accentIsVertical = (accentSide == "Left" or accentSide == "Right")
+    -- Accent bar line on notification (like keybind list accent line)
     local AccentBar = New("Frame", {
         BackgroundColor3 = "AccentColor",
-        Size = accentIsVertical and UDim2.new(0, 2, 1, 0) or UDim2.new(1, 0, 0, 2),
+        Size = UDim2.new(0, 2, 1, 0),
         Position = UDim2.new(0, 0, 0, 0),
         ZIndex = 10,
+        LayoutOrder = -1,
         Parent = Holder,
     })
-    -- Position/anchor for each side
-    if accentSide == "Right" then
-        AccentBar.AnchorPoint = Vector2.new(1, 0)
-        AccentBar.Position = UDim2.new(1, 0, 0, 0)
-    elseif accentSide == "Top" then
-        AccentBar.AnchorPoint = Vector2.new(0, 0)
-        AccentBar.Position = UDim2.new(0, 0, 0, 0)
-    elseif accentSide == "Bottom" then
-        AccentBar.AnchorPoint = Vector2.new(0, 1)
-        AccentBar.Position = UDim2.new(0, 0, 1, 0)
-    else -- Left (default)
-        AccentBar.AnchorPoint = Vector2.new(0, 0)
-        AccentBar.Position = UDim2.new(0, 0, 0, 0)
-    end
+    New("UICorner", {
+        CornerRadius = UDim.new(0, Library.CornerRadius),
+        Parent = AccentBar,
+    })
     local AccentBarGradient = New("UIGradient", {
         Name = "NotifyAccentGrad",
-        Rotation = accentIsVertical and 90 or 0,
+        Rotation = 90,
         Parent = AccentBar,
     })
     pcall(function()
@@ -7959,11 +7917,35 @@ function Library:Notify(...)
         Color = function() return Library:GetAccentGradientSequence() end,
     }
 
+    -- Apply accent bar alignment from Library.NotifyAccentSide
+    local accentSide = Library.NotifyAccentSide or "Left"
+    if accentSide == "Right" then
+        AccentBar.AnchorPoint = Vector2.new(1, 0)
+        AccentBar.Position = UDim2.new(1, -2, 0, 0)
+        AccentBar.Size = UDim2.new(0, 2, 1, 0)
+        AccentBarGradient.Rotation = 90
+    elseif accentSide == "Top" then
+        AccentBar.AnchorPoint = Vector2.new(0, 0)
+        AccentBar.Position = UDim2.new(0, 0, 0, 0)
+        AccentBar.Size = UDim2.new(1, 0, 0, 2)
+        AccentBarGradient.Rotation = 0
+    elseif accentSide == "Bottom" then
+        AccentBar.AnchorPoint = Vector2.new(0, 1)
+        AccentBar.Position = UDim2.new(0, 0, 1, 0)
+        AccentBar.Size = UDim2.new(1, 0, 0, 2)
+        AccentBarGradient.Rotation = 0
+    else -- Left (default)
+        AccentBar.AnchorPoint = Vector2.new(0, 0)
+        AccentBar.Position = UDim2.new(0, 0, 0, 0)
+        AccentBar.Size = UDim2.new(0, 2, 1, 0)
+        AccentBarGradient.Rotation = 90
+    end
+
     local TimerHolder = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 7),
         Visible = (Data.Persist ~= true and typeof(Data.Time) ~= "Instance") or typeof(Data.Steps) == "number",
-        Parent = ContentFrame,
+        Parent = Holder,
     })
     local TimerBar = New("Frame", {
         BackgroundColor3 = "BackgroundColor",
@@ -10544,7 +10526,7 @@ function Library:CreateWindow(WindowInfo)
             Library.Toggled = not Library.Toggled
         end
 
-        local animTime = 0.18
+        local animTime = 0.25
 
         if Library.Toggled then
             -- Opening: show frame, then animate in
@@ -10553,11 +10535,21 @@ function Library:CreateWindow(WindowInfo)
                 LayoutRefs.TabBarWindow.Visible = true
             end
 
-            -- Start from slightly transparent
-            MainFrame.BackgroundTransparency = 0.15
+            -- Start from scaled-down and transparent
+            MainFrame.Size = UDim2.fromOffset(
+                MainFrame.AbsoluteSize.X * 0.95,
+                MainFrame.AbsoluteSize.Y * 0.95
+            )
+            MainFrame.BackgroundTransparency = 0.3
+
+            local targetSize = UDim2.fromOffset(
+                WindowInfo.Size.X.Offset,
+                WindowInfo.Size.Y.Offset
+            )
 
             _toggleAnimating = true
-            local tween = TweenService:Create(MainFrame, TweenInfo.new(animTime, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            local tween = TweenService:Create(MainFrame, TweenInfo.new(animTime, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Size = targetSize,
                 BackgroundTransparency = 0,
             })
             tween:Play()
@@ -10567,8 +10559,13 @@ function Library:CreateWindow(WindowInfo)
         else
             -- Closing: animate out, then hide
             _toggleAnimating = true
-            local tween = TweenService:Create(MainFrame, TweenInfo.new(animTime, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-                BackgroundTransparency = 0.15,
+            local targetSize = UDim2.fromOffset(
+                MainFrame.AbsoluteSize.X * 0.95,
+                MainFrame.AbsoluteSize.Y * 0.95
+            )
+            local tween = TweenService:Create(MainFrame, TweenInfo.new(animTime, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+                Size = targetSize,
+                BackgroundTransparency = 0.3,
             })
             tween:Play()
             tween.Completed:Once(function()
@@ -10576,6 +10573,11 @@ function Library:CreateWindow(WindowInfo)
                 if LayoutRefs.TabBarWindow then
                     LayoutRefs.TabBarWindow.Visible = false
                 end
+                -- Restore size for next open
+                MainFrame.Size = UDim2.fromOffset(
+                    WindowInfo.Size.X.Offset,
+                    WindowInfo.Size.Y.Offset
+                )
                 MainFrame.BackgroundTransparency = 0
                 _toggleAnimating = false
             end)
