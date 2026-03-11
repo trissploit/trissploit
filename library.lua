@@ -1894,8 +1894,8 @@ function Library:AddSmallOutline(Frame: GuiObject)
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    Library:AddShadowFrame(Frame)
-    -- full outline uses same edge-frame logic as small, returning three references
+    -- return: outlineContainer, shadowStroke, outlineContainer (compat)
+    local darkStroke = Library:AddShadowFrame(Frame)
     local function createEdges(thickness)
         local cont = Instance.new("Frame")
         cont.Name = "_OutlineContainer"
@@ -1934,7 +1934,7 @@ function Library:AddOutline(Frame: GuiObject)
     end
 
     local outline = createEdges(1)
-    return outline, outline, outline
+    return outline, darkStroke, outline
 end
 
 function Library:AddDraggableLabel(Text: string)
