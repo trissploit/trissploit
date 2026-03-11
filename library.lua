@@ -582,6 +582,25 @@ local function GetLighterColor(Color)
     return Color3.fromHSV(H, math.max(0, S - 0.1), math.min(1, V + 0.1))
 end
 
+-- Horizontal accent line: full accent color in centre, darker towards both ends.
+function Library:GetHorizontalAccentSequence()
+    local accent = self.Scheme.AccentColor
+    if typeof(accent) ~= "Color3" then accent = Color3.fromRGB(125, 85, 255) end
+    local H, S, V = accent:ToHSV()
+    if S < 0.2 and V > 0.8 then
+        H, S, V = Color3.fromRGB(125, 85, 255):ToHSV()
+        accent = Color3.fromHSV(H, S, V)
+    end
+    local dark = Color3.fromHSV(H, math.min(S * 1.3, 1), math.max(V * 0.30, 0.05))
+    return ColorSequence.new({
+        ColorSequenceKeypoint.new(0,    dark),
+        ColorSequenceKeypoint.new(0.35, Color3.fromHSV(H, math.min(S*1.1,1), math.max(V*0.70,0.15))),
+        ColorSequenceKeypoint.new(0.5,  accent),
+        ColorSequenceKeypoint.new(0.65, Color3.fromHSV(H, math.min(S*1.1,1), math.max(V*0.70,0.15))),
+        ColorSequenceKeypoint.new(1,    dark),
+    })
+end
+
 function Library:GetAccentGradientSequence()
     local accent = self.Scheme.AccentColor
     if typeof(accent) ~= "Color3" then
@@ -1784,6 +1803,59 @@ function Library:MakeLine(Frame: GuiObject, Info)
     return Line
 end
 
+-- ────────────────────────────────────────────────────────────────────────────
+-- OUTLINE SYSTEM — completely rewritten to use solid sibling-Frame borders
+-- instead of UIStroke.  UIStroke is kept only as a fallback for frames whose
+-- parent has a UIListLayout (e.g. elements inside groupboxes).
+-- ────────────────────────────────────────────────────────────────────────────
+Library._BorderCorners = Library._BorderCorners or {}
+
+local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
+    local parent = Frame.Parent
+    if not parent then return nil end
+    local corner = Frame:FindFirstChildOfClass("UICorner")
+    local radius = corner and corner.CornerRadius.Offset or Library.CornerRadius
+
+    local bf = Instance.new("Frame")
+    bf.BackgroundColor3 = Library.Scheme[colorKey] or colorFallback
+    bf.BorderSizePixel = 0
+    bf.Name = name
+    bf.ZIndex = math.max(1, Frame.ZIndex - 1)
+
+    local bfc = Instance.new("UICorner")
+    bfc.CornerRadius = UDim.new(0, math.max(0, radius + outset))
+    bfc.Parent = bf
+    Library._BorderCorners = Library._BorderCorners or {}
+    table.insert(Library._BorderCorners, { corner = bfc, targetFrame = Frame, offset = outset })
+
+    local function sync()
+        if not bf.Parent or not Frame.Parent then return end
+        local ax, ay = Frame.AnchorPoint.X, Frame.AnchorPoint.Y
+        -- With matching AnchorPoint, enlarging by 2*outset centres the extra pixels.
+        -- Position must shift so the extra pixels appear equally on all four sides.
+        bf.AnchorPoint = Frame.AnchorPoint
+        bf.Position = UDim2.new(
+            Frame.Position.X.Scale, Frame.Position.X.Offset + outset * (2 * ax - 1),
+            Frame.Position.Y.Scale, Frame.Position.Y.Offset + outset * (2 * ay - 1)
+        )
+        bf.Size = UDim2.new(
+            Frame.Size.X.Scale, Frame.Size.X.Offset + outset * 2,
+            Frame.Size.Y.Scale, Frame.Size.Y.Offset + outset * 2
+        )
+        bf.ZIndex = math.max(1, Frame.ZIndex - 1)
+    end
+    sync()
+    bf.Parent = parent
+    Library.Registry[bf] = { BackgroundColor3 = colorKey }
+
+    Frame:GetPropertyChangedSignal("Position"):Connect(sync)
+    Frame:GetPropertyChangedSignal("Size"):Connect(sync)
+    Frame:GetPropertyChangedSignal("ZIndex"):Connect(sync)
+    Frame:GetPropertyChangedSignal("AnchorPoint"):Connect(sync)
+    Frame.Destroying:Connect(function() pcall(function() bf:Destroy() end) end)
+    return bf
+end
+
 function Library:AddHoverEffect(button, stroke, element)
     -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
     -- Track hover state so it persists across toggle value changes
@@ -1806,25 +1878,17 @@ function Library:AddHoverEffect(button, stroke, element)
     end
 end
 
+-- AddShadowFrame: legacy UIStroke-based outline kept for UIListLayout containers.
 function Library:AddShadowFrame(Frame: GuiObject)
-    -- Skip if the frame has a UIListLayout (shadow would become a layout member)
-    if Frame:FindFirstChildOfClass("UIListLayout") then
-        return nil
-    end
+    if Frame:FindFirstChildOfClass("UIListLayout") then return nil end
 
-    -- Transparent child frame with a dark UIStroke. Gives a black outer border
-    -- visible around the colored outline without stacking UIStrokes on the same object.
     local corner = Frame:FindFirstChildOfClass("UICorner")
-    local baseRadius = corner and corner.CornerRadius.Offset or Library.CornerRadius
-    -- shadow radius matches the element's radius exactly; previous +1 offset caused
-    -- corner bulging when the gap was only 1px, making the outline look uneven.
     local shadowCornerRadius = corner
         and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 2)
         or UDim.new(0, Library.CornerRadius + 2)
 
     local Shadow = Instance.new("Frame")
     Shadow.BackgroundTransparency = 1
-    -- keep the black outline tight against the element (2px gap for thicker strokes)
     Shadow.Size = UDim2.new(1, 4, 1, 4)
     Shadow.Position = UDim2.fromOffset(-2, -2)
     Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
@@ -1834,7 +1898,6 @@ function Library:AddShadowFrame(Frame: GuiObject)
     local ShadowCorner = Instance.new("UICorner")
     ShadowCorner.CornerRadius = shadowCornerRadius
     ShadowCorner.Parent = Shadow
-    -- track shadow corners so they can follow library rounding (+1 offset)
     Library._ShadowCorners = Library._ShadowCorners or {}
     table.insert(Library._ShadowCorners, ShadowCorner)
 
@@ -1845,14 +1908,11 @@ function Library:AddShadowFrame(Frame: GuiObject)
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
 
-    -- If UIPadding exists now, counteract it. Also listen for future UIPadding.
     local function AdjustForPadding()
         local pad = Frame:FindFirstChildOfClass("UIPadding")
         if pad then
-            local pl = pad.PaddingLeft.Offset
-            local pr = pad.PaddingRight.Offset
-            local pt = pad.PaddingTop.Offset
-            local pb = pad.PaddingBottom.Offset
+            local pl, pr = pad.PaddingLeft.Offset, pad.PaddingRight.Offset
+            local pt, pb = pad.PaddingTop.Offset, pad.PaddingBottom.Offset
             Shadow.Position = UDim2.fromOffset(-2 - pl, -2 - pt)
             Shadow.Size = UDim2.new(1, 4 + pl + pr, 1, 4 + pt + pb)
         end
@@ -1862,77 +1922,44 @@ function Library:AddShadowFrame(Frame: GuiObject)
         if child:IsA("UIPadding") then
             task.defer(AdjustForPadding)
         elseif child:IsA("UIListLayout") then
-            -- UIListLayout added after shadow — remove shadow to prevent layout issues
             pcall(function() Shadow:Destroy() end)
         end
     end)
-
     return DarkStroke
 end
 
--- Outline implementation using a separate underlay frame rather than UIStroke.
--- This avoids stroke-rendering quirks and lets us control exact thickness.
-local function createOutlineFrame(Frame: GuiObject, thickness)
-    thickness = thickness or 2
-    if not Frame.Parent then return nil end
-    local Outline = Instance.new("Frame")
-    Outline.Name = "_OutlineFrame"
-    Outline.BackgroundColor3 = Library.Scheme.OutlineColor
-    Outline.BorderSizePixel = 0
-    Outline.ZIndex = Frame.ZIndex - 1
-    Outline.AnchorPoint = Frame.AnchorPoint
-    Outline.Parent = Frame.Parent
-
-    local function resync()
-        if not Frame.Parent then return end
-        Outline.ZIndex = Frame.ZIndex - 1
-        Outline.AnchorPoint = Frame.AnchorPoint
-        Outline.Position = UDim2.new(
-            Frame.Position.X.Scale,
-            Frame.Position.X.Offset - thickness,
-            Frame.Position.Y.Scale,
-            Frame.Position.Y.Offset - thickness
-        )
-        Outline.Size = UDim2.new(
-            Frame.Size.X.Scale,
-            Frame.Size.X.Offset + thickness * 2,
-            Frame.Size.Y.Scale,
-            Frame.Size.Y.Offset + thickness * 2
-        )
-        local baseCorner = Frame:FindFirstChildOfClass("UICorner")
-        if baseCorner then
-            local oc = Outline:FindFirstChildOfClass("UICorner")
-            if not oc then
-                oc = Instance.new("UICorner", Outline)
-            end
-            oc.CornerRadius = UDim.new(baseCorner.CornerRadius.Scale, baseCorner.CornerRadius.Offset + thickness)
-        end
-    end
-
-    resync()
-    Frame:GetPropertyChangedSignal("Position"):Connect(resync)
-    Frame:GetPropertyChangedSignal("Size"):Connect(resync)
-    Frame:GetPropertyChangedSignal("ZIndex"):Connect(resync)
-    Frame.ChildAdded:Connect(function(c)
-        if c:IsA("UICorner") then
-            resync()
-        end
-    end)
-
-    Library.Registry[Outline] = { BackgroundColor3 = "OutlineColor" }
-    return Outline
-end
-
+-- AddSmallOutline: sibling solid-Frame borders for free-floating frames;
+-- UIStroke fallback for elements inside UIListLayout containers.
 function Library:AddSmallOutline(Frame: GuiObject)
-    local DarkStroke = Library:AddShadowFrame(Frame)
-    local outline = createOutlineFrame(Frame, 1)
-    return outline or DarkStroke, DarkStroke or outline
+    local parent = Frame.Parent
+    local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
+    if inLayout then
+        local DarkStroke = Library:AddShadowFrame(Frame)
+        local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 2, LineJoinMode = joinMode, Parent = Frame })
+        return Stroke, DarkStroke or Stroke
+    end
+    -- Sibling approach: solid colored frames rendered behind the target via ZIndex.
+    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 3)
+    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 2)
+    local ref = OutlineFrame or DarkFrame or Frame
+    return ref, DarkFrame or ref
 end
 
+-- AddOutline: same sibling approach as AddSmallOutline, three-return-value variant.
 function Library:AddOutline(Frame: GuiObject)
-    Library:AddShadowFrame(Frame)
-    local outline = createOutlineFrame(Frame, 2)
-    return outline, outline, outline
+    local parent = Frame.Parent
+    local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
+    if inLayout then
+        Library:AddShadowFrame(Frame)
+        local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 2, LineJoinMode = joinMode, Parent = Frame })
+        return Stroke, Stroke, Stroke
+    end
+    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 3)
+    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 2)
+    local ref = OutlineFrame or DarkFrame or Frame
+    return ref, ref, ref
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -2047,13 +2074,18 @@ function Library:AddDraggableMenu(Name: string)
         Size = false,
     })
 
-    -- Accent line at top (plain accent color, no gradient) - matches watermark style
+    -- Accent line at top: full accent in centre, fades darker towards both ends
     local AccentLine = New("Frame", {
         BackgroundColor3 = "AccentColor",
         Size = UDim2.new(1, 0, 0, 1),
         ZIndex = 11,
         Parent = Holder,
     })
+    local _alGrad = Instance.new("UIGradient")
+    _alGrad.Rotation = 0
+    pcall(function() _alGrad.Color = Library:GetHorizontalAccentSequence() end)
+    _alGrad.Parent = AccentLine
+    Library.Registry[_alGrad] = { Color = function() return Library:GetHorizontalAccentSequence() end }
 
     Library:MakeLine(Holder, {
         Position = UDim2.fromOffset(0, 34),
@@ -2233,10 +2265,10 @@ do
             Parent = WM.AccentLine,
         })
         pcall(function()
-            WM.AccentLineGradient.Color = Library:GetAccentGradientSequence()
+            WM.AccentLineGradient.Color = Library:GetHorizontalAccentSequence()
         end)
         Library.Registry[WM.AccentLineGradient] = {
-            Color = function() return Library:GetAccentGradientSequence() end,
+            Color = function() return Library:GetHorizontalAccentSequence() end,
         }
         WM.AccentLine.Visible = WM.ShowAccentLine
 
@@ -6479,20 +6511,24 @@ do
             local padBottom = (pad and pad.PaddingBottom.Offset or 0) * Library.DPIScale
             local totalPad = padTop + padBottom
 
-            -- max height: fill available screen space below the display button,
-            -- only scroll when the list would go off-screen
+            -- Hard cap: show at most 7 lines before the list becomes scrollable
+            local MAX_LINES = 7
+            local sevenLinesCap = MAX_LINES * itemHeight + totalPad
+
             local function computeY()
                 local viewportH = workspace.CurrentCamera.ViewportSize.Y
                 local dispBottom = Display.AbsolutePosition.Y + Display.AbsoluteSize.Y
-                local available = math.max(60, viewportH - dispBottom - 6)
-                return math.min(totalItemHeight + totalPad, available)
+                local screenAvailable = math.max(60, viewportH - dispBottom - 6)
+                -- cap at whichever is smaller: 7 lines or available screen space
+                local maxHeight = math.min(screenAvailable, sevenLinesCap)
+                return math.min(totalItemHeight + totalPad, maxHeight)
             end
 
             MenuTable:SetSize(function()
                 return UDim2.fromOffset(Display.AbsoluteSize.X, computeY())
             end)
 
-            -- enable scrolling only if content overflows available space
+            -- enable scrolling when content exceeds the capped height
             if MenuTable.Menu:IsA("ScrollingFrame") then
                 local Y = computeY()
                 MenuTable.Menu.ScrollingEnabled = (totalItemHeight + totalPad) > Y
@@ -8178,7 +8214,7 @@ function Library:CreateWindow(WindowInfo)
             end
         end
     end
-    -- update any shadow corners (+1 offset)
+    -- update any shadow corners (UIStroke-based outlines in layout containers)
     if Library._ShadowCorners then
         for _, sc in ipairs(Library._ShadowCorners) do
             if sc and sc.Parent and sc:IsA("UICorner") then
@@ -8188,6 +8224,16 @@ function Library:CreateWindow(WindowInfo)
                 else
                     sc.CornerRadius = UDim.new(0, Library.CornerRadius + 2)
                 end
+            end
+        end
+    end
+    -- update sibling border frame corners (solid-Frame outline system)
+    if Library._BorderCorners then
+        for _, entry in ipairs(Library._BorderCorners) do
+            if entry.corner and entry.corner.Parent and entry.targetFrame and entry.targetFrame.Parent then
+                local tc = entry.targetFrame:FindFirstChildOfClass("UICorner")
+                local base = tc and tc.CornerRadius.Offset or Library.CornerRadius
+                entry.corner.CornerRadius = UDim.new(0, math.max(0, base + entry.offset))
             end
         end
     end
