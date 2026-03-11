@@ -1,3291 +1,1789 @@
--- copy of UI setup from jjsold.lua
---// Services
+--[[
+    TrisESP - ScreenGui ESP System
+    
+    Complete rewrite using ScreenGui instead of Drawing.new
+    Includes rotation animation and vertical gradients
+    
+    Load via: loadstring(game:HttpGet("YOUR_URL_HERE"))()
+--]]
+
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local SoundService = game:GetService("SoundService")
 local CoreGui = game:GetService("CoreGui")
+local Teams = game:GetService("Teams")
 
---// Player / Camera
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 local Camera = Workspace.CurrentCamera
+local renderConn
 
---// Common constructors (worth localizing)
-local Vector2 = Vector2
-local Vector3 = Vector3
-local CFrame = CFrame
-local Color3 = Color3
-local Enum = Enum
-local Instance = Instance
-local Drawing = Drawing
+local ESPObjects = {}
+local ESPsCleared = false
+local RotationAngle = -90
+-- Persistent state across hot-reloads (if executor preserves getgenv)
+getgenv()._TrisESP_Persistent = getgenv()._TrisESP_Persistent or {}
+local PERSIST = getgenv()._TrisESP_Persistent
+PERSIST.HealthPhase = PERSIST.HealthPhase or {}
+PERSIST.GradientAngle = PERSIST.GradientAngle or {}
+PERSIST.SpinAngle = PERSIST.SpinAngle or RotationAngle
 
--- Remote library loading (the same Obsidian/TrisSploit UI library that jjsold uses)
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local success, Library = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/trissploit/trissploit/refs/heads/main/library.lua"))()
-end)
-if not success or not Library then
-    warn("Failed to load UI library")
-    return
-end
-Library.ForceCheckbox = true
 
--- always strip icons from notifications globally
-if Library and Library.Notify then
-    local _origNotify = Library.Notify
-    Library.Notify = function(self, ...)
-        local info = select(1, ...)
-        if type(info) == "table" then
-            info.Icon = nil
-            info.IconName = nil
-        end
-        return _origNotify(self, ...)
-    end
-end
-
-local success2, ThemeManager = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/trissploit/trissploit/refs/heads/main/thememanager.lua"))()
-end)
-if not success2 then
-    ThemeManager = nil
-end
-
--- attempt to load local UI customization overrides (if executor supports file access)
+-- Create ScreenGui holder
+local ESPHolder = Instance.new("ScreenGui")
+ESPHolder.Name = "TrisESPHolder"
+ESPHolder.ResetOnSpawn = false
+ESPHolder.IgnoreGuiInset = true
 pcall(function()
-    if ThemeManager and isfile and readfile then
-        local path = "UI/Addons/UIcustomization.lua"
-        if isfile(path) then
-            local ok, custom = pcall(loadstring, readfile(path))
-            if ok and type(custom) == "table" then
-                for k, v in pairs(custom) do
-                    ThemeManager[k] = v
-                end
-            end
-        end
-    end
+    ESPHolder.Parent = CoreGui
 end)
-
-local success3, SaveManager = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/trissploit/trissploit/refs/heads/main/savemanager.lua"))()
-end)
-if not success3 then
-    SaveManager = nil
+if not ESPHolder.Parent then
+    ESPHolder.Parent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
--- Load TrisESP (external player ESP library)
-local TrisESPLoaded = false
-pcall(function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/trissploit/trissploit/refs/heads/main/esp.luau"))()
-    TrisESPLoaded = true
-end)
+local ESPSettings = {
+    Enabled = true,
+    MaxDistance = 150000,
+    
+    PlayerOverrides = {},
+    
+    -- Box animation settings
+    AnimateBoxRotation = false,
+    BoxRotationSpeed = 300,
+    
+    -- Filtering
+    FilterMode = "All",
+    WhitelistedPlayers = {},
+    BlacklistedPlayers = {},
+    TeamCheckEnabled = false,
+    -- Custom team filters (strings = team names, objects = Team instances)
+    CustomTeams = {},
+    CustomTeamObjects = {},
+    
+    -- Display settings
+    ShowName = false,
+    -- Name display mode: "Name" | "DisplayName" | "Both"
+    -- "Name" shows the Roblox username, "DisplayName" shows the player's display name,
+    -- "Both" shows `DisplayName (Name)`
+    NameMode = "DisplayName",
+    ShowHealthText = false,
+    ShowDistance = false,
+    -- Font selection: "ProggyClean" | "Tahoma"
+    TextFont = "ProggyClean",
+    -- Name label gradient
+    NameGradientEnabled = false,
+    NameGradientSpeed = 0.3,
+    NameGradientStops = {
+        {pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0},
+        {pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0},
+    },
+    -- Distance label gradient
+    DistanceGradientEnabled = false,
+    DistanceGradientSpeed = 0.3,
+    DistanceGradientStops = {
+        {pos = 0,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(255, 100,  50), transparency = 0},
+        {pos = 1,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
+    },
+    -- Health text label gradient (the HP/distance text shown below the bar)
+    HealthTextGradientEnabled = false,
+    HealthTextGradientSpeed = 0.3,
+    HealthTextGradientStops = {
+        {pos = 0,   color = Color3.fromRGB(  0, 255,  80), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(255, 255,   0), transparency = 0},
+        {pos = 1,   color = Color3.fromRGB(255,  60,  60), transparency = 0},
+    },
+    
+    -- Gradient settings (autorotate enabled internally)
+    -- NOTE: UI gradient autorotation is handled internally; GUI animation controls removed
 
--- previously we used the TrisROCKS FOV circle system but simplify to a basic drawing
--- (no external dependency)
-local fovCircle = Drawing.new("Circle")
-fovCircle.Visible = false
-fovCircle.Color = Color3.new(1,1,1)
-fovCircle.Thickness = 1
-fovCircle.NumSides = 64
-fovCircle.Filled = false
-fovCircle.Radius = 100  -- initial value, will be updated
+    
+    -- Gradient stops (ulib colorpicker compatible)
+    BoxGradientStops = {
+        {pos = 0, color = Color3.fromRGB(255, 0, 0), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(0, 255, 55), transparency = 0},
+        {pos = 1, color = Color3.fromRGB(0, 0, 255), transparency = 0},
+    },
+    BoxFillGradientStops = {
+        {pos = 0, color = Color3.fromRGB(68, 0, 255), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(0, 255, 76), transparency = 0},
+        {pos = 1, color = Color3.fromRGB(255, 0, 212), transparency = 0},
+    },
+    
+    -- Box settings
+    Boxes = false,
+    BoxType = "Square",
+    -- Box sizing mode: "Static" uses a fixed width ratio, "Bounding" uses dynamic part projection
+    BoxSizingMode = "Static",
+    -- Width multiplier for Static sizing mode (ratio of height)
+    StaticBoxWidth = 0.6,
+    BoxColor = Color3.fromRGB(0, 170, 255),
+    Thickness = 2,
+    BoxOutlineColor = Color3.new(0, 0, 0),
+    
+    -- Box fill
+    BoxFill = false,
+    BoxFillColor = Color3.fromRGB(0, 170, 255),
+    BoxFillTransparency = 0.5,
+    
+    -- Tracers
+    Tracers = false,
+    TracerFrom = "Bottom",
+    TracerThickness = 1.2,
+    TracerColor = Color3.fromRGB(255, 255, 255),
+    
+    -- Health bar
+    HealthBarEnabled = false,
+    -- Health bar position: "Left" (vertical) or "Bottom" (horizontal below box)
+    HealthBarPosition = "Bottom",
+    HealthBarThickness = 2.5,
+    -- Health bar gradient stops
+    HealthBarGradientStops = {
+        {pos = 0, color = Color3.fromRGB(255, 0, 0), transparency = 0},
+        {pos = 0.5, color = Color3.fromRGB(38, 0, 255), transparency = 0},
+        {pos = 1, color = Color3.fromRGB(0, 255, 0), transparency = 0},
+    },
+    -- Health gradient animation speed (cycles per second)
+    HealthGradientSpeed = 0.5,
+    -- Enable animated health gradient
+    HealthGradientEnabled = true,
+    -- Number of samples used when building the animated gradient (fixed default)
+    -- (setting removed; defaults to 12 samples)
+    -- Whether the healthbar outline thickness scales with the filled height
+    HealthOutlineFollow = false,
+    
+    -- Minimum box size (pixels) to prevent tiny boxes at long range
+    MinBoxWidth = 8,
+    MinBoxHeight = 12,
 
--- persistent bullet TP line
-local bulletTPLine = Drawing.new("Line")
-bulletTPLine.Visible = false
-bulletTPLine.Thickness = 2
-bulletTPLine.Color = Color3.new(1,1,1) -- will update later
-bulletTPLine.ZIndex = 1005
+    -- Skeleton ESP
+    SkeletonEnabled = false,
+    BoneThickness = 1.5,
+    BoneColor = Color3.fromRGB(255, 255, 255),
+    SkeletonOutlineEnabled = true,
+    SkeletonOutlineColor = Color3.fromRGB(0, 0, 0),
+    SkeletonOutlineThickness = 1,
+    SkeletonGradientEnabled = false,
+    SkeletonGradientSpeed = 0.4,
+    SkeletonGradientStops = {
+        { pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0 },
+        { pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0 },
+        { pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0 },
+    },
 
-
--- Queue-based ESP setting helper (safe from synchronous callbacks)
-local pendingESPSettings = {}
-local function applyPendingESPSettings()
-    if getgenv().TrisESP and getgenv().TrisESP.Settings then
-        for k, v in pairs(pendingESPSettings) do
-            getgenv().TrisESP.Settings[k] = v
-        end
-        pendingESPSettings = {}
-    end
-end
-
-local function setESPSetting(key, value)
-    if getgenv().TrisESP and getgenv().TrisESP.Settings then
-        getgenv().TrisESP.Settings[key] = value
-    else
-        pendingESPSettings[key] = value
-        task.spawn(function()
-            for i = 1, 20 do
-                task.wait(0.1)
-                if getgenv().TrisESP and getgenv().TrisESP.Settings then
-                    applyPendingESPSettings()
-                    return
-                end
-            end
-        end)
-    end
-end
-
--- Initialize ESP defaults (disabled until user enables via UI)
-if TrisESPLoaded and getgenv().TrisESP then
-    getgenv().TrisESP.Settings.Enabled = false
-    getgenv().TrisESP.Settings.Boxes = false
-    getgenv().TrisESP.Settings.BoxFill = false
-    getgenv().TrisESP.Settings.Highlight = false
-    getgenv().TrisESP.Settings.ShowDistance = false
-    getgenv().TrisESP.Settings.ShowName = false
-    getgenv().TrisESP.Settings.Tracers = false
-    getgenv().TrisESP.Settings.HealthBarEnabled = false
-    getgenv().TrisESP.Settings.ShowHealthText = false
-    -- new gradient defaults (static rotation; no animation for text labels)
-    getgenv().TrisESP.Settings.NameGradientRotation = 0
-
-    getgenv().TrisESP.Settings.DistanceGradientRotation = 0
-
-    getgenv().TrisESP.Settings.HealthTextGradientRotation = 0
-end
-
--- build the window
-local Window = Library:CreateWindow({
-    Title = "tris.rocks",
-    Footer = "tris.rocks | in development | version: 1.0",
-    Icon = "rbxassetid://85419017315177",
-    CornerRadius = 0,
-    Size = UDim2.fromOffset(580, 460),
-    NotifySide = "Right",
-    ShowCustomCursor = false,
-    Compact = true,
-    LocalizedAssets = true,  -- download & use cached assets; no repeated web pulls
-})
-
-
--- grab the shared options/toggles table (examplelib pattern)
-local Options = Library.Options
-local Toggles = Library.Toggles
-
-local Tabs = {
-    Home = Window:AddTab("Home", "boxes", "Overview & status"),
-    Farming = Window:AddTab("Farming", "leaf", "Farming features"),
-    Combat = Window:AddTab("Combat", "sword", "Combat options"),
-    Visuals = Window:AddTab("Visuals", "eye", "Visual tweaks"),
-    World = Window:AddTab("World", "globe", "World / lighting options"),
-    Modifications = Window:AddTab("Modifications", "wrench", "Misc modifications"),
-    Settings = Window:AddTab("Settings", "cog", "Configuration"),
+    -- Chams
+    Highlight = false,
+    GlobalChamColor = Color3.fromRGB(0, 170, 255),
+    FillTransparency = 0.5,
+    OutlineTransparency = 0,
 }
+--[[
+Documentation: TrisESP usage & API
 
-Tabs.Home:UpdateWarningBox({
-    Title = "Development Notice",
-    Text = "SCRIPT IS IN DEVELOPMENT! Script may have bugs or things may not function properly",
-    IsNormal = false,
-    Visible = true,
-    LockSize = true
-})
+Settings (table: `getgenv().TrisESP.Settings`)
+- Enabled (bool): Master system toggle. When false, all ESP is removed.
+- MaxDistance (number): Max render distance (studs).
+- TextFont (string): "ProggyClean" (monospace) or "Tahoma" (sans-serif).
+- AnimateBoxRotation (bool): Rotate box-fill gradients when true.
+- BoxRotationSpeed (number): Rotation speed used when AnimateBoxRotation is enabled.
+- Boxes (bool): Enable box outlines.
+- BoxType (string): "Square" or "Corner".
+- BoxSizingMode (string): "Static" uses a fixed width ratio, "Bounding" uses dynamic part projection.
+- StaticBoxWidth (number): Width multiplier for Static sizing mode (ratio of height, default 0.6).
+- BoxOutlineColor (Color3): Outline color for box frames (outline stroke forced to 1px).
+- BoxGradientStops (table): Gradient stops for box outlines ({pos, color, transparency} arrays).
+- BoxFill (bool): Enable gradient-filled boxes (independent of `Boxes`).
+- BoxFillGradientStops (table): Gradient stops for box fill.
+- BoxFillTransparency (number 0-1): Transparency for the box fill layer.
 
--- example groupboxes, change or remove as needed
-local ChangelogsBox = Tabs.Home:AddLeftGroupbox("Changelogs", "scroll")
-ChangelogsBox:AddLabel("Updates posted in Discord server.", true)
+- Tracers (bool), TracerFrom ("Top"|"Bottom"|"Center"), TracerThickness, TracerColor
 
-local CreditsBox = Tabs.Home:AddRightGroupbox("Credits", "award")
-CreditsBox:AddLabel("<font color='rgb(255,0,255)'>worldwide</font> - founder & developer", true)
-CreditsBox:AddLabel("<font color='rgb(0,255,255)'>nebula</font> - developer", true)
+- HealthBarEnabled (bool): Show vertical health bar.
+- HealthBarPosition ("Left"|"Right"|"Bottom"): Side/position to draw health bar.
+- HealthBarThickness (number): Pixel width of health bar.
+- HealthBarGradientStops (table): Gradient stops used for the health bar.
+- HealthGradientEnabled (bool): Animate the health gradient when true.
+- HealthGradientSpeed (number): Cycles per second used when HealthGradientEnabled is true.
+- ShowHealthText (bool): Show percent value next to the healthbar.
+- HealthOutlineFollow (bool): When true the outline height follows the filled height.
 
-local function safeSetClipboard(text)
-    local ok = pcall(function()
-        if setclipboard then setclipboard(text)
-        elseif toclipboard then toclipboard(text)
-        elseif Clipboard and Clipboard.set then Clipboard.set(text)
-        end
-    end)
-    return ok
+- ShowName, NameMode ("Name"|"DisplayName"|"Both"), ShowDistance
+
+Per-player overrides
+- `getgenv().TrisESP.Settings.PlayerOverrides` is a table keyed by player UserId (string) or player.Name.
+  Each entry is a table of settings which override the global `Settings` for that player.
+
+API Helpers
+- _resolvePlayer(ref) -> player object | nil
+    Accepts: Player object, numeric UserId, or string player name.
+
+- AddPlayerOverride(playerRef, overrides) -> bool
+    `overrides` is a table of setting keys to override for the player. Example:
+      getgenv().TrisESP.AddPlayerOverride("SomePlayer", { BoxFill = true })
+
+- SetPlayerColor(playerRef, colorKey, color3) -> bool
+    Convenience for a single color override. Example:
+      getgenv().TrisESP.SetPlayerColor(12345678, "BoxColor", Color3.fromRGB(0,255,0))
+
+- GetPlayerOverride(playerRef) -> table | nil
+    Returns the override table for the player if present.
+
+- RemovePlayerOverride(playerRef) -> bool
+    Removes any overrides for the specified player.
+
+- ClearPlayerOverrides() -> bool
+    Clears all player-specific overrides.
+
+Examples
+- Set per-player gradient via HandleColorPickerChange:
+    getgenv().TrisESP.HandleColorPickerChange("BoxFill", Color3.fromRGB(0,150,255))
+
+- Toggle health gradient animation off (global):
+    getgenv().TrisESP.Settings.HealthGradientEnabled = false
+
+- Make a single player always invisible to ESP (override):
+    getgenv().TrisESP.AddPlayerOverride("Enemy", { Enabled = false })
+
+Notes
+- Many settings can also be overridden per-player using `AddPlayerOverride`.
+- The system persists per-player gradient/phase angles in `getgenv()._TrisESP_Persistent` where supported by the executor.
+- If you want help converting an external UI to call these helpers, provide the UI code and I can wire it.
+]]
+
+-- Spin integrator & constants
+local AUTOROTATE_SPEED = 60 -- degrees per second for fill gradient
+local SpinAngle = PERSIST.SpinAngle or RotationAngle -- persistent integrated angle
+local MAX_DT = 0.01 -- cap delta to avoid huge single-frame jumps (seconds)
+
+-- Utility functions
+-- rainbow removed
+
+local function lerpColor(c1, c2, t)
+    return Color3.new(
+        c1.R + (c2.R - c1.R) * t,
+        c1.G + (c2.G - c1.G) * t,
+        c1.B + (c2.B - c1.B) * t
+    )
 end
 
-local SocialBox = Tabs.Home:AddRightGroupbox("Socials", "users")
-SocialBox:AddLabel("Join Discord for updates & support!", true)
-SocialBox:AddButton("Join Discord", function()
-    if safeSetClipboard("https://discord.gg/example") then
-        Library:Notify("Discord invite copied!", 3)
-        local s = Instance.new("Sound"); s.SoundId = "rbxassetid://9086208311"; s.Volume = 0.3; s.Parent = SoundService; s:Play(); s.Ended:Wait(); s:Destroy()
+local function createGradientSequence(color1, color2, color3)
+    return ColorSequence.new{
+        ColorSequenceKeypoint.new(0, color1),
+        ColorSequenceKeypoint.new(0.5, color2),
+        ColorSequenceKeypoint.new(1, color3)
+    }
+end
+
+-- Convert arbitrary gradient stops (from ulib colorpicker) to a UIGradient
+local function stopsToUIGradient(uiGradient, stops, rotation)
+    if not stops or #stops == 0 then return end
+    local sorted = {}
+    for _, s in ipairs(stops) do sorted[#sorted+1] = s end
+    table.sort(sorted, function(a, b) return (a.pos or 0) < (b.pos or 0) end)
+    if (sorted[1].pos or 0) > 0 then
+        table.insert(sorted, 1, { pos = 0, color = sorted[1].color or Color3.new(1,1,1), transp = sorted[1].transp or sorted[1].transparency or 0 })
+    end
+    if (sorted[#sorted].pos or 0) < 1 then
+        sorted[#sorted+1] = { pos = 1, color = sorted[#sorted].color or Color3.new(1,1,1), transp = sorted[#sorted].transp or sorted[#sorted].transparency or 0 }
+    end
+    local ckp, tkp = {}, {}
+    for _, s in ipairs(sorted) do
+        ckp[#ckp+1] = ColorSequenceKeypoint.new(s.pos or 0, s.color or Color3.new(1,1,1))
+        tkp[#tkp+1] = NumberSequenceKeypoint.new(s.pos or 0, s.transp or s.transparency or 0)
+    end
+    uiGradient.Color = ColorSequence.new(ckp)
+    uiGradient.Transparency = NumberSequence.new(tkp)
+    if rotation then uiGradient.Rotation = rotation end
+end
+
+-- Build a ColorSequence from gradient stops with a phase offset (for skeleton gradient animation)
+local function buildGradientSequenceFromStops(stops, phase)
+    phase = phase or 0
+    local kps = {}
+    for _, s in ipairs(stops) do
+        local p = (s.pos + phase) % 1
+        table.insert(kps, ColorSequenceKeypoint.new(p, s.color))
+    end
+    table.sort(kps, function(a, b) return a.Time < b.Time end)
+    if kps[1].Time > 0 then
+        table.insert(kps, 1, ColorSequenceKeypoint.new(0, kps[#kps].Value))
+    end
+    if kps[#kps].Time < 1 then
+        table.insert(kps, ColorSequenceKeypoint.new(1, kps[1].Value))
+    end
+    return ColorSequence.new(kps)
+end
+
+-- Sample arbitrary gradient stops down to 3 Color3 values (legacy compat)
+local function gradientStopsToThree(stops)
+    if not stops or #stops == 0 then
+        local w = Color3.new(1,1,1); return w, w, w
+    end
+    local sorted = {}
+    for _, s in ipairs(stops) do sorted[#sorted+1] = s end
+    table.sort(sorted, function(a, b) return (a.pos or 0) < (b.pos or 0) end)
+    local function sampleAt(target)
+        if #sorted == 1 then return sorted[1].color end
+        for i = 1, #sorted - 1 do
+            if target <= sorted[i+1].pos then
+                local range = sorted[i+1].pos - sorted[i].pos
+                if range <= 0 then return sorted[i].color end
+                return lerpColor(sorted[i].color, sorted[i+1].color, (target - sorted[i].pos) / range)
+            end
+        end
+        return sorted[#sorted].color
+    end
+    return sampleAt(0), sampleAt(0.5), sampleAt(1)
+end
+
+-- Sample color from arbitrary gradient stops at a given position [0..1]
+local function sampleStopsAtPosition(stops, pos)
+    if not stops or #stops == 0 then return Color3.new(1,1,1) end
+    local sorted = {}
+    for _, s in ipairs(stops) do sorted[#sorted+1] = s end
+    table.sort(sorted, function(a, b) return (a.pos or 0) < (b.pos or 0) end)
+    if pos <= sorted[1].pos then return sorted[1].color end
+    if pos >= sorted[#sorted].pos then return sorted[#sorted].color end
+    for i = 1, #sorted - 1 do
+        if pos <= sorted[i+1].pos then
+            local range = sorted[i+1].pos - sorted[i].pos
+            if range <= 0 then return sorted[i].color end
+            return lerpColor(sorted[i].color, sorted[i+1].color, (pos - sorted[i].pos) / range)
+        end
+    end
+    return sorted[#sorted].color
+end
+
+-- Build a RichText string that colors each character by its position along gradient stops.
+-- `phase` offsets the sampling so animated gradients stay in sync with the bar.
+local function makeGradientText(text, stops, phase)
+    local len = #text
+    if len == 0 then return "" end
+    local parts = {}
+    for i = 1, len do
+        local t = (len == 1) and 0 or ((i - 1) / (len - 1))
+        local samplePos = ((t - (phase or 0)) % 1 + 1) % 1
+        local color = sampleStopsAtPosition(stops, samplePos)
+        local r = math.floor(color.R * 255 + 0.5)
+        local g = math.floor(color.G * 255 + 0.5)
+        local b = math.floor(color.B * 255 + 0.5)
+        local char = text:sub(i, i)
+        char = char:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+        parts[i] = string.format('<font color="rgb(%d,%d,%d)">%s</font>', r, g, b, char)
+    end
+    return table.concat(parts)
+end
+
+local function getEnumFont(fontName)
+    if fontName == "Tahoma" then
+        return Enum.Font.SourceSans
+    elseif fontName == "SourceSansBold" then
+        return Enum.Font.SourceSansBold
+    elseif fontName == "GothamBold" then
+        return Enum.Font.GothamBold
+    elseif fontName == "Gotham" then
+        return Enum.Font.Gotham
+    elseif fontName == "Roboto" then
+        return Enum.Font.Roboto
+    elseif fontName == "RobotoMono" then
+        return Enum.Font.RobotoMono
+    elseif fontName == "Ubuntu" then
+        return Enum.Font.Ubuntu
+    elseif fontName == "Oswald" then
+        return Enum.Font.Oswald
+    end
+    return Enum.Font.Code -- ProggyClean (default)
+end
+
+local function getHealthColor(ratio)
+    if ratio > 0.75 then
+        return Color3.fromRGB(0, 255, 0)
+    elseif ratio > 0.5 then
+        return Color3.fromRGB(255, 255, 0)
+    elseif ratio > 0.25 then
+        return Color3.fromRGB(255, 170, 0)
     else
-        Library:Notify("Clipboard not supported!", 3)
+        return Color3.fromRGB(255, 0, 0)
     end
-end)
+end
 
--- Farming tab groupbox for tycoon farm auto-buy
-local FarmingGroup = Tabs.Farming:AddLeftGroupbox("Tycoon Farm", "leaf")
-local autoBuyEnabled = false
+local function isSameTeam(player1, player2)
+    if not player1 or not player2 or player1 == player2 then return false end
+    if player1.Team and player2.Team then
+        return player1.Team == player2.Team
+    end
+    return false
+end
 
-FarmingGroup:AddToggle("AutoBuy", {
-    Text = "Auto Buy",
-    Default = false,
-    Callback = function(val)
-        autoBuyEnabled = val
-        if val then
-            task.spawn(function()
-                while autoBuyEnabled do
-                    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    -- determine team name from GUI using updated path
-                    local teamText = nil
-                    pcall(function()
-                        local plName = LocalPlayer.Name
-                        local entry = LocalPlayer.PlayerGui.UI.Container.HUD.PlayerList.PlayerList.ScrollingFrame:FindFirstChild(plName)
-                        if entry and entry:FindFirstChild("Stats") and entry.Stats:FindFirstChild("Team") then
-                            teamText = entry.Stats.Team.Text
-                        end
-                    end)
-                    if teamText and workspace.Tycoon and workspace.Tycoon.Tycoons:FindFirstChild(teamText) then
-                        local buttonFolder = workspace.Tycoon.Tycoons[teamText].UnpurchasedButtons
-                        for _, group in ipairs(buttonFolder:GetChildren()) do
-                            if hrp then
-                                -- ignore specific item by name
-                                if group.Name == "FAMAS Group Gun" then
-                                    continue
-                                end
-                                -- check neon color inside the button model
-                                local neon = group:FindFirstChild("Neon")
-                                if neon and neon:IsA("BasePart") then
-                                    local c = neon.Color
-                                    if not (c.r == 0 and c.g == 1 and c.b == 0) then
-                                        -- check for yellow rebirth item
-                                        if c.r == 1 and c.g == 1 and c.b == 0 then
-                                            -- try read price
-                                            local priceText
-                                            pcall(function()
-                                                priceText = group.Neon.UI.BillboardGui.Frame.Price.Text
-                                            end)
-                                            if priceText then
-                                                local num = tonumber(priceText:match("%d+")) or 0
-                                                local myRebirths = 0
-                                                pcall(function()
-                                                    local stats = LocalPlayer:FindFirstChild("leaderstats")
-                                                    if stats and stats:FindFirstChild("Rebirths") then
-                                                        myRebirths = tonumber(stats.Rebirths.Value) or 0
-                                                    else
-                                                        local entry = LocalPlayer.PlayerGui.UI.Container.HUD.PlayerList.PlayerList.ScrollingFrame:FindFirstChild(LocalPlayer.Name)
-                                                        if entry and entry:FindFirstChild("Stats") and entry.Stats:FindFirstChild("Rebirths") then
-                                                            myRebirths = tonumber(entry.Stats.Rebirths.Text:match("%d+")) or 0
-                                                        end
-                                                    end
-                                                end)
-                                                if num > myRebirths then
-                                                    continue
-                                                end
-                                            end
-                                        -- blue cash purchase item
-                                        elseif math.abs(c.r - (4/255)) < 0.001 and math.abs(c.g - (175/255)) < 0.001 and math.abs(c.b - (235/255)) < 0.001 then
-                                            local priceText
-                                            pcall(function()
-                                                priceText = group.Neon.UI.BillboardGui.Frame.Price.Text
-                                            end)
-                                            if priceText then
-                                                local num = tonumber(priceText:match("%d+")) or 0
-                                                local myCash = 0
-                                                pcall(function()
-                                                    local stats = LocalPlayer:FindFirstChild("leaderstats")
-                                                    if stats and stats:FindFirstChild("Cash") then
-                                                        myCash = tonumber(stats.Cash.Value) or 0
-                                                    end
-                                                end)
-                                                if num > myCash then
-                                                    continue
-                                                end
-                                            end
-                                        else
-                                            continue
-                                        end
-                                    end
-                                end
-                                local targetPart = nil
-                                if group:IsA("BasePart") then
-                                    targetPart = group
-                                else
-                                    targetPart = group:FindFirstChild("Part")
-                                end
-                                if targetPart and targetPart:IsA("BasePart") then
-                                    -- teleport to point just above the part
-                                    local aboveCFrame = targetPart.CFrame + Vector3.new(0, targetPart.Size.Y/2 + 3, 0)
-                                    hrp.CFrame = aboveCFrame
-                                    -- small shake to trigger purchase
-                                    for i = 1, 3 do
-                                        hrp.CFrame = hrp.CFrame * CFrame.new(math.random(-1,1),0,math.random(-1,1))
-                                        task.wait(0.05)
-                                    end
-                                    task.wait(0.1)
-                                end
-                            end
+local function shouldShowPlayer(player)
+    if not player or player == LocalPlayer then return false end
+    if ESPSettings.TeamCheckEnabled then
+        -- hide teammates (standard behaviour)
+        if isSameTeam(player, LocalPlayer) then
+            return false
+        end
+        -- hide players on any configured custom team names
+        if player.Team then
+            for _, tname in ipairs(ESPSettings.CustomTeams or {}) do
+                if tostring(player.Team.Name) == tostring(tname) then
+                    return false
+                end
+            end
+                -- hide players on any configured team objects (support many types)
+                for _, tobj in ipairs(ESPSettings.CustomTeamObjects or {}) do
+                    -- direct Team instance
+                    if typeof and typeof(tobj) == "Instance" and tobj:IsA("Team") then
+                        if player.Team == tobj then return false end
+                    end
+                    -- if tobj is a Folder/Container with children named after players or containing values
+                    if typeof and typeof(tobj) == "Instance" then
+                        if tobj:FindFirstChild(player.Name) then return false end
+                        -- check for ObjectValue/StringValue children referencing player
+                        for _, child in ipairs(tobj:GetChildren()) do
+                            if child:IsA("ObjectValue") and child.Value == player then return false end
+                            if child:IsA("StringValue") and child.Value == player.Name then return false end
                         end
                     end
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-})
-
--- additional farming toggle for collecting gradient
-local collectEnabled = false
-FarmingGroup:AddToggle("AutoCollect", {
-    Text = "Auto Collect",
-    Default = false,
-    Callback = function(val)
-        collectEnabled = val
-        if val then
-            task.spawn(function()
-                while collectEnabled do
-                    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    local teamText = nil
-                    pcall(function()
-                        local plName = LocalPlayer.Name
-                        local entry = LocalPlayer.PlayerGui.UI.Container.HUD.PlayerList.PlayerList.ScrollingFrame:FindFirstChild(plName)
-                        if entry and entry:FindFirstChild("Stats") and entry.Stats:FindFirstChild("Team") then
-                            teamText = entry.Stats.Team.Text
-                        end
-                    end)
-                    if teamText and workspace.Tycoon and workspace.Tycoon.Tycoons:FindFirstChild(teamText) then
-                        local collector = workspace.Tycoon.Tycoons[teamText].Essentials.CollectorParts:FindFirstChild("Collector")
-                        if collector and collector:IsA("BasePart") and hrp then
-                            hrp.CFrame = collector.CFrame
+                    -- if tobj is a plain table (list of players/names/ids)
+                    if type(tobj) == "table" then
+                        for _, v in ipairs(tobj) do
+                            if v == player or v == player.UserId or v == player.Name then return false end
                         end
                     end
-                    task.wait(1)
+                    -- if tobj is a number (userid)
+                    if type(tobj) == "number" and tobj == player.UserId then return false end
+                    -- if tobj is a string (team name) handled earlier in CustomTeams loop
                 end
-            end)
         end
     end
-})
-
--- auto rebirth toggle
-local autoRebirthEnabled = false
-FarmingGroup:AddToggle("AutoRebirth", {
-    Text = "Auto Rebirth",
-    Tooltip = "Automatically fires rebirth every 30s",
-    Default = false,
-    Callback = function(val)
-        autoRebirthEnabled = val
-        if val then
-            task.spawn(function()
-                while autoRebirthEnabled do
-                    local teamText = nil
-                    pcall(function()
-                        local plName = LocalPlayer.Name
-                        local entry = LocalPlayer.PlayerGui.UI.Container.HUD.PlayerList.PlayerList.ScrollingFrame:FindFirstChild(plName)
-                        if entry and entry:FindFirstChild("Stats") and entry.Stats:FindFirstChild("Team") then
-                            teamText = entry.Stats.Team.Text
-                        end
-                    end)
-                    if teamText and workspace.Tycoon and workspace.Tycoon.Tycoons:FindFirstChild(teamText) then
-                        -- always fire the rebirth remote first
-                        pcall(function()
-                            local evt = game:GetService("ReplicatedStorage").RebirthEVT
-                            if evt then
-                                evt:FireServer()
-                            end
-                        end)
-
-                        -- check cash afterwards
-                        local myCash = 0
-                        pcall(function()
-                            local stats = LocalPlayer:FindFirstChild("leaderstats")
-                            if stats and stats:FindFirstChild("Cash") then
-                                myCash = tonumber(stats.Cash.Value) or 0
-                            end
-                        end)
-                        if myCash <= 0 then
-                            -- teleport to diamond plate for 5 seconds and trigger prompt
-                            pcall(function()
-                                local ty = workspace.Tycoon.Tycoons[teamText]
-                                local diamond = ty.PurchasedObjects["Oil 1"].DiamondPlate
-                                if diamond and diamond:IsA("BasePart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                                    LocalPlayer.Character.HumanoidRootPart.CFrame = diamond.CFrame + Vector3.new(0, 5, 0)
-                                end
-                                local prompt = ty.PurchasedObjects["Oil 1"].CB1.DefaultExtractor
-                                if prompt and prompt:IsA("ProximityPrompt") then
-                                    pcall(function()
-                                        prompt.HoldDuration = 0
-                                    end)
-                                    prompt:InputHoldBegin()
-                                    prompt:InputHoldEnd()
-                                end
-                            end)
-                            -- stay there for 5 seconds
-                            task.wait(5)
-                        end
-                    end
-                    task.wait(30)
-                end
-            end)
-        end
-    end
-})
-
---============================================================
--- COMBAT TAB: Silent Aim
---============================================================
-local SilentAimGroup = Tabs.Combat:AddLeftGroupbox("Silent Aim", "crosshair")
-
-local silentAimEnabled = false
-local silentAimFOV = 100
-local silentAimVisCheck = false
-local bulletTPEnabled = false
-local bulletManipEnabled = false
-local bulletTPColor = Color3.fromRGB(255,255,255)
-local bulletManipColor = Color3.fromRGB(255,255,255)
-local _activeManipCount = 0  -- tracks concurrent steered bullets; capped to prevent lag
-local infiniteAmmoEnabled = false
-local noMaxDistEnabled = false
-local alwaysAutoEnabled = false
-local breakShieldsEnabled = false
-local instantHitEnabled = false
-local _ammoTable = nil       -- tbl_3_upvr reference (found via GC)
-local _origNamecall = nil    -- stored hookmetamethod original
-local _fastCastHooked = false
-
--- turret/vehicle helpers
-local localTurretPart = nil
-local humveeRoot = nil
-
-local function updateLocalTurret()
-    if not humveeRoot then
-        local vs = workspace:FindFirstChild("Game Systems")
-        vs = vs and vs:FindFirstChild("Vehicle Workspace")
-        humveeRoot = vs and vs:FindFirstChild("Humvee")
-    end
-    if humveeRoot and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        local seat = LocalPlayer.Character.Humanoid.SeatPart
-        if seat and seat:IsDescendantOf(humveeRoot) then
-            local part = humveeRoot:FindFirstChild("Misc")
-            part = part and part:FindFirstChild("Turrets")
-            part = part and part:FindFirstChild("Humvee Weapons")
-            part = part and part:FindFirstChild("Mid Turret")
-            part = part and part:FindFirstChild("Up/Down")
-            part = part and part:FindFirstChild("MovingParts")
-            part = part and part:FindFirstChild("Collision")
-            localTurretPart = part
-        else
-            localTurretPart = nil
-        end
-    else
-        localTurretPart = nil
-    end
+    return true
 end
 
-RunService.RenderStepped:Connect(updateLocalTurret)
-LocalPlayer.CharacterAdded:Connect(function(char)
-    char:WaitForChild("Humanoid")
-    updateLocalTurret()
-end)
-
--- simple drawing circle will represent FOV; radius managed below
-fovCircle.Radius = silentAimFOV
-
-local SAEnableToggle = SilentAimGroup:AddToggle("SilentAimEnable", {
-    Text = "Enable",
-    Default = false,
-    Callback = function(val)
-        silentAimEnabled = val
-    end
-}):AddKeyPicker("SilentAimKey", {
-    Default = "None",
-    SyncToggleState = true,
-    Mode = "Toggle",
-    Text = "Silent Aim",
-})
-
-local SADep = SilentAimGroup:AddDependencyBox()
-SADep:SetupDependencies({{SAEnableToggle, true}})
-
-SADep:AddSlider("SilentAimFOVSlider", {
-    Text = "FOV Size",
-    Default = 100,
-    Min = 10,
-    Max = 500,
-    Rounding = 0,
-    Callback = function(val)
-        silentAimFOV = val
-        fovCircle.Radius = val
-    end
-})
-
-SADep:AddToggle("SilentAimFOVCircle", {
-    Text = "Show FOV Circle",
-    Default = false,
-    Callback = function(val)
-        fovCircle.Visible = val and silentAimEnabled
-    end
-}):AddColorPicker("SAFovColor", {
-    Default = Color3.new(1, 1, 1),
-    Title = "FOV Color",
-    Transparency = 0,
-    Callback = function(val)
-        fovCircle.Color = val
-    end
-})
-
-SADep:AddSlider("SAFovThickness", {
-    Text = "Circle Thickness",
-    Default = 1,
-    Min = 1,
-    Max = 5,
-    Rounding = 0,
-    Callback = function(val) fovCircle.Thickness = val end
-})
-SADep:AddSlider("SAFovSides", {
-    Text = "Circle Sides",
-    Default = 64,
-    Min = 16,
-    Max = 256,
-    Rounding = 0,
-    Callback = function(val) fovCircle.NumSides = val end
-})
-SADep:AddToggle("SAFovFilled", {
-    Text = "Filled Circle",
-    Default = false,
-    Callback = function(val) fovCircle.Filled = val end
-})
-
-SADep:AddToggle("SilentAimVisCheck", {
-    Text = "Visible Check",
-    Default = false,
-    Callback = function(val)
-        silentAimVisCheck = val
-    end
-})
-
--- Bullet Features section
-SilentAimGroup:AddDivider()
-
-local BTPtoggle = SilentAimGroup:AddToggle("BulletTP", {
-    Text = "Bullet TP",
-    Tooltip = "Teleports bullet to target. RPGs are more stable.",
-    Default = false,
-    Callback = function(val)
-        bulletTPEnabled = val
-    end
-})
-BTPtoggle:AddColorPicker("BulletTPColor", {
-    Title = "TP Trace",
-    Default = Color3.fromRGB(255, 255, 255),
-    Transparency = 0,
-    Callback = function(c) bulletTPColor = c end
-})
-
-local BMtoggle = SilentAimGroup:AddToggle("BulletManip", {
-    Text = "Bullet Manipulation",
-    Tooltip = "Performance heavy — steers bullets around walls",
-    Default = false,
-    Callback = function(val)
-        bulletManipEnabled = val
-    end
-})
-BMtoggle:AddColorPicker("BulletManipColor", {
-    Title = "Manip Trace",
-    Default = Color3.fromRGB(255, 255, 255),
-    Transparency = 0,
-    Callback = function(c) bulletManipColor = c end
-})
-BMtoggle:AddKeyPicker("BulletManipKey", {
-    Default = "None",
-    SyncToggleState = true,
-    Mode = "Toggle",
-    Text = "Bullet Manip",
-})
-
-
---============================================================
--- COMBAT TAB: Camera Aimbot
---============================================================
-local AimbotGroup = Tabs.Combat:AddRightGroupbox("Camera Aimbot", "target")
-
-local aimbotEnabled = false
-local aimbotSmoothing = 5
-local aimbotFOV = 200
-local aimbotTargetBone = "Head"
-local aimbotVisCheck = false
-local aimbotShowFOV = false
-local aimbotPrediction = false
-local aimbotPredictionAmount = 0.1
-local aimbotStickyTarget = false
-local _aimbotLockedTarget = nil
-
--- Drawing FOV circle for camera aimbot
-local aimbotFovCircle = Drawing.new("Circle")
-aimbotFovCircle.Thickness = 1
-aimbotFovCircle.NumSides = 64
-aimbotFovCircle.Filled = false
-aimbotFovCircle.Visible = false
-aimbotFovCircle.Color = Color3.fromRGB(0, 255, 100)
-aimbotFovCircle.Transparency = 0.6
-
-local AimEnableToggle = AimbotGroup:AddToggle("AimbotEnable", {
-    Text = "Enable",
-    Default = false,
-    Callback = function(val)
-        aimbotEnabled = val
-        if not val then _aimbotLockedTarget = nil end
-    end
-}):AddKeyPicker("AimbotKey", {
-    Default = "None",
-    SyncToggleState = true,
-    Mode = "Toggle",
-    Text = "Camera Aimbot",
-})
-
-local AimDep = AimbotGroup:AddDependencyBox()
-AimDep:SetupDependencies({{AimEnableToggle, true}})
-
-AimDep:AddDropdown("AimbotBone", {
-    Text = "Target Bone",
-    Values = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso"},
-    Default = "Head",
-    Callback = function(val) aimbotTargetBone = val end
-})
-
-AimDep:AddSlider("AimbotSmoothing", {
-    Text = "Smoothing",
-    Default = 5,
-    Min = 1,
-    Max = 30,
-    Rounding = 1,
-    Tooltip = "Higher = smoother/slower tracking",
-    Callback = function(val) aimbotSmoothing = val end
-})
-
-AimDep:AddSlider("AimbotFOV", {
-    Text = "FOV",
-    Default = 200,
-    Min = 10,
-    Max = 800,
-    Rounding = 0,
-    Callback = function(val)
-        aimbotFOV = val
-        aimbotFovCircle.Radius = val
-    end
-})
-
-AimDep:AddToggle("AimbotVisCheck", {
-    Text = "Visibility Check",
-    Default = false,
-    Callback = function(val) aimbotVisCheck = val end
-})
-
-AimDep:AddToggle("AimbotShowFOV", {
-    Text = "Show FOV Circle",
-    Default = false,
-    Callback = function(val)
-        aimbotShowFOV = val
-        aimbotFovCircle.Visible = val and aimbotEnabled
-    end
-})
-
-AimDep:AddToggle("AimbotStickyTarget", {
-    Text = "Sticky Target",
-    Default = false,
-    Tooltip = "Lock onto one target until they die or leave FOV",
-    Callback = function(val)
-        aimbotStickyTarget = val
-        if not val then _aimbotLockedTarget = nil end
-    end
-})
-
-AimDep:AddDivider()
-
-AimDep:AddToggle("AimbotPrediction", {
-    Text = "Movement Prediction",
-    Default = false,
-    Callback = function(val) aimbotPrediction = val end
-})
-
-AimDep:AddSlider("AimbotPredictionAmount", {
-    Text = "Prediction Factor",
-    Default = 0.1,
-    Min = 0.01,
-    Max = 0.5,
-    Rounding = 2,
-    Tooltip = "How far ahead to predict (seconds)",
-    Callback = function(val) aimbotPredictionAmount = val end
-})
-
--- Silent aim helper functions
-local function isAlive(plr)
-    local char = plr.Character
-    if not char then return false end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local hrpCheck = char:FindFirstChild("HumanoidRootPart")
-    return hum and hum.Health > 0 and hrpCheck
-end
-
-local function isVisible(targetPart)
-    local cam = Workspace.CurrentCamera
-    local origin = cam.CFrame.Position
-    local dir = (targetPart.Position - origin)
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {LocalPlayer.Character, cam}
-    local result = Workspace:Raycast(origin, dir, params)
-    if result then
-        return result.Instance:IsDescendantOf(targetPart.Parent)
-    end
-    return true -- nothing blocking = visible
-end
-
-local function getClosestPlayerToCursor()
-    local cam = Workspace.CurrentCamera
-    local mouse2d = UserInputService:GetMouseLocation()
-    local closest = nil
-    local closestDist = silentAimFOV
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == LocalPlayer then continue end
-        if not isAlive(plr) then continue end
-        -- skip teammates (same team)
-        if plr.Team and LocalPlayer.Team and plr.Team == LocalPlayer.Team then continue end
-
-        local char = plr.Character
-        local targetPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-        if not targetPart then continue end
-
-        if silentAimVisCheck and not isVisible(targetPart) then continue end
-
-        local screenPos, onScreen = cam:WorldToViewportPoint(targetPart.Position)
-        if not onScreen then continue end
-
-        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mouse2d).Magnitude
-        if dist < closestDist then
-            closestDist = dist
-            closest = targetPart
-        end
-    end
-    return closest
-end
-
--- Find nearest enemy base shield for Break Base Shields feature
-local function getEnemyShieldTarget()
-    local myTeam = nil
-    pcall(function()
-        local entry = LocalPlayer.PlayerGui.UI.Container.HUD.PlayerList.PlayerList.ScrollingFrame:FindFirstChild(LocalPlayer.Name)
-        if entry and entry:FindFirstChild("Stats") and entry.Stats:FindFirstChild("Team") then
-            myTeam = entry.Stats.Team.Text
-        end
-    end)
-    if not myTeam then return nil end
-
-    local tycoons = workspace:FindFirstChild("Tycoon") and workspace.Tycoon:FindFirstChild("Tycoons")
-    if not tycoons then return nil end
-
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+local function getScreenRectForCharacter(char)
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
 
-    local closest, closestDist = nil, math.huge
-    for _, tycoon in ipairs(tycoons:GetChildren()) do
-        if tycoon.Name ~= myTeam then
-            local shield = nil
-            pcall(function()
-                shield = tycoon.PurchasedObjects["Base Shield"].Shield
-            end)
-            if shield and shield:IsA("BasePart") then
-                local dist = (shield.Position - hrp.Position).Magnitude
-                if dist < closestDist then
-                    closestDist = dist
-                    closest = shield
+    local sizingMode = ESPSettings.BoxSizingMode or "Static"
+
+    if sizingMode == "Bounding" then
+        -- Dynamic bounding box: project all character part corners to screen space
+        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+        local anyVisible = false
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                local corners = {
+                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2, -part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new(-part.Size.X/2,  part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2,  part.Size.Y/2, -part.Size.Z/2),
+                    part.CFrame * CFrame.new(-part.Size.X/2, -part.Size.Y/2,  part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2, -part.Size.Y/2,  part.Size.Z/2),
+                    part.CFrame * CFrame.new(-part.Size.X/2,  part.Size.Y/2,  part.Size.Z/2),
+                    part.CFrame * CFrame.new( part.Size.X/2,  part.Size.Y/2,  part.Size.Z/2),
+                }
+                for _, corner in ipairs(corners) do
+                    local sp = Camera:WorldToViewportPoint(corner.Position)
+                    if sp.Z > 0 then
+                        anyVisible = true
+                        minX = math.min(minX, sp.X)
+                        minY = math.min(minY, sp.Y)
+                        maxX = math.max(maxX, sp.X)
+                        maxY = math.max(maxY, sp.Y)
+                    end
                 end
             end
         end
-    end
-    return closest
-end
-
---============================================================
--- VISUALS: Variables & helpers (declared before hook)
---============================================================
-local vmChamsEnabled = false
-local vmChamsFillColor = Color3.fromRGB(75, 0, 130)
-local vmChamsOutlineColor = Color3.fromRGB(255, 255, 255)
-local vmChamsFillTransparency = 0.5
-local vmChamsOutlineTransparency = 0
-local vmChamsHighlight = nil
-
-local vmOffsetX = 0
-local vmOffsetY = 0
-local vmOffsetZ = 0
-
-local tracerEnabled = false
-local tracerStartColor = Color3.fromRGB(255, 50, 50)
-local tracerEndColor = Color3.fromRGB(255, 50, 50)
-local tracerWidth = 0.05
-local tracerFadeTime = 0.3
-
--- 3D beam-based tracer (renders in world space, visible from any angle)
-local function drawTracer(origin, endpoint, startC, endC)
-    if not tracerEnabled then return end
-
-    local att0 = Instance.new("Attachment")
-    att0.WorldPosition = origin
-    att0.Parent = Workspace.Terrain
-
-    local att1 = Instance.new("Attachment")
-    att1.WorldPosition = endpoint
-    att1.Parent = Workspace.Terrain
-
-    local beam = Instance.new("Beam")
-    beam.Attachment0 = att0
-    beam.Attachment1 = att1
-    local sc = startC or tracerStartColor
-    local ec = endC or tracerEndColor
-    beam.Color = ColorSequence.new(sc, ec)
-    beam.Width0 = tracerWidth
-    beam.Width1 = tracerWidth
-    beam.FaceCamera = true
-    beam.LightEmission = 1
-    beam.Transparency = NumberSequence.new(0)
-    beam.Parent = att0
-
-    -- Always fade
-    local startTick = tick()
-    local fadeConn
-    fadeConn = RunService.Heartbeat:Connect(function()
-        local elapsed = tick() - startTick
-        local alpha = math.clamp(elapsed / math.max(tracerFadeTime, 0.01), 0, 1)
-        pcall(function()
-            beam.Transparency = NumberSequence.new(alpha)
-        end)
-        if alpha >= 1 then
-            fadeConn:Disconnect()
-            pcall(function() beam:Destroy() end)
-            pcall(function() att0:Destroy() end)
-            pcall(function() att1:Destroy() end)
+        if not anyVisible or minX == math.huge then return nil end
+        local w = maxX - minX
+        local h = maxY - minY
+        if w < 1 or h < 1 then return nil end
+        -- Enforce minimum box size
+        local minW = ESPSettings.MinBoxWidth or 8
+        local minH = ESPSettings.MinBoxHeight or 12
+        if w < minW then
+            local diff = minW - w
+            minX = minX - diff / 2
+            maxX = maxX + diff / 2
+            w = minW
         end
-    end)
-end
-
---============================================================
--- REMOTES: Cache for reference (tracers, debug)
---============================================================
-local BFS = ReplicatedStorage:WaitForChild("BulletFireSystem")
-local _FireGunRemote = BFS:WaitForChild("FireGun")
-local _BulletHitRemote = BFS:WaitForChild("BulletHit")
-local _FireTurretRemote = BFS:WaitForChild("FireTurret")
-
--- Pre-computed target reference (updated every frame in RenderStepped)
-local _silentAimTarget = nil
-
-RunService.RenderStepped:Connect(function()
-    -- update simple drawing circle each frame
-    if Toggles.SilentAimFOVCircle and Toggles.SilentAimFOVCircle.Value and silentAimEnabled then
-        fovCircle.Visible = true
-        fovCircle.Position = UserInputService:GetMouseLocation()
-        if _silentAimTarget then
-            -- pulsing accent ring when a target is locked (gamesense-style)
-            local pulse = math.sin(tick() * 8) * 2.5
-            fovCircle.Radius    = math.max(1, silentAimFOV + pulse)
-            fovCircle.Thickness = 1.5
-            fovCircle.Color     = Color3.fromRGB(255, 70, 70)
-        else
-            fovCircle.Radius    = silentAimFOV
-            fovCircle.Thickness = 1
-            fovCircle.Color     = Color3.new(1, 1, 1)
+        if h < minH then
+            local diff = minH - h
+            minY = minY - diff / 2
+            maxY = maxY + diff / 2
+            h = minH
         end
+        return { x = minX, y = minY, w = w, h = h, cx = minX + w/2, cy = minY + h/2 }
     else
-        fovCircle.Visible = false
-    end
-
-    -- bullet TP visualization: draw line from camera to target head when enabled
-    if bulletTPEnabled and _silentAimTarget then
-        local head = _silentAimTarget.Parent and _silentAimTarget.Parent:FindFirstChild("Head") or _silentAimTarget
-        if head then
-            local camPos = Camera.CFrame.Position
-            local headPos = head.Position
-            bulletTPLine.Visible = true
-            bulletTPLine.From = Vector2.new(camPos.X, camPos.Y) -- we cannot set world positions in Drawing line; better use 3D beam? but keep visible fade
-            -- Instead convert to screen coordinates
-            local sp = Camera:WorldToViewportPoint(camPos)
-            local hp = Camera:WorldToViewportPoint(headPos)
-            bulletTPLine.From = Vector2.new(sp.X, sp.Y)
-            bulletTPLine.To = Vector2.new(hp.X, hp.Y)
-            bulletTPLine.Color = bulletTPColor
-        else
-            bulletTPLine.Visible = false
-        end
-    else
-        bulletTPLine.Visible = false
-    end
-
-    -- find the closest valid target each frame (uses Camera APIs which are NOT
-    -- safe inside __namecall, so we must do this here)
-    if silentAimEnabled then
-        _silentAimTarget = getClosestPlayerToCursor()  -- returns Head or HRP Part
-        -- Fall back to enemy shield if no player target and Break Base Shields is on
-        if not _silentAimTarget and breakShieldsEnabled then
-            _silentAimTarget = getEnemyShieldTarget()
-        end
-    else
-        _silentAimTarget = nil
-    end
-
-    -- Camera Aimbot: smoothly rotate camera toward target
-    if aimbotEnabled then
-        local cam = Workspace.CurrentCamera
-        local mouse2d = UserInputService:GetMouseLocation()
-
-        -- Update aimbot FOV circle
-        if aimbotShowFOV then
-            aimbotFovCircle.Visible = true
-            aimbotFovCircle.Position = mouse2d
-            aimbotFovCircle.Radius = aimbotFOV
-        else
-            aimbotFovCircle.Visible = false
-        end
-
-        -- Sticky target: reuse locked target if still valid
-        local bestTarget = nil
-        if aimbotStickyTarget and _aimbotLockedTarget then
-            local part = _aimbotLockedTarget
-            if part and part.Parent and part.Parent:FindFirstChildOfClass("Humanoid") then
-                local hum = part.Parent:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health > 0 then
-                    local sp, onScr = cam:WorldToViewportPoint(part.Position)
-                    local d = (Vector2.new(sp.X, sp.Y) - mouse2d).Magnitude
-                    if onScr and d < aimbotFOV * 1.5 then
-                        bestTarget = part
-                    end
-                end
-            end
-            if not bestTarget then _aimbotLockedTarget = nil end
-        end
-
-        -- Find new target if needed
-        if not bestTarget then
-            local bestDist = aimbotFOV
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr == LocalPlayer then continue end
-                if not isAlive(plr) then continue end
-                if plr.Team and LocalPlayer.Team and plr.Team == LocalPlayer.Team then continue end
-                local char = plr.Character
-                local bone = char:FindFirstChild(aimbotTargetBone) or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-                if not bone then continue end
-                if aimbotVisCheck and not isVisible(bone) then continue end
-                local screenPos, onScreen = cam:WorldToViewportPoint(bone.Position)
-                if not onScreen then continue end
-                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mouse2d).Magnitude
-                if dist < bestDist then
-                    bestDist = dist
-                    bestTarget = bone
-                end
-            end
-            if bestTarget and aimbotStickyTarget then
-                _aimbotLockedTarget = bestTarget
-            end
-        end
-
-        if bestTarget then
-            local aimPos = bestTarget.Position
-            -- Movement prediction: offset aim by velocity * prediction factor
-            if aimbotPrediction and bestTarget.Parent then
-                local hrp = bestTarget.Parent:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local vel = hrp.AssemblyLinearVelocity or hrp.Velocity
-                    if vel then
-                        aimPos = aimPos + vel * aimbotPredictionAmount
-                    end
-                end
-            end
-            local targetCF = CFrame.lookAt(cam.CFrame.Position, aimPos)
-            cam.CFrame = cam.CFrame:Lerp(targetCF, 1 / math.max(aimbotSmoothing, 1))
-        end
-    else
-        aimbotFovCircle.Visible = false
-        _aimbotLockedTarget = nil
-    end
-
-end)
-
---============================================================
--- TURRET SILENT AIM: Hook __namecall
---============================================================
--- Only intercepts FireTurret:FireServer for turret silent aim.
--- ACS gun bullet manipulation is handled by FastCast.Fire hook below.
-
-local function getClosestPlayerWorld(fromPos, maxDist)
-    local closest, closestDist = nil, maxDist or math.huge
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == LocalPlayer then continue end
-        if not isAlive(plr) then continue end
-        if plr.Team and LocalPlayer.Team and plr.Team == LocalPlayer.Team then continue end
-        local char = plr.Character
-        local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-        if not head then continue end
-        local dist = (head.Position - fromPos).Magnitude
-        if dist < closestDist then
-            closestDist = dist
-            closest = head
-        end
-    end
-    return closest
-end
-
-_origNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    if method ~= "FireServer" then
-        return _origNamecall(self, ...)
-    end
-
-    -- block the built-in AFK remote
-    if self and self.Name == "SendAFK" then
-        return
-    end
-
-    -- Attempt secondary bulletTP by moving the local gun into the head
-    -- and also rewrite remote arguments so the server packet starts/ends at the
-    -- target's head.  This serves as a backup when the CastRay hook alone fails,
-    -- which helps with faster or non-RPG weapons.
-    if self == _FireGunRemote and bulletTPEnabled and _silentAimTarget then
-        local args = {...}
-
-        -- visual backup: move the local tool over the head
-        pcall(function()
-            local tgt = _silentAimTarget
-            if tgt and tgt.Parent then
-                local head = tgt.Parent:FindFirstChild("Head") or tgt
-                if head then
-                    local char = LocalPlayer.Character
-                    if char then
-                        local tool = char:FindFirstChildOfClass("Tool")
-                        if tool and tool.PrimaryPart then
-                            tool:SetPrimaryPartCFrame(head.CFrame)
-                        elseif tool then
-                            for _, part in ipairs(tool:GetDescendants()) do
-                                if part:IsA("BasePart") then
-                                    part.CFrame = head.CFrame
-                                end
-                            end
-                        end
-                    end
-                end
-            end
+        -- Static mode: use GetBoundingBox for accurate center + fixed width ratio
+        local ok, cf, size = pcall(function()
+            local c, s = char:GetBoundingBox()
+            return c, s
         end)
-
-        -- only rewrite server args when they look like the usual (direction +
-        -- muzzle Pos) pattern to avoid corrupting non-Vector3 payloads that the
-        -- game might sometimes send (some weapons use other formats).
-        if typeof(args[1]) == "Vector3" and typeof(args[4]) == "Vector3" then
-            if _silentAimTarget and _silentAimTarget.Parent then
-                local head = _silentAimTarget.Parent:FindFirstChild("Head") or _silentAimTarget
-                if head then
-                    local headPos = head.Position
-                    local origin = headPos + Vector3.new(0, 0.1, 0)
-                    local dir = (headPos - origin).Unit
-
-                    args[1] = dir
-                    -- replace subsequent Vector3 entries (muzzlePos, stance,
-                    -- etc) with the origin
-                    for i = 2, #args do
-                        if typeof(args[i]) == "Vector3" then
-                            args[i] = origin
-                        end
-                    end
-
-                    -- noMaxDist is now handled solely by FastCast.MaxDistance
-                end
+        if ok and cf and size and size.Y > 0 then
+            local halfH = size.Y / 2
+            local center = cf.Position
+            local topWorld = center + Vector3.new(0, halfH, 0)
+            local bottomWorld = center - Vector3.new(0, halfH, 0)
+            local spTop = Camera:WorldToViewportPoint(topWorld)
+            local spBottom = Camera:WorldToViewportPoint(bottomWorld)
+            if spTop.Z > 0 and spBottom.Z > 0 then
+                local h = math.abs(spBottom.Y - spTop.Y)
+                local widthRatio = ESPSettings.StaticBoxWidth or 0.6
+                local w = h * widthRatio
+                -- Enforce minimum box size
+                local minW = ESPSettings.MinBoxWidth or 8
+                local minH = ESPSettings.MinBoxHeight or 12
+                if w < minW then w = minW end
+                if h < minH then h = minH end
+                local cx = (spTop.X + spBottom.X) / 2
+                local cy = (spTop.Y + spBottom.Y) / 2
+                local x = cx - w / 2
+                local y = cy - h / 2
+                return { x = x, y = y, w = w, h = h, cx = cx, cy = cy }
             end
         end
-
-        return _origNamecall(self, unpack(args))
-    end
-
-
-
-
-    -- ── VEHICLE TURRET PACKET MODIFIERS ──
-    if self == _FireTurretRemote then
-        local args = {...}
-        -- apply silent‑aim only to the first argument (muzzle direction)
-        if silentAimEnabled and _silentAimTarget and typeof(args[1]) == "Vector3" then
-            local target = getClosestPlayerWorld(args[1], silentAimFOV)
-            if target then
-                args[1] = (target.Position - args[1]).Unit
-            end
-        end
-        -- distance limit handled by FastCast; leave args alone
-        return _origNamecall(self, unpack(args))
-    end
-
-    -- ── SERVER BULLET RANGE EXTENSION ──
-    if self == _FireGunRemote and noMaxDistEnabled then
-        local args = {...}
-        -- args[1]=direction, args[4]=muzzlePos
-        if typeof(args[1]) == "Vector3" and typeof(args[4]) == "Vector3" then
-            -- push origin backwards to gain extra range
-            args[4] = args[4] - args[1] * 800
-        end
-        return _origNamecall(self, unpack(args))
-    end
-
-    return _origNamecall(self, ...)
-end))
-
---============================================================
--- FASTCAST HOOK: Projectile TP / Manipulation / MaxDist
---============================================================
--- ACS fires visual bullets via FastCast.Fire(caster, origin, direction, speed, behavior).
--- We replace FC.Fire on the module table — every caster:Fire() goes through this.
---
---   Projectile TP:   (now handled in namecall remote hook) teleports
---                    the server packet directly to the target's head.
---   Bullet Manip:    computes waypoints around walls via iterative raycasting,
---                    fires toward the first waypoint, then steers the ActiveCast
---                    per-frame through each waypoint with sharp turns.
---   Max Distance:    moved to Modifications tab (noMaxDistEnabled).
-
--- Builds the shared RaycastParams for pathfinding (excludes our character,
--- the target character, and ACS_WorkSpace bullet cosmetics).
-local function buildNavParams(targetPart)
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local filterList = {}
-    if LocalPlayer.Character then
-        filterList[#filterList + 1] = LocalPlayer.Character
-    end
-    -- Exclude target character so their hitbox isn't treated as a wall
-    if targetPart then
-        local tChar = targetPart:FindFirstAncestorOfClass("Model")
-        if tChar then filterList[#filterList + 1] = tChar end
-    end
-    local gameSystems = Workspace:FindFirstChild("Game Systems")
-    if gameSystems then
-        local acsWS = gameSystems:FindFirstChild("ACS_WorkSpace")
-        if acsWS then filterList[#filterList + 1] = acsWS end
-    end
-    params.FilterDescendantsInstances = filterList
-    return params
-end
-
--- Helper: returns true if a ray from `a` to `b` is unobstructed.
-local function canReach(a, b, params)
-    local dir = b - a
-    local ray = Workspace:Raycast(a, dir, params)
-    return not ray or (ray.Position - a).Magnitude >= dir.Magnitude - 1
-end
-
--- Computes waypoints from `origin` to `targetPos` that navigate around walls.
--- Two-strategy search per leg:
---   1) Wall-surface scan: slides along the hit wall to find openings (doors, windows).
---   2) Wide-angle probe from current position in 50+ directions × multiple distances.
--- Unlimited sharp turns (up to MAX_LEGS).  No sliders.
-local function computeWallNavPath(origin, targetPos, targetPart)
-    local params = buildNavParams(targetPart)
-
-    -- Quick direct-LOS check
-    if canReach(origin, targetPos, params) then
-        return {targetPos}
-    end
-
-    local waypoints = {}
-    local current   = origin
-    local MAX_LEGS  = 25
-    local GRID      = 4   -- studs per grid cell for visited tracking
-
-    local visited = {}
-    local function markVisited(pos)
-        local k = math.floor(pos.X / GRID)
-            .. "," .. math.floor(pos.Y / GRID)
-            .. "," .. math.floor(pos.Z / GRID)
-        if visited[k] then return false end
-        visited[k] = true
-        return true
-    end
-    markVisited(origin)
-
-    -- Evaluate a candidate bypass point; updates best* upvalues via closure.
-    local bestBypass, bestScore, bestCanSee
-
-    local function evaluate(candidate)
-        -- Must be reachable from current
-        if not canReach(current, candidate, params) then return end
-        -- Target visible from here?
-        local see = canReach(candidate, targetPos, params)
-        local score = (targetPos - candidate).Magnitude
-        local dominated = false
-        if see and not bestCanSee then          -- seeing target wins everything
-        elseif see == bestCanSee and score < bestScore then
-        else dominated = true end
-        if not dominated then
-            bestBypass = candidate
-            bestScore  = score
-            bestCanSee = see
-        end
-    end
-
-    for _leg = 1, MAX_LEGS do
-        local toTarget = targetPos - current
-        if toTarget.Magnitude < 2 then
-            waypoints[#waypoints + 1] = targetPos
-            break
-        end
-
-        -- Direct LOS from current leg?
-        if canReach(current, targetPos, params) then
-            waypoints[#waypoints + 1] = targetPos
-            break
-        end
-
-        -- Blocked — get wall info
-        local ray = Workspace:Raycast(current, toTarget, params)
-        if not ray then
-            waypoints[#waypoints + 1] = targetPos
-            break
-        end
-
-        local hitPos    = ray.Position
-        local hitNormal = ray.Normal
-        local travelDir = toTarget.Unit
-
-        -- ── STRATEGY 1: Wall-surface scan (finds doors / windows) ──
-        -- Compute two orthogonal directions along the wall surface.
-        local wallRight = hitNormal:Cross(Vector3.new(0, 1, 0))
-        if wallRight.Magnitude < 0.01 then
-            wallRight = hitNormal:Cross(Vector3.new(1, 0, 0))
-        end
-        wallRight = wallRight.Unit
-        local wallUp = hitNormal:Cross(wallRight).Unit
-
-        local wallDirs = {
-            wallRight, -wallRight, wallUp, -wallUp,
-            (wallRight + wallUp).Unit, (-wallRight + wallUp).Unit,
-            (wallRight - wallUp).Unit, (-wallRight - wallUp).Unit,
-        }
-
-        bestBypass = nil; bestScore = math.huge; bestCanSee = false
-
-        for _, wDir in ipairs(wallDirs) do
-            -- Slide along the wall in 2-stud increments looking for an opening
-            for scanDist = 2, 50, 2 do
-                -- Point on our side of the wall, offset along its surface
-                local probe = hitPos + wDir * scanDist + hitNormal * 2
-                -- Check if the wall has ended / there's an opening here
-                local passRay = Workspace:Raycast(probe, travelDir * 30, params)
-                local opening = not passRay
-                    or (passRay.Position - probe).Magnitude > 8
-                if opening then
-                    evaluate(probe)
-                    -- Also try a position slightly past the opening
-                    local through = probe + travelDir * 5
-                    evaluate(through)
-                    break  -- found opening in this scan direction
-                end
-            end
-        end
-
-        -- ── STRATEGY 2: Wide-angle probing from current position ──
-        -- 26 uniform (cardinal + diagonal) + target-biased cone directions
-        local probeDirs = {}
-        for x = -1, 1 do
-            for y = -1, 1 do
-                for z = -1, 1 do
-                    if x ~= 0 or y ~= 0 or z ~= 0 then
-                        probeDirs[#probeDirs + 1] = Vector3.new(x, y, z).Unit
-                    end
-                end
-            end
-        end
-
-        -- Target-biased cone (rotated off travel direction)
-        local cRight = travelDir:Cross(Vector3.new(0, 1, 0))
-        if cRight.Magnitude < 0.01 then
-            cRight = travelDir:Cross(Vector3.new(1, 0, 0))
-        end
-        cRight = cRight.Unit
-        local cUp = cRight:Cross(travelDir).Unit
-
-        for _, angle in ipairs({15, 30, 50, 70, 90}) do
-            local rad = math.rad(angle)
-            local cosA, sinA = math.cos(rad), math.sin(rad)
-            for i = 0, 7 do
-                local az = i * math.pi / 4
-                local perpDir = cRight * math.cos(az) + cUp * math.sin(az)
-                probeDirs[#probeDirs + 1] = (travelDir * cosA + perpDir * sinA).Unit
-            end
-        end
-
-        for _, dir in ipairs(probeDirs) do
-            for _, dist in ipairs({6, 12, 22, 38, 60}) do
-                local candidate = current + dir * dist
-                if markVisited(candidate) then
-                    evaluate(candidate)
-                end
-            end
-        end
-
-        -- Commit best bypass
-        if bestBypass then
-            waypoints[#waypoints + 1] = bestBypass
-            markVisited(bestBypass)
-            current = bestBypass
-            if bestCanSee then
-                waypoints[#waypoints + 1] = targetPos
-                break
-            end
-        else
-            -- No path found; aim directly
-            waypoints[#waypoints + 1] = targetPos
-            break
-        end
-    end
-
-    -- Guarantee target is the final waypoint
-    if #waypoints == 0 or (waypoints[#waypoints] - targetPos).Magnitude > 1 then
-        waypoints[#waypoints + 1] = targetPos
-    end
-
-    return waypoints
-end
-
--- Steers an ActiveCast through waypoints with sharp direction changes.
--- Uses FastCast's :SetVelocity() / :SetAcceleration() per-frame.
-local function steerActiveCast(activeCast, waypoints, speed, targetRef)
-    -- only run manipulation when a valid target reference exists
-    if not activeCast or not targetRef or not targetRef.Parent or #waypoints == 0 then return end
-    -- cap concurrent steerers to avoid excessive heartbeat callbacks
-    local MAX_CONCURRENT_MANIP = 6
-    if _activeManipCount >= MAX_CONCURRENT_MANIP then return end
-    _activeManipCount += 1
-
-    local wpIndex   = 1
-    local threshold = math.clamp(speed * 0.04, 5, 30)
-    local currentWaypoints = waypoints
-    local lastTargetPos = targetRef.Position
-
-    local conn
-    conn = RunService.Heartbeat:Connect(function()
-        local ok, pos = pcall(function() return activeCast:GetPosition() end)
-        if not ok or not pos then
-            if conn.Connected then conn:Disconnect() end
-            _activeManipCount -= 1
-            return
-        end
-
-        if targetRef and targetRef.Parent then
-            local targetPos = targetRef.Position
-
-            -- if target moved significantly, recalc fresh path
-            if (targetPos - lastTargetPos).Magnitude > 2 then
-                local newPath = computeWallNavPath(pos, targetPos, targetRef)
-                if newPath and #newPath > 0 then
-                    currentWaypoints = newPath
-                    wpIndex = 1
-                end
-                lastTargetPos = targetPos
-            end
-
-            -- if we've reached a waypoint but it's no longer near the target,
-            -- recompute to chase the moving entity
-            if wpIndex and currentWaypoints[wpIndex] then
-                local wpCheck = currentWaypoints[wpIndex]
-                if (pos - wpCheck).Magnitude < threshold and (wpCheck - targetPos).Magnitude > 5 then
-                    local newPath = computeWallNavPath(pos, targetPos, targetRef)
-                    if newPath and #newPath > 0 then
-                        currentWaypoints = newPath
-                        wpIndex = 1
-                    else
-                        currentWaypoints[#currentWaypoints] = targetPos
-                    end
-                end
-            end
-        end
-
-        local wp = currentWaypoints[wpIndex]
-        if not wp then
-            if conn.Connected then conn:Disconnect() end
-            _activeManipCount -= 1
-            return
-        end
-
-        local toWP = wp - pos
-        local dist = toWP.Magnitude
-
-        while dist < threshold do
-            wpIndex = wpIndex + 1
-            wp = currentWaypoints[wpIndex]
-            if not wp then
-                if conn.Connected then conn:Disconnect() end
-                _activeManipCount -= 1
-                return
-            end
-            toWP = wp - pos
-            dist = toWP.Magnitude
-        end
-
-        pcall(function()
-            activeCast:SetVelocity(toWP.Unit * speed)
-            activeCast:SetAcceleration(Vector3.new(0, 0, 0))
-        end)
-    end)
-
-    task.delay(10, function()
-        if conn and conn.Connected then
-            conn:Disconnect()
-            _activeManipCount -= 1
-        end
-    end)
-end
-
--- Draws tracers along a waypoint path (origin → wp1 → wp2 → ... → target)
-local function drawManipTracer(origin, waypoints)
-    if not tracerEnabled then return end
-    local prev = origin
-    for _, wp in ipairs(waypoints) do
-        task.spawn(drawTracer, prev, wp, bulletManipColor or tracerStartColor, bulletManipColor or tracerEndColor)
-        prev = wp
+        return nil
     end
 end
 
-local function hookFastCast()
-    if _fastCastHooked then return end
-    local ok, FC = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("BulletFireSystem", 10):WaitForChild("FastCastRedux", 10))
-    end)
-    if not ok or not FC or not FC.Fire then
-        Library:Notify("FastCast hook: module not found", 4)
-        return
-    end
+-- Create ESP object
+local function createESPObject()
+    local container = Instance.new("Frame")
+    container.Name = "ESPContainer"
+    container.BackgroundTransparency = 1
+    container.Size = UDim2.new(1, 0, 1, 0)
+    container.Parent = ESPHolder
+    
+    local espObj = {
+        Container = container,
+        Player = nil,
+    }
+    espObj.GradientAngle = nil
+    espObj.OutlineAngle = 0
+    espObj.BoxRotation = 0
+    espObj.HealthGradientPhase = nil
+    espObj.NameGradientPhase = nil
+    espObj.DistanceGradientPhase = nil
+    espObj.HealthTextGradientPhase = nil
+    
+    -- Name label
+    local initFont = getEnumFont(ESPSettings.TextFont)
+    espObj.Name = Instance.new("TextLabel")
+    espObj.Name.Name = "NameLabel"
+    espObj.Name.BackgroundTransparency = 1
+    espObj.Name.Size = UDim2.new(0, 100, 0, 20)
+    espObj.Name.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.Name.Font = initFont
+    espObj.Name.TextSize = 13
+    espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Name.TextStrokeTransparency = 0
+    espObj.Name.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.Name.RichText = true
+    espObj.Name.Visible = false
+    espObj.Name.ZIndex = 10
+    espObj.Name.Parent = container
+    
+    -- Distance label (AnchorPoint top-center so text stays right below the box)
+    espObj.Distance = Instance.new("TextLabel")
+    espObj.Distance.Name = "DistanceLabel"
+    espObj.Distance.BackgroundTransparency = 1
+    espObj.Distance.Size = UDim2.new(0, 100, 0, 20)
+    espObj.Distance.AnchorPoint = Vector2.new(0.5, 0)
+    espObj.Distance.Font = initFont
+    espObj.Distance.TextSize = 13
+    espObj.Distance.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Distance.RichText = true
+    espObj.Distance.TextStrokeTransparency = 0
+    espObj.Distance.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.Distance.Visible = false
+    espObj.Distance.ZIndex = 10
+    espObj.Distance.Parent = container
 
-    local origFire = FC.Fire
-    _fastCastHooked = true
+    -- Custom text entries (external scripts may populate `espObj.CustomTexts`)
+    espObj.CustomTexts = {} -- array of strings
+    espObj.CustomTextLabels = {} -- generated TextLabel instances
+    
+    -- Weapon label
+    espObj.Weapon = Instance.new("TextLabel")
+    espObj.Weapon.Name = "WeaponLabel"
+    espObj.Weapon.BackgroundTransparency = 1
+    espObj.Weapon.Size = UDim2.new(0, 100, 0, 20)
+    espObj.Weapon.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.Weapon.Font = initFont
+    espObj.Weapon.TextSize = 13
+    espObj.Weapon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Weapon.TextStrokeTransparency = 0
+    espObj.Weapon.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.Weapon.Visible = false
+    espObj.Weapon.ZIndex = 10
+    espObj.Weapon.Parent = container
+    
+    -- Box outline frame (used for the 1px outline / corner boxes)
+    espObj.Box = Instance.new("Frame")
+    espObj.Box.Name = "BoxOutlineFrame"
+    espObj.Box.BackgroundColor3 = Color3.fromRGB(1, 1, 1)
+    espObj.Box.BackgroundTransparency = 1
+    espObj.Box.BorderSizePixel = 0
+    espObj.Box.Visible = false
+    espObj.Box.ZIndex = 1
+    espObj.Box.Parent = container
 
-    FC.Fire = function(caster, origin, direction, speed, behavior)
-        -- Always remove max distance when enabled (set very large value)
-        if noMaxDistEnabled and behavior then
-            behavior.MaxDistance = 1e7
-        end
+    -- black outer stroke (thickness 2) always on the box
+    espObj.BoxBlack = Instance.new("UIStroke")
+    espObj.BoxBlack.Name = "BoxBlackStroke"
+    espObj.BoxBlack.Color = Color3.new(0, 0, 0)
+    espObj.BoxBlack.Thickness = 3
+    espObj.BoxBlack.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    espObj.BoxBlack.Parent = espObj.Box
 
-        -- Bullet TP: shift visual bullet origin to just above head and aim at it
-        if bulletTPEnabled and _silentAimTarget and _silentAimTarget.Parent then
-            local head = _silentAimTarget.Parent:FindFirstChild("Head") or _silentAimTarget
-            if head then
-                local headPos = head.Position
-                local originPos = headPos + Vector3.new(0, 0.1, 0)
-                origin = originPos
-                -- align direction toward head for better visuals
-                direction = (headPos - originPos).Unit
-            end
-        end
+    -- gradient/outline stroke sits above the black stroke
+    espObj.BoxOutline = Instance.new("UIStroke")
+    espObj.BoxOutline.Name = "BoxOutline"
+    espObj.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
+    espObj.BoxOutline.Thickness = 1
+    espObj.BoxOutline.Transparency = 0
+    espObj.BoxOutline.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxOutline.Parent = espObj.Box
 
-        -- Vehicle turret tracer origin override
-        if localTurretPart then
-            -- if origin is very near the turret part assume it's a vehicle shot
-            if (origin - localTurretPart.Position).Magnitude < 5 then
-                origin = localTurretPart.Position
-            end
-        end
+    -- Box outline stroke (always 1px when enabled)
+    espObj.BoxOutline = Instance.new("UIStroke")
+    espObj.BoxOutline.Name = "BoxOutline"
+    -- stroke color will be overridden by gradient logic later; start black for fallback
+    espObj.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
+    espObj.BoxOutline.Thickness = 1
+    espObj.BoxOutline.Transparency = 0
+    espObj.BoxOutline.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxOutline.Parent = espObj.Box
 
-        local target = _silentAimTarget
-        local doManip = silentAimEnabled and target and target.Parent
-        local _manipWaypoints = nil
-        local _manipSpeed     = nil
-        local _manipOrigin    = nil
-        -- allow piercing everything except the target so the visual cast can't hit walls
-        if doManip and behavior then
-            behavior.CanPierceFunction = function(cast, rayResult, segVelocity, cosmeticBullet)
-                local hitPart = rayResult and rayResult.Instance
-                if not hitPart then return true end
-                if target and target.Parent then
-                    if hitPart == target or hitPart:IsDescendantOf(target.Parent) then
-                        -- Spawn hitmarker at impact point for local feedback
-                        if hitMarkerEnabled and rayResult.Position then
-                            task.defer(spawnHitMarker, rayResult.Position)
-                        end
-                        if hitSoundEnabled then
-                            task.defer(function() pcall(function() hitSound:Play() end) end)
-                        end
-                        return false
-                    end
+    -- Box outline gradient (for colored outlines - parented to UIStroke)
+    espObj.OutlineGradient = Instance.new("UIGradient")
+    espObj.OutlineGradient.Name = "OutlineGradient"
+    espObj.OutlineGradient.Enabled = true
+    espObj.OutlineGradient.Rotation = -90
+    espObj.OutlineGradient.Parent = espObj.BoxOutline
+
+    -- Separate Box Fill frame (completely independent of Box outline)
+    espObj.BoxFill = Instance.new("Frame")
+    espObj.BoxFill.Name = "BoxFillLayer"
+    espObj.BoxFill.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.BoxFill.BackgroundTransparency = 1
+    espObj.BoxFill.BorderSizePixel = 0
+    espObj.BoxFill.Visible = false
+    espObj.BoxFill.ZIndex = 0
+    espObj.BoxFill.Parent = container
+
+    -- Box fill gradient (independent)
+    espObj.BoxGradient = Instance.new("UIGradient")
+    espObj.BoxGradient.Name = "FillGradient"
+    espObj.BoxGradient.Enabled = true
+    espObj.BoxGradient.Rotation = -90
+    espObj.BoxGradient.Parent = espObj.BoxFill
+    
+    -- Tracer line
+    espObj.Tracer = Instance.new("Frame")
+    espObj.Tracer.Name = "Tracer"
+    espObj.Tracer.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.Tracer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.Tracer.BorderSizePixel = 0
+    espObj.Tracer.Visible = false
+    espObj.Tracer.ZIndex = 2
+    espObj.Tracer.Parent = container
+    -- Tracer outline (UIStroke) for a crisp outline around the rotated tracer
+    espObj.TracerOutline = Instance.new("UIStroke")
+    espObj.TracerOutline.Name = "TracerOutline"
+    espObj.TracerOutline.Color = Color3.fromRGB(0, 0, 0)
+    espObj.TracerOutline.Thickness = 1
+    espObj.TracerOutline.Transparency = 0
+    espObj.TracerOutline.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.TracerOutline.Parent = espObj.Tracer
+    
+    -- Health bar background
+    espObj.HealthBarBG = Instance.new("Frame")
+    espObj.HealthBarBG.Name = "HealthBarBG"
+    espObj.HealthBarBG.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.HealthBarBG.BackgroundTransparency = 0
+    espObj.HealthBarBG.BorderSizePixel = 1
+    espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.HealthBarBG.Visible = false
+    espObj.HealthBarBG.ZIndex = 3
+    espObj.HealthBarBG.Parent = container
+    
+    -- Health bar fill
+    espObj.HealthBar = Instance.new("Frame")
+    espObj.HealthBar.Name = "HealthBar"
+    espObj.HealthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    espObj.HealthBar.BackgroundTransparency = 0
+    espObj.HealthBar.BorderSizePixel = 0
+    espObj.HealthBar.Visible = false
+    espObj.HealthBar.ZIndex = 4
+    espObj.HealthBar.Parent = container
+    
+    -- Health bar gradient
+    espObj.HealthBarGradient = Instance.new("UIGradient")
+    espObj.HealthBarGradient.Name = "HealthGradient"
+    espObj.HealthBarGradient.Enabled = true
+    espObj.HealthBarGradient.Rotation = -90
+                espObj.HealthBarGradient.Color = createGradientSequence(
+        Color3.fromRGB(200, 0, 0),
+        Color3.fromRGB(60, 60, 125),
+        Color3.fromRGB(119, 120, 255)
+    )
+                if ESPSettings.HealthBarPosition == "Bottom" then
+                    espObj.HealthBarGradient.Rotation = 0
+                else
+                    espObj.HealthBarGradient.Rotation = -90
                 end
-                return true
-            end
-        end
-
-        if doManip then
-            -- Remove max distance when any bullet feature is active too
-            if behavior and (bulletTPEnabled or bulletManipEnabled) then
-                behavior.MaxDistance = 999999
-            end
-
-
-
-            -- ── Bullet Manipulation: wall-navigating pathfinding ──
-            -- Computes waypoints around obstacles, fires toward the first,
-            -- then steers the ActiveCast per-frame through each waypoint.
-            if bulletManipEnabled then
-                _manipWaypoints = computeWallNavPath(origin, target.Position, target)
-                if _manipWaypoints and #_manipWaypoints > 0 then
-                    -- Remove gravity so turns are clean straight-line segments
-                    if behavior then
-                        behavior.Acceleration = Vector3.new(0, 0, 0)
-                    end
-                    direction = (_manipWaypoints[1] - origin).Unit
-                end
-                -- respect instant hit by using enormous speed for steering
-                _manipSpeed = instantHitEnabled and 1e6 or (type(speed) == "number" and speed or 500)
-                _manipOrigin = origin
-            end
-        end
-
-        local activeCast = origFire(caster, origin, direction, speed, behavior)
-
-        -- Instant Hit: override bullet speed to extreme value
-        if instantHitEnabled then
-            pcall(function()
-                activeCast:SetVelocity(direction.Unit * 999999)
-                activeCast:SetAcceleration(Vector3.new(0, 0, 0))
-            end)
-        end
-
-
-
-        -- Start per-frame steering through waypoints (sharp turns)
-        if _manipWaypoints and #_manipWaypoints > 0 then
-            steerActiveCast(activeCast, _manipWaypoints, _manipSpeed, target)
-            -- Draw tracer along the planned trajectory
-            drawManipTracer(_manipOrigin or origin, _manipWaypoints)
-        end
-
-        -- Show tracers for normal bullets (always on)
-        if tracerEnabled and not doManip then
-            local spd = type(speed) == "number" and speed or 500
-            local endPoint = origin + direction.Unit * math.min(spd, 500)
-            task.spawn(drawTracer, origin, endPoint)
-        end
-
-        return activeCast
+    espObj.HealthBarGradient.Parent = espObj.HealthBar
+    
+    -- Health text (RichText enabled for per-character gradient coloring)
+    espObj.HealthText = Instance.new("TextLabel")
+    espObj.HealthText.Name = "HealthText"
+    espObj.HealthText.BackgroundTransparency = 1
+    espObj.HealthText.Size = UDim2.new(0, 60, 0, 20)
+    espObj.HealthText.AnchorPoint = Vector2.new(0.5, 0.5)
+    espObj.HealthText.Font = initFont
+    espObj.HealthText.TextSize = 13
+    espObj.HealthText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.HealthText.RichText = true
+    espObj.HealthText.TextStrokeTransparency = 0
+    espObj.HealthText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.HealthText.Visible = false
+    espObj.HealthText.ZIndex = 10
+    espObj.HealthText.Parent = container
+    
+    -- HP numeric text (combined HP+distance label below the bottom health bar)
+    espObj.HPText = Instance.new("TextLabel")
+    espObj.HPText.Name = "HPText"
+    espObj.HPText.BackgroundTransparency = 1
+    espObj.HPText.Size = UDim2.new(0, 120, 0, 18)
+    -- AnchorPoint (0.5, 0) means Position Y sets the TOP edge of the label, preventing overlap with the bar
+    espObj.HPText.AnchorPoint = Vector2.new(0.5, 0)
+    espObj.HPText.Font = initFont
+    espObj.HPText.TextSize = 13
+    espObj.HPText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espObj.HPText.RichText = true
+    espObj.HPText.TextStrokeTransparency = 0
+    espObj.HPText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    espObj.HPText.Visible = false
+    espObj.HPText.ZIndex = 11
+    espObj.HPText.Parent = container
+    
+    -- Corner boxes (8 frames)
+    espObj.Corners = {}
+    for i = 1, 8 do
+        local corner = Instance.new("Frame")
+        corner.Name = "Corner" .. i
+        corner.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        corner.BorderSizePixel = 0
+        corner.Visible = false
+        corner.ZIndex = 5
+        corner.Parent = container
+        espObj.Corners[i] = corner
     end
-
-    Library:Notify("FastCast hooked!", 3)
-end
-
-task.spawn(hookFastCast)
-
---============================================================
--- SILENT AIM: Hook ACS internal GetDir via GC
---============================================================
--- Why __namecall doesn't work:
---   Luau compiler can emit CALL bytecode instead of NAMECALL for
---   :FireServer() calls. When this happens, __namecall never fires.
---
--- Solution: Hook the ACS script's INTERNAL GetDir function directly.
---   GetDir returns the bullet direction vector. This direction flows into
---   CastRay → FireGun:FireServer AND module_4.FireGun (visual).
---   Hooking GetDir redirects EVERYTHING — server + visuals — naturally.
---
--- How we find it:
---   Scan getgc() for a function named "GetDir" with upvalue[8] = an
---   Instance named "Stances" (unique to this function in ACS).
-
-local _aimDebugCount = 0
-local _hookStatus = "searching..."
-local _origGetDir = nil
-local _origCastRay = nil
-local _getDir_var31_index = 1    -- upvalue index for var31_upvw (gun viewmodel)
-local _heartbeatScanConn = nil   -- current GC scan connection (replaced on respawn)
-local _hookedFunctions = {}      -- track func refs we've already hooked so stale closures are skipped
-
--- Scan GC for ACS functions (new-character-aware)
-local function scanGCForACS()
-    local currentChar = LocalPlayer.Character
-    for _, v in getgc(true) do
-        if type(v) == "function" and not _hookedFunctions[v] then
-            local ok, info = pcall(getinfo, v)
-            if ok and info then
-
-                -- GetDir: upvalue[8] = Instance "Stances", upvalue[2] = Character
-                if not _origGetDir then
-                    local ok2, stances = pcall(getupvalue, v, 8)
-                    if ok2 and typeof(stances) == "Instance" and stances.Name == "Stances" then
-                        local ok3, charRef = pcall(getupvalue, v, 2)
-                        if ok3 and typeof(charRef) == "Instance" then
-                            -- must belong to the CURRENT character (or accept if char is nil yet)
-                            if not currentChar or charRef == currentChar then
-                                _origGetDir = v
-                            end
-                        end
-                    end
-                end
-
-                -- CastRay: upvalue[7] = Instance "FireGun", upvalue[1] = Character
-                if not _origCastRay then
-                    local ok2, remote = pcall(getupvalue, v, 7)
-                    if ok2 and typeof(remote) == "Instance" and remote.Name == "FireGun" then
-                        local ok3, charRef = pcall(getupvalue, v, 1)
-                        if ok3 and typeof(charRef) == "Instance" then
-                            if not currentChar or charRef == currentChar then
-                                _origCastRay = v
-                            end
-                        end
-                    end
-                end
-
-                -- fireGun: upvalue[22] = GetDir function, upvalue[8] = tbl_3_upvr (ammo table)
-                -- We find this to extract the ammo table for infinite ammo
-                if not _ammoTable and _origGetDir then
-                    local ok2, uv22 = pcall(getupvalue, v, 22)
-                    if ok2 and uv22 == _origGetDir then
-                        local ok3, ammoTbl = pcall(getupvalue, v, 8)
-                        if ok3 and type(ammoTbl) == "table" then
-                            _ammoTable = ammoTbl
-                        end
-                    end
-                end
-            end
-        end
-        if _origGetDir and _origCastRay and _ammoTable then break end
-    end
-end
-
--- find & hook ACS camera update (for third-person support)
-local _origACSCamFunc = nil
-local function scanGCForACSCam()
-    if _origACSCamFunc then return end
-    for _, v in ipairs(getgc(true)) do
-        if type(v) == "function" and not _hookedFunctions[v] then
-            local ok, info = pcall(getinfo, v, "u")
-            if ok and info and info.nups and info.nups > 0 then
-                for i = 1, info.nups do
-                    local ok2, upv = pcall(getupvalue, v, i)
-                    if ok2 and typeof(upv) == "Instance" and upv:IsA("Camera") then
-                        _origACSCamFunc = v
-                        break
-                    end
-                end
-            end
-        end
-        if _origACSCamFunc then break end
-    end
-    if _origACSCamFunc then
-        local old = _origACSCamFunc
-        local inCamHook = false
-        _origACSCamFunc = hookfunction(old, newcclosure(function(...)
-            if inCamHook then
-                return old(...)
-            end
-            inCamHook = true
-            -- third-person support removed; camera left unchanged
-
-            local res = old(...)
-            inCamHook = false
-            return res
-        end))
-        Library:Notify("ACS camera handler hooked for third-person", 3)
-    end
-end
-
--- Wire ChildAdded on a character so any tool equip triggers a GC scan
-local function watchCharForTools(char)
-    char.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") then
-            task.wait(0.5)   -- wait for ACS to finish initializing
-            pcall(scanGCForACS)
-        end
-    end)
-    -- also scan for tools that already exist on the character
-    for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("Tool") then
-            task.spawn(function()
-                task.wait(0.5)
-                pcall(scanGCForACS)
-            end)
-        end
-    end
-end
-
--- Core hook setup — builds GetDir + CastRay hooks
-local function setupHooks()
-    if not _origGetDir then return end
-
-    -- Mark functions so future GC scans skip them
-    _hookedFunctions[_origGetDir] = true
-    if _origCastRay then _hookedFunctions[_origCastRay] = true end
-
-    -- Hook GetDir — returns bullet direction vector
-    local oldGetDir
-    do
-        local inHook = false
-        oldGetDir = hookfunction(_origGetDir, newcclosure(function(spread)
-            if inHook then
-                return oldGetDir(spread)
-            end
-            inHook = true
-            if silentAimEnabled and _silentAimTarget then
-                -- compute muzzle position
-                local smokePos = nil
-                pcall(function()
-                    local char = LocalPlayer.Character
-                    if char then
-                        for _, obj in ipairs(char:GetChildren()) do
-                            if obj:IsA("Model") and obj.Name:sub(1,1) == "S" then
-                                local attach = obj:FindFirstChild("MuzzleAttach", true)
-                                if attach and attach:IsA("BasePart") then
-                                    smokePos = attach.Position
-                                    break
-                                end
-                            end
-                        end
-                    end
-                end)
-                if not smokePos then
-                    local ok, var31 = pcall(getupvalue, _origGetDir, _getDir_var31_index)
-                    if ok and var31 and typeof(var31) == "Instance" then
-                        local smokePart = var31:FindFirstChild("SmokePart")
-                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if smokePart and hrp then
-                            smokePos = (smokePart.CFrame * CFrame.new(0, 0,
-                                smokePart.CFrame:ToObjectSpace(hrp.CFrame).Z + 0.5)).Position
-                        end
-                    end
-                end
-                if not smokePos then
-                    smokePos = Camera.CFrame.Position
-                end
-
-                local hitPos = _silentAimTarget.Position
-                local dir = (hitPos - smokePos).Unit
-
-                _aimDebugCount += 1
-
-                if tracerEnabled then
-                    local sC = bulletTPEnabled and bulletTPColor or tracerStartColor
-                    local eC = bulletTPEnabled and bulletTPColor or tracerEndColor
-                    task.spawn(drawTracer, smokePos, hitPos, sC, eC)
-                end
-
-                inHook = false
-                return dir
-            end
-
-            local ret = oldGetDir(spread)
-            inHook = false
-            return ret
-        end))
-    end
-
-    _hookStatus = "GetDir hooked"
-
-    -- ── CastRay hook: Direction override for visual + server ──
-    -- CastRay(arg1 = direction) calls BOTH:
-    --   module_4.FireGun(player, arg1, tool, var31, muzzlePos)  ← visual (FastCast)
-    --   FireGun:FireServer(arg1, tool, serverGun, muzzlePos, stance) ← server
-    --
-    -- Overriding arg1 here redirects BOTH the visual bullet and the server-side
-    -- fire packet toward the target. The FastCast.Fire hook (above) then handles
-    -- origin/speed/maxDist modifications when the visual bullet is created.
-    if _origCastRay then
-        local oldCastRay
-        do
-            local inHook2 = false
-            oldCastRay = hookfunction(_origCastRay, newcclosure(function(arg1, ...)
-                local rest = {...}
-                if inHook2 then
-                    return oldCastRay(arg1, unpack(rest))
-                end
-                inHook2 = true
-                if bulletTPEnabled and _silentAimTarget then
-                    -- bullet TP: behave like silent aim but origin just above the head
-                    local head = _silentAimTarget.Parent and _silentAimTarget.Parent:FindFirstChild("Head") or _silentAimTarget
-                    local newDir
-                    if head then
-                        local headPos = head.Position
-                        local origin = headPos + Vector3.new(0, 0.1, 0)
-                        newDir = (headPos - origin).Unit
-                        -- replace first vector3 in rest (likely muzzlePos) with origin
-                        for idx = 1, #rest do
-                            if typeof(rest[idx]) == "Vector3" then
-                                rest[idx] = origin
-                                break
-                            end
-                        end
-                        -- draw persistent screen line to head
-                        if tracerEnabled then
-                            local camPos = Camera.CFrame.Position
-                            local sp = Camera:WorldToViewportPoint(camPos)
-                            local hp = Camera:WorldToViewportPoint(headPos)
-                            bulletTPLine.From = Vector2.new(sp.X, sp.Y)
-                            bulletTPLine.To = Vector2.new(hp.X, hp.Y)
-                            bulletTPLine.Color = bulletTPColor
-                            bulletTPLine.Visible = true
-                        end
-                    end
-                    -- override direction to point back at head
-                    if newDir then
-                        if typeof(arg1) == "Vector3" then
-                            arg1 = newDir
-                        elseif type(arg1) == "table" then
-                            for i = 1, #arg1 do
-                                if typeof(arg1[i]) == "Vector3" then
-                                    arg1[i] = newDir
-                                end
-                            end
-                        end
-                    end
-                elseif silentAimEnabled and _silentAimTarget and not bulletTPEnabled and arg1 then
-                    local targetPos = _silentAimTarget.Position
-                    -- Get muzzle position for direction calc
-                    local muzzlePos = Camera.CFrame.Position
-                    pcall(function()
-                        local char = LocalPlayer.Character
-                        local tool = char and char:FindFirstChildOfClass("Tool")
-                        if tool then
-                            local om = Camera:FindFirstChild(tool.Name)
-                            if om then
-                                local gm = om:FindFirstChild(tool.Name)
-                                local sp = gm and gm:FindFirstChild("SmokePart", true)
-                                if sp then muzzlePos = sp.Position end
-                            end
-                        end
-                    end)
-                    local newDir = (targetPos - muzzlePos).Unit
-                    -- Override direction for both visual bullet and server packet
-                    if typeof(arg1) == "Vector3" then
-                        arg1 = newDir
-                    elseif type(arg1) == "table" then
-                        for i = 1, #arg1 do
-                            if typeof(arg1[i]) == "Vector3" then
-                                arg1[i] = newDir
-                            end
-                        end
-                    end
-                end
-                local res = oldCastRay(arg1, unpack(rest))
-                inHook2 = false
-                return res
-            end))
-            _hookStatus = "GetDir+CastRay hooked"
-        end
-    end
-
-    Library:Notify("Silent Aim: hooks active!", 4)
-
-    -- ── Infinite Ammo: scan for ammo table now that GetDir is known ──
-    pcall(scanGCForACS)  -- re-scan to find fireGun → ammo table
-    if _ammoTable then
-        Library:Notify("Infinite Ammo: ammo table found!", 3)
-    end
-end
-
--- Infinite ammo background loop: keeps ammo at 999 + Chambered = true
--- Runs forever; re-scans for _ammoTable when it's nil (handles respawn)
-task.spawn(function()
-    while true do
-        if infiniteAmmoEnabled then
-            local char = LocalPlayer.Character
-            local tool = char and char:FindFirstChildOfClass("Tool")
-            if tool then
-                -- If ammo table is lost (respawn), try to re-find it
-                if not _ammoTable then
-                    pcall(scanGCForACS)
-                end
-                -- Reset ammo in tbl_3_upvr (client-side ammo table)
-                if _ammoTable then
-                    -- Set ammo for ALL keys (tools) in the table, not just current
-                    for k, v in pairs(_ammoTable) do
-                        if typeof(k) == "Instance" and k:IsA("Tool") then
-                            _ammoTable[k] = 999
-                        end
-                    end
-                end
-                -- Keep Chambered = true (prevents bolt-lock blocking fire)
-                pcall(function()
-                    local acsGuns = ReplicatedStorage:FindFirstChild("Configurations")
-                        and ReplicatedStorage.Configurations:FindFirstChild("ACS_Guns")
-                    if acsGuns and acsGuns:FindFirstChild(tool.Name) then
-                        local chambered = acsGuns[tool.Name]:FindFirstChild("Chambered")
-                        if chambered and chambered:IsA("BoolValue") then
-                            chambered.Value = true
-                        end
-                    end
-                end)
-            end
-        end
-        task.wait(0.05)
-    end
-end)
-
--- Start (or restart) the GC scan loop, then hook once found.
--- Called at startup and again on every respawn.
-local function startHookTask()
-    -- reset so we find the NEW ACS closures from the new character
-    _origGetDir  = nil
-    _origCastRay = nil
-    _ammoTable   = nil   -- ammo table changes on respawn (new fireGun closure)
-    _hookStatus  = "searching..."
-
-    -- kill previous heartbeat scan if still running
-    if _heartbeatScanConn then
-        pcall(function() _heartbeatScanConn:Disconnect() end)
-        _heartbeatScanConn = nil
-    end
-
-    task.spawn(function()
-        -- aggressive heartbeat scan
-        _heartbeatScanConn = RunService.Heartbeat:Connect(function()
-            if _origGetDir and _origCastRay then
-                if _heartbeatScanConn then
-                    _heartbeatScanConn:Disconnect()
-                    _heartbeatScanConn = nil
-                end
-            else
-                pcall(scanGCForACS)
-            end
-        end)
-
-        -- wait for GetDir to appear (with 60 s timeout)
-        local deadline = tick() + 60
-        repeat task.wait(0.15) until _origGetDir or tick() > deadline
-
-        if not _origGetDir then
-            _hookStatus = "GetDir not found (timeout)"
-            return
-        end
-
-        -- extra wait so CastRay is also created, then final scan
-        task.wait(0.5)
-        pcall(scanGCForACS)
-
-        setupHooks()
-    end)
-end
-
--- Watch for respawn: new character → new ACS_Client → new closures
-LocalPlayer.CharacterAdded:Connect(function(char)
-    _hookStatus = "searching... (respawn)"
-    -- give the character a moment to fully load + ACS_Client to init
-    task.wait(1.5)
-    startHookTask()
-    watchCharForTools(char)
-end)
-
--- Wire up the CURRENT character right now (handles load-before-shooting)
-if LocalPlayer.Character then
-    watchCharForTools(LocalPlayer.Character)
-end
-
--- Kick off the initial scan immediately
-startHookTask()
-
--- Debug button to check hook status
-SilentAimGroup:AddButton("AimDebugStatus", {
-    Text = "Check Hook Status",
-    Callback = function()
-        local msg = string.format(
-            "Hook: %s | Shots redirected: %d | Target: %s",
-            _hookStatus,
-            _aimDebugCount,
-            _silentAimTarget and _silentAimTarget:GetFullName() or "none"
-        )
-        Library:Notify(msg, 5)
-    end
-})
-
---============================================================
--- VISUALS TAB: Viewmodel & Tracers
---============================================================
-local ViewmodelGroup = Tabs.Visuals:AddLeftGroupbox("Viewmodel", "eye")
-
-ViewmodelGroup:AddToggle("VMChams", {
-    Text = "Viewmodel Chams",
-    Default = false,
-    Callback = function(val)
-        vmChamsEnabled = val
-        if not val and vmChamsHighlight then
-            vmChamsHighlight:Destroy()
-            vmChamsHighlight = nil
-        end
-    end
-})
-    :AddColorPicker("VMChamsFill", {
-        Default = Color3.fromRGB(75, 0, 130),
-        Title = "Fill Color",
-        Transparency = 0,
-        Callback = function(val)
-            vmChamsFillColor = val
-            if vmChamsHighlight then vmChamsHighlight.FillColor = val end
-        end
-    })
-    :AddColorPicker("VMChamsOutline", {
-        Default = Color3.fromRGB(255, 255, 255),
-        Title = "Outline Color",
-        Transparency = 0,
-        Callback = function(val)
-            vmChamsOutlineColor = val
-            if vmChamsHighlight then vmChamsHighlight.OutlineColor = val end
-        end
-    })
-
-ViewmodelGroup:AddSlider("VMChamsFillTransp", {
-    Text = "Fill Transparency",
-    Default = 50,
-    Min = 0,
-    Max = 100,
-    Rounding = 0,
-    Suffix = "%",
-    Callback = function(val)
-        vmChamsFillTransparency = val / 100
-        if vmChamsHighlight then vmChamsHighlight.FillTransparency = vmChamsFillTransparency end
-    end
-})
-
-ViewmodelGroup:AddSlider("VMChamsOutlineTransp", {
-    Text = "Outline Transparency",
-    Default = 0,
-    Min = 0,
-    Max = 100,
-    Rounding = 0,
-    Suffix = "%",
-    Callback = function(val)
-        vmChamsOutlineTransparency = val / 100
-        if vmChamsHighlight then vmChamsHighlight.OutlineTransparency = vmChamsOutlineTransparency end
-    end
-})
-
-ViewmodelGroup:AddDivider()
-
-ViewmodelGroup:AddSlider("VMOffsetX", {
-    Text = "Offset X",
-    Default = 0,
-    Min = -5,
-    Max = 5,
-    Rounding = 1,
-    Callback = function(val) vmOffsetX = val end
-})
-
-ViewmodelGroup:AddSlider("VMOffsetY", {
-    Text = "Offset Y",
-    Default = 0,
-    Min = -5,
-    Max = 5,
-    Rounding = 1,
-    Callback = function(val) vmOffsetY = val end
-})
-
-ViewmodelGroup:AddSlider("VMOffsetZ", {
-    Text = "Offset Z",
-    Default = 0,
-    Min = -5,
-    Max = 5,
-    Rounding = 1,
-    Callback = function(val) vmOffsetZ = val end
-})
-
-local TracerGroup = Tabs.Visuals:AddRightGroupbox("Bullet Tracers", "zap")
-
--- additional groupbox for camera FOV
-local FOVGroup = Tabs.Visuals:AddRightGroupbox("Camera FOV", "viewfinder")
-local cameraFOV = Camera.FieldOfView
-
-FOVGroup:AddSlider("CameraFOV", {
-    Text = "Field of View",
-    Default = cameraFOV,
-    Min = 30,
-    Max = 140,
-    Rounding = 1,
-    Callback = function(val)
-        cameraFOV = val
-        Camera.FieldOfView = val
-    end
-})
-
-
-TracerGroup:AddToggle("TracerEnable", {
-    Text = "Enable Tracers",
-    Default = false,
-    Callback = function(val) tracerEnabled = val end
-})
-    :AddColorPicker("TracerStartColor", {
-        Default = Color3.fromRGB(255, 50, 50),
-        Title = "Start Color",
-        Transparency = 0,
-        Callback = function(val) tracerStartColor = val end
-    })
-    :AddColorPicker("TracerEndColor", {
-        Default = Color3.fromRGB(255, 50, 50),
-        Title = "End Color",
-        Transparency = 0,
-        Callback = function(val) tracerEndColor = val end
-    })
-
-TracerGroup:AddSlider("TracerFadeTime", {
-    Text = "Fade Time",
-    Default = 30,
-    Min = 5,
-    Max = 200,
-    Rounding = 0,
-    Suffix = "ms",
-    Callback = function(val) tracerFadeTime = val / 100 end
-})
-
-TracerGroup:AddSlider("TracerWidth", {
-    Text = "Width",
-    Default = 5,
-    Min = 1,
-    Max = 20,
-    Rounding = 0,
-    Callback = function(val) tracerWidth = val / 100 end
-})
-
---============================================================
--- VISUALS: Player ESP (via TrisESP library)
---============================================================
-local ESPGroup = Tabs.Visuals:AddLeftGroupbox("ESP")
-
--- Master ESP enable
-local ESPEnableToggle = ESPGroup:AddToggle("ESPEnable", {
-    Text = "Enable ESP",
-    Default = false,
-    Callback = function(v) setESPSetting("Enabled", v) end
-})
-
-
-ESPGroup:AddDivider()
-
--- Box
-local BoxToggle = ESPGroup:AddToggle("BoxESPToggle", {
-    Text = "Box",
-    Default = false,
-    Callback = function(value) setESPSetting("Boxes", value) end
-})
-local BoxDep = ESPGroup:AddDependencyBox()
-BoxDep:SetupDependencies({{BoxToggle, true}})
-BoxToggle:AddColorPicker("BoxGradient", {
-    Title = "Box Color",
-    Default = Color3.fromRGB(255, 0, 0),
-    Gradient = true,
-    Transparency = true,
-    Callback = function(payload)
-        if getgenv().TrisESP and getgenv().TrisESP.HandleColorPickerChange then
-            getgenv().TrisESP.HandleColorPickerChange("Box", payload)
-        end
-    end
-})
-BoxDep:AddDropdown("BoxSizingMode", {
-    Text = "Sizing Mode",
-    Values = {"Static", "Bounding"},
-    Default = "Static",
-    Callback = function(v) setESPSetting("BoxSizingMode", v) end
-})
-BoxDep:AddSlider("StaticBoxWidth", {
-    Text = "Static Width Ratio",
-    Default = 60,
-    Min = 20,
-    Max = 100,
-    Rounding = 0,
-    Suffix = "%",
-    Callback = function(v) setESPSetting("StaticBoxWidth", v / 100) end
-})
-BoxDep:AddToggle("BoxOutlineRotationToggle", {
-    Text = "Animate",
-    Default = false,
-    Callback = function(v) setESPSetting("BoxOutlineRotation", v) end
-})
-BoxDep:AddSlider("BoxOutlineRotationSpeed", {
-    Text = "Outline Spin Speed",
-    Default = 300,
-    Min = 50,
-    Max = 1000,
-    Rounding = 0,
-    Suffix = " deg/s",
-    Callback = function(v) setESPSetting("BoxOutlineRotationSpeed", v) end
-})
-
--- Box Fill
-local BoxFillToggle = ESPGroup:AddToggle("BoxFillESPToggle", {
-    Text = "Box Fill",
-    Default = false,
-    Callback = function(value) setESPSetting("BoxFill", value) end
-})
-local BoxFillDep = ESPGroup:AddDependencyBox()
-BoxFillDep:SetupDependencies({{BoxFillToggle, true}})
-BoxFillToggle:AddColorPicker("BoxFillGradient", {
-    Title = "Fill Color",
-    Default = Color3.fromRGB(68, 0, 255),
-    Gradient = true,
-    Transparency = true,
-    Callback = function(payload)
-        if getgenv().TrisESP and getgenv().TrisESP.HandleColorPickerChange then
-            getgenv().TrisESP.HandleColorPickerChange("BoxFill", payload)
-        end
-    end
-})
-BoxFillDep:AddToggle("BoxFillAnimateToggle", {
-    Text = "Animate",
-    Default = false,
-    Callback = function(v) setESPSetting("AnimateBoxRotation", v) end
-})
-BoxFillDep:AddSlider("BoxRotationSpeed", {
-    Text = "Rotation Speed",
-    Default = 300,
-    Min = 50,
-    Max = 1000,
-    Rounding = 0,
-    Suffix = " deg/s",
-    Callback = function(v) setESPSetting("BoxRotationSpeed", v) end
-})
-
--- glow toggle for box outlines/fills
-
-
--- Chams
-local ChamsToggle = ESPGroup:AddToggle("ChamsESPToggle", {
-    Text = "Chams",
-    Default = false,
-    Callback = function(value) setESPSetting("Highlight", value) end
-})
-local ChamsDep = ESPGroup:AddDependencyBox()
-ChamsDep:SetupDependencies({{ChamsToggle, true}})
-ChamsToggle:AddColorPicker("ChamsColor", {
-    Title = "Chams Color",
-    Default = Color3.fromRGB(0, 170, 255),
-    Callback = function(c) setESPSetting("GlobalChamColor", c) end
-})
-ChamsDep:AddSlider("ChamsFillTransparencySlider", {
-    Text = "Fill Transparency",
-    Min = 0, Max = 1, Default = 0.5, Rounding = 2, Compact = true,
-    Callback = function(value) setESPSetting("FillTransparency", value) end
-})
-ChamsDep:AddSlider("ChamsOutlineTransparencySlider", {
-    Text = "Outline Transparency",
-    Min = 0, Max = 1, Default = 0, Rounding = 2, Compact = true,
-    Callback = function(value) setESPSetting("OutlineTransparency", value) end
-})
-
--- ESP Tracers (2D screen-space tracers from the ESP library)
-local ESPTracerToggle = ESPGroup:AddToggle("ESPTracerToggle", {
-    Text = "ESP Tracers",
-    Default = false,
-    Callback = function(v) setESPSetting("Tracers", v) end
-})
-local ESPTracerDep = ESPGroup:AddDependencyBox()
-ESPTracerDep:SetupDependencies({{ESPTracerToggle, true}})
-ESPTracerToggle:AddColorPicker("ESPTracerColor", {
-    Title = "Tracer Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(c) setESPSetting("TracerColor", c) end
-})
-ESPTracerDep:AddDropdown("ESPTracerFrom", {
-    Text = "Tracer Origin",
-    Values = {"Bottom", "Top", "Center"},
-    Default = "Bottom",
-    Callback = function(v) setESPSetting("TracerFrom", v) end
-})
-ESPTracerDep:AddSlider("ESPTracerThickness", {
-    Text = "Thickness",
-    Default = 12,
-    Min = 1,
-    Max = 50,
-    Rounding = 1,
-    Callback = function(v) setESPSetting("TracerThickness", v / 10) end
-})
-
-
-
--- Distance
-local DistanceToggle = ESPGroup:AddToggle("DistanceESPToggle", {
-    Text = "Distance",
-    Default = false,
-    Callback = function(value) setESPSetting("ShowDistance", value) end
-})
-local DistanceDep = ESPGroup:AddDependencyBox()
-DistanceDep:SetupDependencies({{DistanceToggle, true}})
-DistanceToggle:AddColorPicker("DistanceGradient", {
-    Title = "Distance Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Gradient = true,
-    Transparency = true,
-    Callback = function(payload)
-        if getgenv().TrisESP and getgenv().TrisESP.HandleColorPickerChange then
-            getgenv().TrisESP.HandleColorPickerChange("Distance", payload)
-        end
-    end
-})
-
-DistanceDep:AddSlider("DistanceGradientRotation", {
-    Text = "Gradient Rotation",
-    Default = 0,
-    Min = 0,
-    Max = 360,
-    Rounding = 0,
-    Suffix = "°",
-    Callback = function(v) setESPSetting("DistanceGradientRotation", v) end
-})
-
--- Name
-local NameToggle = ESPGroup:AddToggle("NameESPToggle", {
-    Text = "Name",
-    Default = false,
-    Callback = function(value) setESPSetting("ShowName", value) end
-})
-local NameDep = ESPGroup:AddDependencyBox()
-NameDep:SetupDependencies({{NameToggle, true}})
-NameDep:AddDropdown("NameMode", {
-    Text = "Name Mode",
-    Values = {"Name", "DisplayName", "Both"},
-    Default = "DisplayName",
-    Callback = function(v) setESPSetting("NameMode", v) end
-})
--- gradient options for the name label
-NameToggle:AddColorPicker("NameGradient", {
-    Title = "Name Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Gradient = true,
-    Transparency = true,
-    Callback = function(payload)
-        if getgenv().TrisESP and getgenv().TrisESP.HandleColorPickerChange then
-            getgenv().TrisESP.HandleColorPickerChange("Name", payload)
-        end
-    end
-})
-
-NameDep:AddSlider("NameGradientRotation", {
-    Text = "Gradient Rotation",
-    Default = 0,
-    Min = 0,
-    Max = 360,
-    Rounding = 0,
-    Suffix = "°",
-    Callback = function(v) setESPSetting("NameGradientRotation", v) end
-})
-
-
-
--- Health
-local HealthToggle = ESPGroup:AddToggle("HealthESPToggle", {
-    Text = "Health Bar",
-    Default = false,
-    Callback = function(v) setESPSetting("HealthBarEnabled", v) end
-})
-local HealthDep = ESPGroup:AddDependencyBox()
-HealthDep:SetupDependencies({{HealthToggle, true}})
-HealthToggle:AddColorPicker("HealthGradient", {
-    Title = "Health Colors",
-    Default = Color3.fromRGB(255, 0, 0),
-    Gradient = true,
-    Transparency = true,
-    Callback = function(payload)
-        if getgenv().TrisESP and getgenv().TrisESP.HandleColorPickerChange then
-            getgenv().TrisESP.HandleColorPickerChange("HealthBar", payload)
-        end
-    end
-})
-HealthDep:AddDropdown("HealthBarPosition", {
-    Text = "Position",
-    Values = {"Left", "Right", "Bottom"},
-    Default = "Bottom",
-    Callback = function(v) setESPSetting("HealthBarPosition", v) end
-})
-HealthDep:AddSlider("HealthBarThickness", {
-    Text = "Thickness",
-    Default = 25,
-    Min = 10,
-    Max = 80,
-    Rounding = 0,
-    Callback = function(v) setESPSetting("HealthBarThickness", v / 10) end
-})
-HealthDep:AddToggle("HealthAnimateToggle", {
-    Text = "Animate",
-    Default = false,
-    Callback = function(v) setESPSetting("HealthGradientEnabled", v) end
-})
-HealthDep:AddSlider("HealthGradientSpeed", {
-    Text = "Gradient Speed",
-    Default = 50,
-    Min = 10,
-    Max = 200,
-    Rounding = 0,
-    Suffix = "%",
-    Callback = function(v) setESPSetting("HealthGradientSpeed", v / 100) end
-})
-
-
-local HealthShowTextToggle = HealthDep:AddToggle("HealthShowTextToggle", {
-    Text = "Show Text",
-    Default = false,
-    Callback = function(v) setESPSetting("ShowHealthText", v) end
-})
--- health-text gradient and color – linked to the Show Text toggle
-HealthShowTextToggle:AddColorPicker("HealthTextGradient", {
-    Title = "Text Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Gradient = true,
-    Transparency = true,
-    Callback = function(payload)
-        if getgenv().TrisESP and getgenv().TrisESP.HandleColorPickerChange then
-            getgenv().TrisESP.HandleColorPickerChange("HealthText", payload)
-        end
-    end
-})
-
-HealthDep:AddSlider("HealthTextGradientRotation", {
-    Text = "Text Rotation",
-    Default = 0,
-    Min = 0,
-    Max = 360,
-    Rounding = 0,
-    Suffix = "°",
-    Callback = function(v) setESPSetting("HealthTextGradientRotation", v) end
-})
-HealthDep:AddToggle("HealthOutlineResizeToggle", {
-    Text = "Outline Resize",
-    Default = false,
-    Callback = function(v) setESPSetting("HealthOutlineFollow", v) end
-})
-
---============================================================
--- VISUALS: Vehicle ESP (Highlight-based Object ESP)
---============================================================
--- font dropdown moved to bottom of ESP group
-ESPGroup:AddDropdown("ESPTextFont", {
-    Text = "Font",
-    Default = "ProggyClean",
-    Values = {"ProggyClean", "Tahoma", "SourceSansBold", "GothamBold", "Gotham", "Roboto", "RobotoMono", "Ubuntu", "Oswald"},
-    Callback = function(v) setESPSetting("TextFont", v) end
-})
-
--- Minimum box size
-ESPGroup:AddSlider("ESPMinBoxWidth", {
-    Text = "Min Box Width",
-    Default = 8,
-    Min = 0,
-    Max = 60,
-    Rounding = 0,
-    Suffix = "px",
-    Callback = function(v) setESPSetting("MinBoxWidth", v) end
-})
-ESPGroup:AddSlider("ESPMinBoxHeight", {
-    Text = "Min Box Height",
-    Default = 12,
-    Min = 0,
-    Max = 80,
-    Rounding = 0,
-    Suffix = "px",
-    Callback = function(v) setESPSetting("MinBoxHeight", v) end
-})
-
---============================================================
--- VISUALS: Skeleton ESP
---============================================================
-local SkeletonGroup = Tabs.Visuals:AddLeftGroupbox("Skeleton ESP")
-
-local SkeletonToggle = SkeletonGroup:AddToggle("SkeletonEnable", {
-    Text = "Enable Skeleton",
-    Default = false,
-    Callback = function(v) setESPSetting("SkeletonEnabled", v) end
-})
-SkeletonToggle:AddColorPicker("SkeletonBoneColor", {
-    Default = Color3.fromRGB(255, 255, 255),
-    Title = "Bone Color",
-    Transparency = 0,
-    Callback = function(v) setESPSetting("BoneColor", v) end
-})
-
-local SkeletonDep = SkeletonGroup:AddDependencyBox()
-SkeletonDep:SetupDependencies({{SkeletonToggle, true}})
-
-SkeletonDep:AddSlider("SkeletonThickness", {
-    Text = "Thickness",
-    Default = 15,
-    Min = 5,
-    Max = 50,
-    Rounding = 0,
-    Callback = function(v) setESPSetting("BoneThickness", v / 10) end
-})
-
-SkeletonDep:AddToggle("SkeletonOutlineEnable", {
-    Text = "Outline",
-    Default = true,
-    Callback = function(v) setESPSetting("SkeletonOutlineEnabled", v) end
-}):AddColorPicker("SkeletonOutlineColor", {
-    Default = Color3.fromRGB(0, 0, 0),
-    Title = "Outline Color",
-    Transparency = 0,
-    Callback = function(v) setESPSetting("SkeletonOutlineColor", v) end
-})
-
-SkeletonDep:AddToggle("SkeletonGradientEnable", {
-    Text = "Gradient",
-    Default = false,
-    Callback = function(v) setESPSetting("SkeletonGradientEnabled", v) end
-}):AddColorPicker("SkeletonGradientColors", {
-    Title = "Skeleton Gradient",
-    Default = Color3.fromRGB(255, 80, 168),
-    Gradient = true,
-    Transparency = true,
-    Callback = function(payload)
-        if getgenv().TrisESP and getgenv().TrisESP.HandleColorPickerChange then
-            getgenv().TrisESP.HandleColorPickerChange("Skeleton", payload)
-        end
-    end
-})
-SkeletonDep:AddSlider("SkeletonGradientSpeed", {
-    Text = "Gradient Speed",
-    Default = 40,
-    Min = 10,
-    Max = 200,
-    Rounding = 0,
-    Suffix = "%",
-    Callback = function(v) setESPSetting("SkeletonGradientSpeed", v / 100) end
-})
-
---============================================================
--- VISUALS: Custom Crosshair
---============================================================
-local CrosshairGroup = Tabs.Visuals:AddLeftGroupbox("Custom Crosshair", "plus")
-
-local crosshairEnabled = false
-local crosshairLength = 10
-local crosshairWidth = 2
-local crosshairSpacing = 5
-local crosshairSpinSpeed = 0
--- Per-line colors: Right, Left, Down, Up
-local crosshairColors = {
-    Color3.fromRGB(255, 255, 255),
-    Color3.fromRGB(255, 255, 255),
-    Color3.fromRGB(255, 255, 255),
-    Color3.fromRGB(255, 255, 255),
-}
-local crosshairPositions = {} -- multi-select: {"Barrel", "Target"} or empty = center only
-local _crosshairAngle = 0
-local crosshairBounceEnabled = false
-local crosshairBounceMin = 2
-local crosshairBounceMax = 15
-local crosshairBounceSpeed = 3
-local _crosshairBounceTime = 0
-
--- Main crosshair lines + outline lines (behind each, +2px thick, black)
-local _crossLines = {}
-local _crossOutlines = {}
-for i = 1, 4 do
-    local outline = Drawing.new("Line")
-    outline.Visible = false
-    outline.Thickness = 4
-    outline.Color = Color3.fromRGB(0, 0, 0)
-    outline.ZIndex = 999
-    _crossOutlines[i] = outline
-
-    local line = Drawing.new("Line")
-    line.Visible = false
-    line.Thickness = 2
-    line.Color = Color3.fromRGB(255, 255, 255)
-    line.ZIndex = 1000
-    _crossLines[i] = line
-end
-
-local CrosshairEnableToggle = CrosshairGroup:AddToggle("CrosshairEnable", {
-    Text = "Enable",
-    Default = false,
-    Callback = function(val)
-        crosshairEnabled = val
-        for i = 1, 4 do
-            _crossLines[i].Visible = val
-            _crossOutlines[i].Visible = val
-        end
-    end
-})
-
--- Per-line color pickers as a DependencyBox
-local CrosshairColorBox = CrosshairGroup:AddDependencyBox()
-CrosshairColorBox:SetupDependencies({{CrosshairEnableToggle, true}})
-
-local _crossColorNames = {"Right", "Left", "Down", "Up"}
-for idx, armName in ipairs(_crossColorNames) do
-    CrosshairColorBox:AddLabel(armName .. " Color")
-        :AddColorPicker("CrosshairColor" .. armName, {
-            Default = Color3.fromRGB(255, 255, 255),
-            Title = armName .. " Line",
-            Transparency = 0,
-            Callback = function(val)
-                crosshairColors[idx] = val
-                _crossLines[idx].Color = val
-            end
-        })
-end
-
-CrosshairGroup:AddSlider("CrosshairLength", {
-    Text = "Length",
-    Default = 10,
-    Min = 2,
-    Max = 50,
-    Rounding = 0,
-    Callback = function(val) crosshairLength = val end
-})
-
-CrosshairGroup:AddSlider("CrosshairWidth", {
-    Text = "Width",
-    Default = 2,
-    Min = 1,
-    Max = 10,
-    Rounding = 0,
-    Callback = function(val)
-        crosshairWidth = val
-        for i = 1, 4 do
-            _crossLines[i].Thickness = val
-            _crossOutlines[i].Thickness = val + 2
-        end
-    end
-})
-
-CrosshairGroup:AddSlider("CrosshairSpacing", {
-    Text = "Spacing",
-    Default = 5,
-    Min = 0,
-    Max = 30,
-    Rounding = 0,
-    Callback = function(val) crosshairSpacing = val end
-})
-
-CrosshairGroup:AddSlider("CrosshairSpinSpeed", {
-    Text = "Spin Speed",
-    Default = 0,
-    Min = 0,
-    Max = 720,
-    Rounding = 0,
-    Suffix = " deg/s",
-    Callback = function(val) crosshairSpinSpeed = val end
-})
-
-CrosshairGroup:AddDropdown("CrosshairPosition", {
-    Text = "Position Mode",
-    Default = {},
-    Multi = true,
-    Values = {"Barrel", "Target"},
-    Callback = function(val) crosshairPositions = val end
-})
-
-CrosshairGroup:AddDivider()
-
-local BounceToggle = CrosshairGroup:AddToggle("CrosshairBounce", {
-    Text = "Distance Bounce",
-    Default = false,
-    Callback = function(val) crosshairBounceEnabled = val end
-})
-local BounceDep = CrosshairGroup:AddDependencyBox()
-BounceDep:SetupDependencies({{BounceToggle, true}})
-BounceDep:AddSlider("CrosshairBounceMin", {
-    Text = "Min Distance",
-    Default = 2,
-    Min = 0,
-    Max = 30,
-    Rounding = 0,
-    Callback = function(val) crosshairBounceMin = val end
-})
-BounceDep:AddSlider("CrosshairBounceMax", {
-    Text = "Max Distance",
-    Default = 15,
-    Min = 1,
-    Max = 50,
-    Rounding = 0,
-    Callback = function(val) crosshairBounceMax = val end
-})
-BounceDep:AddSlider("CrosshairBounceSpeed", {
-    Text = "Bounce Speed",
-    Default = 3,
-    Min = 1,
-    Max = 20,
-    Rounding = 1,
-    Callback = function(val) crosshairBounceSpeed = val end
-})
-
--- Crosshair update (RenderStepped)
-RunService.RenderStepped:Connect(function(dt)
-    if not crosshairEnabled then return end
-
-    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-
-    -- Position logic: center is default baseline
-    -- If both Barrel and Target selected: use barrel, snap to target when target exists
-    local useBarrel = crosshairPositions["Barrel"] or false
-    local useTarget = crosshairPositions["Target"] or false
-
-    local barrelPos = nil
-    if useBarrel then
-        pcall(function()
-            local char = LocalPlayer.Character
-            local tool = char and char:FindFirstChildOfClass("Tool")
-            if tool then
-                local vm = nil
-                for _, child in ipairs(Camera:GetChildren()) do
-                    if child:IsA("Model") and child.Name == tool.Name then vm = child; break end
-                end
-                if vm then
-                    local sp = vm:FindFirstChild("SmokePart", true)
-                    if sp then
-                        local screenPos = Camera:WorldToViewportPoint(sp.Position)
-                        barrelPos = Vector2.new(screenPos.X, screenPos.Y)
-                    end
-                end
-            end
-        end)
-    end
-
-    local targetPos = nil
-    if useTarget and _silentAimTarget then
-        local screenPos, onScreen = Camera:WorldToViewportPoint(_silentAimTarget.Position)
-        if onScreen then
-            targetPos = Vector2.new(screenPos.X, screenPos.Y)
-        end
-    end
-
-    -- Priority: if both selected, prefer target when available, fallback to barrel
-    if useTarget and useBarrel then
-        center = targetPos or barrelPos or center
-    elseif useTarget then
-        center = targetPos or center
-    elseif useBarrel then
-        center = barrelPos or center
-    end
-
-    _crosshairAngle = _crosshairAngle + crosshairSpinSpeed * dt
-    local rad = math.rad(_crosshairAngle)
-    local cosR = math.cos(rad)
-    local sinR = math.sin(rad)
-
-    -- Bounce crosshair spacing if enabled
-    local effectiveSpacing = crosshairSpacing
-    if crosshairBounceEnabled then
-        _crosshairBounceTime = _crosshairBounceTime + dt * crosshairBounceSpeed
-        local t = (math.sin(_crosshairBounceTime) + 1) / 2 -- 0 to 1
-        effectiveSpacing = crosshairBounceMin + (crosshairBounceMax - crosshairBounceMin) * t
-    end
-
-    local arms = {
-        Vector2.new(1, 0),   -- right
-        Vector2.new(-1, 0),  -- left
-        Vector2.new(0, 1),   -- down
-        Vector2.new(0, -1),  -- up
+    
+    -- Highlight/Chams
+    espObj.Highlight = Instance.new("Highlight")
+    espObj.Highlight.Name = "Chams"
+    espObj.Highlight.FillTransparency = 0.5
+    espObj.Highlight.OutlineTransparency = 0
+    espObj.Highlight.FillColor = Color3.fromRGB(0, 170, 255)
+    espObj.Highlight.OutlineColor = Color3.fromRGB(0, 170, 255)
+    espObj.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    espObj.Highlight.Enabled = false
+    espObj.Highlight.Parent = container
+
+    -- Glow effect: outer UIStroke on box frame for glow
+    -- Skeleton bone definitions
+    local BONES_R15 = {
+        { "HumanoidRootPart", "LowerTorso" },
+        { "LowerTorso", "UpperTorso" },
+        { "UpperTorso", "Head" },
+        { "UpperTorso", "LeftUpperArm" },
+        { "LeftUpperArm", "LeftLowerArm" },
+        { "LeftLowerArm", "LeftHand" },
+        { "UpperTorso", "RightUpperArm" },
+        { "RightUpperArm", "RightLowerArm" },
+        { "RightLowerArm", "RightHand" },
+        { "LowerTorso", "LeftUpperLeg" },
+        { "LeftUpperLeg", "LeftLowerLeg" },
+        { "LeftLowerLeg", "LeftFoot" },
+        { "LowerTorso", "RightUpperLeg" },
+        { "RightUpperLeg", "RightLowerLeg" },
+        { "RightLowerLeg", "RightFoot" },
+    }
+    local BONES_R6 = {
+        { "Torso", "Head" },
+        { "Torso", "Left Arm" },
+        { "Torso", "Right Arm" },
+        { "Torso", "Left Leg" },
+        { "Torso", "Right Leg" },
     }
 
-    for i, dir in ipairs(arms) do
-        local rx = dir.X * cosR - dir.Y * sinR
-        local ry = dir.X * sinR + dir.Y * cosR
-        local rotDir = Vector2.new(rx, ry)
-        local from = center + rotDir * effectiveSpacing
-        local to = center + rotDir * (effectiveSpacing + crosshairLength)
-        -- Outline (behind, thicker, black) – extend endpoints for clean caps
-        local capExt = (_crossOutlines[i].Thickness - _crossLines[i].Thickness) / 2
-        _crossOutlines[i].From = from - rotDir * capExt
-        _crossOutlines[i].To = to + rotDir * capExt
-        _crossOutlines[i].Visible = true
-        -- Main line
-        _crossLines[i].From = from
-        _crossLines[i].To = to
-        _crossLines[i].Color = crosshairColors[i]
-        _crossLines[i].Visible = true
+    -- Skeleton bone lines
+    espObj.SkeletonBones = {}
+    espObj.SkeletonGradientPhase = 0
+    local MAX_SKELETON_BONES = #BONES_R15
+    for i = 1, MAX_SKELETON_BONES do
+        local line = Instance.new("Frame")
+        line.Name = "Bone" .. i
+        line.AnchorPoint = Vector2.new(0.5, 0.5)
+        line.BackgroundColor3 = Color3.new(1, 1, 1)
+        line.BorderSizePixel = 0
+        line.Visible = false
+        line.ZIndex = 6
+        line.Parent = container
+
+        local outline = Instance.new("UIStroke")
+        outline.Name = "BoneOutline"
+        outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        outline.Color = Color3.new(0, 0, 0)
+        outline.Thickness = 1
+        outline.LineJoinMode = Enum.LineJoinMode.Miter
+        outline.Parent = line
+
+        local gradient = Instance.new("UIGradient")
+        gradient.Name = "BoneGradient"
+        gradient.Rotation = 0
+        gradient.Enabled = false
+        gradient.Parent = line
+
+        espObj.SkeletonBones[i] = { Line = line, Outline = outline, Gradient = gradient }
     end
-end)
-
--- Viewmodel chams + offset update
--- Runs at Camera+10 to guarantee it runs AFTER ACS sets the viewmodel CFrame
-RunService:BindToRenderStep("VMVisuals", Enum.RenderPriority.Camera.Value + 10, function()
-    -- enforce camera FOV every frame (ACS may modify it)
-    if cameraFOV then
-        Camera.FieldOfView = cameraFOV
-    end
-
-    -- Find the viewmodel model parented to Camera
-    local vm = nil
-    for _, child in Camera:GetChildren() do
-        if child:IsA("Model") then
-            vm = child
-            break
-        end
-    end
-
-    -- Viewmodel Chams
-    if vmChamsEnabled and vm then
-        if not vmChamsHighlight or vmChamsHighlight.Parent ~= vm then
-            if vmChamsHighlight then pcall(function() vmChamsHighlight:Destroy() end) end
-            vmChamsHighlight = Instance.new("Highlight")
-            vmChamsHighlight.Name = "_VMChams"
-            vmChamsHighlight.Adornee = vm
-            vmChamsHighlight.FillColor = vmChamsFillColor
-            vmChamsHighlight.OutlineColor = vmChamsOutlineColor
-            vmChamsHighlight.FillTransparency = vmChamsFillTransparency
-            vmChamsHighlight.OutlineTransparency = vmChamsOutlineTransparency
-            vmChamsHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            vmChamsHighlight.Parent = vm
-        end
-    else
-        if vmChamsHighlight then
-            pcall(function() vmChamsHighlight:Destroy() end)
-            vmChamsHighlight = nil
-        end
-    end
-
-    -- Viewmodel Offset
-    -- ACS sets the viewmodel root part CFrame every frame.
-    -- We offset the root part DIRECTLY (not PivotTo) at Camera+10 priority
-    -- so we always run after ACS. This moves all child parts via Motor6D joints.
-    if vm and (vmOffsetX ~= 0 or vmOffsetY ~= 0 or vmOffsetZ ~= 0) then
-        local rootPart = vm.PrimaryPart or vm:FindFirstChild("HumanoidRootPart")
-        if not rootPart then
-            -- fallback: find any BasePart with Motor6D children
-            for _, p in vm:GetDescendants() do
-                if p:IsA("BasePart") then
-                    rootPart = p
-                    break
-                end
-            end
-        end
-        if rootPart then
-            rootPart.CFrame = rootPart.CFrame * CFrame.new(vmOffsetX, vmOffsetY, vmOffsetZ)
-        end
-    end
-end)
-
---============================================================
--- VISUALS: Hit Marker & Sound
---============================================================
-
--- configuration
-local hitMarkerEnabled = false
-local hitMarkerColor = Color3.fromRGB(255, 0, 0)
-local hitMarkerSize = 20
-local hitMarkerDuration = 0.3
-local hitMarkers = {}
-
-local hitSoundEnabled = false
-local hitSoundVolume = 1
-local hitSound = Instance.new("Sound")
-hitSound.Name = "HitSound"
-hitSound.Parent = Camera
-hitSound.Volume = hitSoundVolume
-hitSound.SoundId = "rbxassetid://0" -- changeable via UI
-
--- helper to spawn a marker at world position
-local function spawnHitMarker(pos)
-    local entry = {worldPos = pos, start = tick(), lines = {}}
-    for i = 1, 4 do
-        local l = Drawing.new("Line")
-        l.Thickness = 2
-        l.Color = hitMarkerColor
-        l.ZIndex = 2000
-        l.Visible = true
-        table.insert(entry.lines, l)
-    end
-    table.insert(hitMarkers, entry)
+    espObj._BONES_R15 = BONES_R15
+    espObj._BONES_R6 = BONES_R6
+    espObj._MAX_SKELETON_BONES = MAX_SKELETON_BONES
+    
+    return espObj
 end
 
--- update / cleanup markers each render step
-RunService.RenderStepped:Connect(function()
-    local now = tick()
-    for i = #hitMarkers, 1, -1 do
-        local m = hitMarkers[i]
-        local elapsed = now - m.start
-        if elapsed >= hitMarkerDuration then
-            for _, l in ipairs(m.lines) do
-                l.Visible = false
-                l:Remove()
+-- Remove ESP
+local function removeESP(espObj)
+    if not espObj then return end
+    if espObj.Container then
+        pcall(function() espObj.Container:Destroy() end)
+    end
+    if espObj.Highlight then
+        pcall(function() espObj.Highlight:Destroy() end)
+    end
+end
+
+-- Hide ESP
+local function hideESP(espObj)
+    if espObj.Name then espObj.Name.Visible = false end
+    if espObj.Distance then espObj.Distance.Visible = false end
+    if espObj.Weapon then espObj.Weapon.Visible = false end
+    if espObj.Box then espObj.Box.Visible = false end
+    if espObj.BoxFill then espObj.BoxFill.Visible = false end
+    if espObj.Tracer then espObj.Tracer.Visible = false end
+    if espObj.TracerOutline then pcall(function() espObj.TracerOutline.Transparency = 1 end) end
+    if espObj.HealthBar then espObj.HealthBar.Visible = false end
+    if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
+    if espObj.HealthText then espObj.HealthText.Visible = false end
+    if espObj.HPText then espObj.HPText.Visible = false end
+    if espObj.CustomTextLabels then
+        for _, lbl in ipairs(espObj.CustomTextLabels) do
+            lbl.Visible = false
+        end
+    end
+    if espObj.Corners then
+        for _, corner in ipairs(espObj.Corners) do
+            corner.Visible = false
+        end
+    end
+    if espObj.Highlight then espObj.Highlight.Enabled = false end
+    if espObj.SkeletonBones then
+        for _, bone in ipairs(espObj.SkeletonBones) do
+            bone.Line.Visible = false
+        end
+    end
+end
+
+-- Position tracer line
+local function positionTracer(frame, fromX, fromY, toX, toY, thickness)
+    local length = math.sqrt((toX - fromX)^2 + (toY - fromY)^2)
+    local angle = math.atan2(toY - fromY, toX - fromX)
+    
+    frame.Size = UDim2.new(0, length, 0, thickness)
+    frame.Position = UDim2.new(0, (fromX + toX) / 2, 0, (fromY + toY) / 2)
+    frame.Rotation = math.deg(angle)
+end
+
+-- Fade function
+local function fadeElement(element, distance, maxDistance)
+    local transparency = math.max(0.1, 1 - (distance / maxDistance))
+    if element:IsA("TextLabel") then
+        element.TextTransparency = 1 - transparency
+    elseif element:IsA("Frame") then
+        element.BackgroundTransparency = 1 - transparency
+    elseif element:IsA("Highlight") then
+        element.FillTransparency = 1 - transparency
+        element.OutlineTransparency = 1 - transparency
+    end
+end
+
+local addESP -- forward declaration (defined after updateESP)
+
+-- Main update loop
+local function updateESP(deltaTime)
+    deltaTime = deltaTime or (1/60)
+    -- If global ESP Enabled is false, remove/destroy objects (and re-create when re-enabled)
+    if not ESPSettings.Enabled then
+        if not ESPsCleared then
+            for player, espObj in pairs(ESPObjects) do
+                pcall(function() removeESP(espObj) end)
             end
-            table.remove(hitMarkers, i)
-        else
-            local screenPos, onScreen = Camera:WorldToViewportPoint(m.worldPos)
-            if onScreen then
-                local s = hitMarkerSize
-                local x, y = screenPos.X, screenPos.Y
-                m.lines[1].From = Vector2.new(x - s, y)
-                m.lines[1].To   = Vector2.new(x - s/2, y)
-                m.lines[2].From = Vector2.new(x + s, y)
-                m.lines[2].To   = Vector2.new(x + s/2, y)
-                m.lines[3].From = Vector2.new(x, y - s)
-                m.lines[3].To   = Vector2.new(x, y - s/2)
-                m.lines[4].From = Vector2.new(x, y + s)
-                m.lines[4].To   = Vector2.new(x, y + s/2)
-                for _, l in ipairs(m.lines) do
-                    l.Color = hitMarkerColor
-                    l.Visible = true
-                end
-            else
-                for _, l in ipairs(m.lines) do
-                    l.Visible = false
+            ESPObjects = {}
+            ESPsCleared = true
+        end
+        return
+    else
+        if ESPsCleared then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer then
+                    addESP(player)
                 end
             end
+            ESPsCleared = false
         end
     end
-end)
 
--- hook BulletHit remote for visuals/sound (fallback — may not fire for shooter)
-pcall(function()
-    _BulletHitRemote.OnClientEvent:Connect(function(hitPart, hitPos, damage, ...)
-        -- hitPos may be nil or a different type; fall back to hitPart position
-        local pos = hitPos
-        if typeof(pos) ~= "Vector3" and typeof(hitPart) == "Instance" and hitPart:IsA("BasePart") then
-            pos = hitPart.Position
-        end
-        if hitMarkerEnabled and typeof(pos) == "Vector3" then
-            spawnHitMarker(pos)
-        end
-        if hitSoundEnabled then
-            hitSound:Play()
-        end
-    end)
-end)
-
--- UI controls (appear in crosshair group)
-local hmToggle = CrosshairGroup:AddToggle("HitMarkerEnabled", {
-    Text = "Hit Marker",
-    Default = false,
-    Callback = function(val) hitMarkerEnabled = val end,
-})
-    :AddColorPicker("HitMarkerColor", {
-        Default = hitMarkerColor,
-        Title = "Marker Color",
-        Callback = function(val) hitMarkerColor = val end,
-    })
-
-local HMDep = CrosshairGroup:AddDependencyBox()
-HMDep:SetupDependencies({{hmToggle, true}})
-HMDep:AddSlider("HitMarkerSize", {
-    Text = "Size",
-    Default = hitMarkerSize,
-    Min = 5,
-    Max = 100,
-    Callback = function(val) hitMarkerSize = val end,
-})
-HMDep:AddSlider("HitMarkerDuration", {
-    Text = "Duration",
-    Default = hitMarkerDuration,
-    Min = 0.1,
-    Max = 1,
-    Float = true,
-    Callback = function(val) hitMarkerDuration = val end,
-})
-
-CrosshairGroup:AddToggle("HitSoundEnabled", {
-    Text = "Hit Sound",
-    Default = false,
-    Callback = function(val) hitSoundEnabled = val end,
-})
-
-local HSDep = CrosshairGroup:AddDependencyBox()
-HSDep:SetupDependencies({{Toggles.HitSoundEnabled, true}})
-HSDep:AddSlider("HitSoundVolume", {
-    Text = "Volume",
-    Default = hitSoundVolume,
-    Min = 0,
-    Max = 5,
-    Callback = function(val) hitSoundVolume = val; hitSound.Volume = val end,
-})
-HSDep:AddInput("HitSoundId", {
-    Default = hitSound.SoundId,
-    Numeric = false,
-    Finished = true,
-    Text = "Sound ID",
-    Callback = function(val) hitSound.SoundId = val end,
-})
-
---============================================================
--- MODIFICATIONS TAB: Gun Modifications
---============================================================
-local GunModsGroup = Tabs.Modifications:AddLeftGroupbox("Gun Modifications", "tool")
-
--- Recoil Modifier (0 = full recoil, 100 = no recoil)
-local recoilMultiplier = 0
-GunModsGroup:AddSlider("RecoilModifier", {
-    Text = "Recoil Reduction",
-    Default = 0,
-    Min = 0,
-    Max = 100,
-    Rounding = 0,
-    Suffix = "%",
-    Callback = function(val)
-        recoilMultiplier = 1 - (val / 100)
+    -- Rotation animation: integrate SpinAngle using deltaTime (with cap) to guarantee continuous spin
+    local dt = math.min(deltaTime or (1/60), MAX_DT)
+    local speed = ESPSettings.BoxRotationSpeed or 300 -- degrees per second
+    if ESPSettings.AnimateBoxRotation then
+        SpinAngle = (SpinAngle + speed * dt) % 360
+        RotationAngle = SpinAngle
+    else
+        RotationAngle = -90
     end
-})
+    -- persist spin angle across reloads
+    PERSIST.SpinAngle = SpinAngle
+    -- Note: gradient autorotation will be integrated per-object below using deltaTime
 
--- Firerate Modifier (0 = no fire, 100 = normal rate)
-local firerateMultiplier = 1
-GunModsGroup:AddSlider("FirerateModifier", {
-    Text = "Firerate %",
-    Default = 100,
-    Min = 0,
-    Max = 100,
-    Rounding = 0,
-    Suffix = "%",
-    Callback = function(val)
-        firerateMultiplier = val / 100
-    end
-})
 
--- Infinite Ammo toggle
-GunModsGroup:AddToggle("InfiniteAmmo", {
-    Text = "Infinite Ammo",
-    Default = false,
-    Callback = function(val)
-        infiniteAmmoEnabled = val
-        if val then
-            Library:Notify(_ammoTable and "Infinite Ammo: ON (ammo table found)" or "Infinite Ammo: ON (waiting for ammo table — equip a gun)", 4)
-        end
-    end
-})
-
-GunModsGroup:AddToggle("NoMaxDist", {
-    Text = "No Distance Limit",
-    Default = false,
-    Callback = function(val)
-        noMaxDistEnabled = val
-    end
-})
-
-GunModsGroup:AddToggle("AlwaysAutomatic", {
-    Text = "Always Automatic",
-    Tooltip = "Forces semi-automatic weapons to fire in full auto",
-    Default = false,
-    Callback = function(val)
-        alwaysAutoEnabled = val
-    end
-})
-
-GunModsGroup:AddToggle("BreakBaseShields", {
-    Text = "Break Base Shields",
-    Tooltip = "Redirects fire at enemy base shields when no player target is found",
-    Default = false,
-    Callback = function(val)
-        breakShieldsEnabled = val
-    end
-})
-
-GunModsGroup:AddToggle("InstantHit", {
-    Text = "Instant Hit",
-    Tooltip = "Makes bullets travel at extreme speed so they hit instantly",
-    Default = false,
-    Callback = function(val)
-        instantHitEnabled = val
-    end
-})
-
--- player modifications group (anti-AFK)
-local antiAfkEnabled = false
-local antiAfkConn = nil
-PlayerModsGroup = Tabs.Modifications:AddRightGroupbox("Player Mods", "user")
-PlayerModsGroup:AddToggle("AntiAFK", {
-    Text = "Anti AFK",
-    Tooltip = "Prevents the game from marking you idle",
-    Default = false,
-    Callback = function(val)
-        antiAfkEnabled = val
-        if val then
-            if antiAfkConn then antiAfkConn:Disconnect() end
-            antiAfkConn = LocalPlayer.Idled:Connect(function()
-                -- tiny position nudge instead of keyboard events
-                local char = LocalPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    local hrp = char.HumanoidRootPart
-                    hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 0.1)
-                end
-            end)
-        else
-            if antiAfkConn then
-                antiAfkConn:Disconnect()
-                antiAfkConn = nil
-            end
-        end
-    end
-})
-
--- Apply firerate, recoil, and mode modifiers via ACS config
--- We periodically check and modify the ACS config values
-task.spawn(function()
-    while true do
+    for player, espObj in pairs(ESPObjects) do
         pcall(function()
-            local char = LocalPlayer.Character
-            if char then
-                local tool = char:FindFirstChildOfClass("Tool")
-                if tool then
-                    local acsGuns = ReplicatedStorage:FindFirstChild("Configurations")
-                        and ReplicatedStorage.Configurations:FindFirstChild("ACS_Guns")
-                    if acsGuns and acsGuns:FindFirstChild(tool.Name) then
-                        local settings = acsGuns[tool.Name]:FindFirstChild("Settings")
-                        if settings then
-                            local cfg = require(settings)
+            -- per-player setting accessor: checks ESPSettings.PlayerOverrides by UserId or Name
+            local function getSetting(key, default)
+                if ESPSettings.PlayerOverrides and player then
+                    local idKey = tostring(player.UserId)
+                    local nameKey = player.Name
+                    local overrides = ESPSettings.PlayerOverrides[idKey] or ESPSettings.PlayerOverrides[nameKey]
+                    if overrides and overrides[key] ~= nil then
+                        return overrides[key]
+                    end
+                end
+                if ESPSettings[key] ~= nil then return ESPSettings[key] end
+                return default
+            end
 
-                            -- Always Automatic: force semi weapons into full auto
-                            if alwaysAutoEnabled and cfg.Mode == "Semi" then
-                                cfg.Mode = "Auto"
+            if not shouldShowPlayer(player) then 
+                hideESP(espObj) 
+                return 
+            end
+            
+            -- update outline rotation angle per-object
+            if getSetting("BoxOutlineRotation", ESPSettings.BoxOutlineRotation) then
+                local speed = getSetting("BoxOutlineRotationSpeed", ESPSettings.BoxOutlineRotationSpeed or 300)
+                espObj.OutlineAngle = (espObj.OutlineAngle or 0) + speed * dt
+                espObj.OutlineAngle = espObj.OutlineAngle % 360
+                espObj.BoxRotation = espObj.OutlineAngle
+            else
+                espObj.OutlineAngle = espObj.OutlineAngle or -90
+                espObj.BoxRotation = 0
+            end
+            
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            
+            if not char or not hrp or not hum or hum.Health <= 0 then
+                hideESP(espObj)
+                return
+            end
+
+            local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
+            if distance > getSetting("MaxDistance", ESPSettings.MaxDistance) then
+                hideESP(espObj)
+                return
+            end
+
+            local rect = getScreenRectForCharacter(char)
+            if not rect then
+                hideESP(espObj)
+                return
+            end
+
+            local x, y, w, h = rect.x, rect.y, rect.w, rect.h
+            local Dist = distance / 3.5714285714
+            
+            if getSetting("Enabled", ESPSettings.Enabled) then
+                local fontEnum = getEnumFont(getSetting("TextFont", ESPSettings.TextFont))
+                -- Dynamic text scale factor based on box height (encodes distance)
+                local textScale = math.clamp(h / 80, 0.65, 1.0)
+                local scaledTextSize = math.max(9, math.floor(13 * textScale))
+                -- Consistent pixel gap used above AND below the box for all text labels
+                local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
+                -- Per-frame text gradient phases
+                local nameGradEnabled = getSetting("NameGradientEnabled", ESPSettings.NameGradientEnabled)
+                local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
+                if nameGradEnabled then
+                    espObj.NameGradientPhase = ((espObj.NameGradientPhase or 0) + dt * (ESPSettings.NameGradientSpeed or 0.3)) % 1
+                end
+                local namePhase = espObj.NameGradientPhase or 0
+
+                local distGradEnabled = getSetting("DistanceGradientEnabled", ESPSettings.DistanceGradientEnabled)
+                local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
+                if distGradEnabled then
+                    espObj.DistanceGradientPhase = ((espObj.DistanceGradientPhase or 0) + dt * (ESPSettings.DistanceGradientSpeed or 0.3)) % 1
+                end
+                local distPhase = espObj.DistanceGradientPhase or 0
+
+                local htGradEnabled = getSetting("HealthTextGradientEnabled", ESPSettings.HealthTextGradientEnabled)
+                local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
+                if htGradEnabled then
+                    espObj.HealthTextGradientPhase = ((espObj.HealthTextGradientPhase or 0) + dt * (ESPSettings.HealthTextGradientSpeed or 0.3)) % 1
+                end
+                local htPhase = espObj.HealthTextGradientPhase or 0
+
+                -- Name
+                if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
+                    local nameText = ""
+                    if getSetting("NameMode", ESPSettings.NameMode) == "DisplayName" then
+                        nameText = (player.DisplayName or player.Name or "")
+                    elseif getSetting("NameMode", ESPSettings.NameMode) == "Both" then
+                        nameText = string.format("%s (%s)", (player.DisplayName or ""), (player.Name or ""))
+                    else
+                        nameText = (player.Name or player.DisplayName or "")
+                    end
+                    espObj.Name.Text = nameGradEnabled and makeGradientText(nameText, nameStops, namePhase) or nameText
+                    espObj.Name.Font = fontEnum
+                    espObj.Name.TextSize = scaledTextSize
+                    espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
+                    espObj.Name.Visible = true
+                else
+                    if espObj.Name then espObj.Name.Visible = false end
+                end
+                
+                -- Distance label is always hidden here – it is combined into HPText below the box/bar
+                if espObj.Distance then espObj.Distance.Visible = false end
+                
+                -- Weapon (placeholder)
+                if espObj.Weapon then
+                    espObj.Weapon.Text = "none"
+                    espObj.Weapon.Font = fontEnum
+                    espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 18)
+                    espObj.Weapon.Visible = false
+                end
+                
+                -- Box outline (completely separate from BoxFill)
+                if getSetting("Boxes", ESPSettings.Boxes) and espObj.Box then
+                    if getSetting("BoxType", ESPSettings.BoxType) == "Square" then
+                        espObj.Box.Position = UDim2.new(0, x, 0, y)
+                        espObj.Box.Size = UDim2.new(0, w, 0, h)
+                        espObj.Box.Visible = true
+                        espObj.Box.Rotation = espObj.BoxRotation or 0
+                        -- Outline color fallback (used when gradient disabled)
+                        -- Force outline thickness to 1px per user request
+                        espObj.BoxOutline.Thickness = 1
+                        -- Gradient always enabled on the box outline (parented to UIStroke)
+                        local outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
+                        if outlineStops then
+                            -- Set UIStroke Color to white so the UIGradient child is not multiplied by a dark color
+                            espObj.BoxOutline.Color = Color3.new(1, 1, 1)
+                            stopsToUIGradient(espObj.OutlineGradient, outlineStops)
+                            espObj.OutlineGradient.Enabled = true
+                        else
+                            espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
+                            espObj.OutlineGradient.Enabled = false
+                        end
+                        local rot = getSetting("BoxOutlineRotation", ESPSettings.BoxOutlineRotation) and (espObj.OutlineAngle or 0) or -90
+                        espObj.OutlineGradient.Rotation = rot
+                        -- Hide corner frames when square outline in use
+                        for _, corner in ipairs(espObj.Corners) do
+                            corner.Visible = false
+                        end
+                    elseif getSetting("BoxType", ESPSettings.BoxType) == "Corner" then
+                        espObj.Box.Visible = true
+                        espObj.Box.BackgroundTransparency = 1
+                        espObj.Box.Rotation = espObj.BoxRotation or 0
+                        -- outer border for corner mode
+                        local cornerLen = math.min(w, h) * 0.25
+                        espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
+                        espObj.Corners[1].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[1].Visible = true
+                        espObj.Corners[2].Position = UDim2.new(0, x, 0, y)
+                        espObj.Corners[2].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[2].Visible = true
+                        espObj.Corners[3].Position = UDim2.new(0, x + w - cornerLen, 0, y)
+                        espObj.Corners[3].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[3].Visible = true
+                        espObj.Corners[4].Position = UDim2.new(0, x + w - 1, 0, y)
+                        espObj.Corners[4].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[4].Visible = true
+                        espObj.Corners[5].Position = UDim2.new(0, x, 0, y + h - 1)
+                        espObj.Corners[5].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[5].Visible = true
+                        espObj.Corners[6].Position = UDim2.new(0, x, 0, y + h - cornerLen)
+                        espObj.Corners[6].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[6].Visible = true
+                        espObj.Corners[7].Position = UDim2.new(0, x + w - cornerLen, 0, y + h - 1)
+                        espObj.Corners[7].Size = UDim2.new(0, cornerLen, 0, 1)
+                        espObj.Corners[7].Visible = true
+                        espObj.Corners[8].Position = UDim2.new(0, x + w - 1, 0, y + h - cornerLen)
+                        espObj.Corners[8].Size = UDim2.new(0, 1, 0, cornerLen)
+                        espObj.Corners[8].Visible = true
+                    end
+                else
+                    if espObj.Box then espObj.Box.Visible = false end
+-- box border frame removed
+                    for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
+                end
+
+                -- Box Fill (fully independent of Box outline)
+                if getSetting("BoxFill", ESPSettings.BoxFill) and espObj.BoxFill then
+                    espObj.BoxFill.Position = UDim2.new(0, x, 0, y)
+                    espObj.BoxFill.Size = UDim2.new(0, w, 0, h)
+                    espObj.BoxFill.Visible = true
+
+                    local animateBox = getSetting("AnimateBoxRotation", ESPSettings.AnimateBoxRotation)
+                    local baseRotation = animateBox and (RotationAngle % 360) or -90
+                    local rad = math.rad(baseRotation % 360)
+                    local absSin = math.abs(math.sin(rad))
+                    local absCos = math.abs(math.cos(rad))
+                    local perpSpan = w * absSin + h * absCos
+                    local averageSpan = (2 / math.pi) * (w + h)
+                    if averageSpan == 0 then averageSpan = 1 end
+                    local multiplier = perpSpan / averageSpan
+                    local effectiveSpeed = AUTOROTATE_SPEED * multiplier
+
+                    if animateBox then
+                        espObj.GradientAngle = (espObj.GradientAngle or 0)
+                        espObj.GradientAngle = (espObj.GradientAngle + effectiveSpeed * dt) % 360
+                        espObj.BoxGradient.Rotation = (baseRotation + espObj.GradientAngle) % 360
+                        if espObj.Player and espObj.Player.UserId then
+                            PERSIST.GradientAngle[tostring(espObj.Player.UserId)] = espObj.GradientAngle
+                        end
+                    else
+                        -- Ensure no dynamic rotation when animation is disabled
+                        if espObj.Player and espObj.Player.UserId then
+                            espObj.GradientAngle = PERSIST.GradientAngle[tostring(espObj.Player.UserId)] or (espObj.GradientAngle or 0)
+                        else
+                            espObj.GradientAngle = espObj.GradientAngle or 0
+                        end
+                        espObj.BoxGradient.Rotation = (baseRotation) % 360
+                    end
+
+                    -- Fill gradient: always use gradient stops
+                    local fillStops = espObj.BoxFillStops or ESPSettings.BoxFillGradientStops
+                    if fillStops then
+                        stopsToUIGradient(espObj.BoxGradient, fillStops)
+                        espObj.BoxFill.BackgroundTransparency = 0
+                    end
+                    espObj.BoxFill.BackgroundColor3 = Color3.new(1, 1, 1)
+                else
+                    if espObj.BoxFill then espObj.BoxFill.Visible = false end
+                end
+
+                -- Health bar
+
+                -- Health bar
+                    -- Custom text ESP: create/update right-side stacked labels
+                    if espObj.CustomTexts and #espObj.CustomTexts > 0 then
+                        local startX = x + w + 6 -- place to the right of the box
+                        local lineHeight = 16
+                        for i, txt in ipairs(espObj.CustomTexts) do
+                            local textStr = tostring(txt or "")
+                            local lbl = espObj.CustomTextLabels[i]
+                            if not lbl then
+                                lbl = Instance.new("TextLabel")
+                                lbl.BackgroundTransparency = 1
+                                lbl.Font = fontEnum
+                                lbl.TextSize = 13
+                                lbl.TextColor3 = Color3.fromRGB(255,255,255)
+                                lbl.TextStrokeTransparency = 0
+                                lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+                                lbl.ZIndex = 11
+                                lbl.Parent = espObj.Container
+                                espObj.CustomTextLabels[i] = lbl
+                            end
+                            lbl.Font = fontEnum
+                            lbl.Text = textStr
+                            lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
+                            lbl.Visible = true
+                        end
+                        -- hide any surplus GUI labels
+                        for j = #espObj.CustomTexts + 1, #espObj.CustomTextLabels do
+                            if espObj.CustomTextLabels[j] then espObj.CustomTextLabels[j].Visible = false end
+                        end
+                    end
+
+                    if getSetting("HealthBarEnabled", ESPSettings.HealthBarEnabled) and espObj.HealthBar then
+                        local healthRatio = 1
+                        if hum.MaxHealth and hum.MaxHealth > 0 then
+                            healthRatio = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                        end
+                        local barHeight = h * healthRatio
+
+                        -- Use neutral background so gradient displays correctly
+                        espObj.HealthBar.BackgroundColor3 = Color3.new(1, 1, 1)
+                        -- Animate health gradient upward by shifting keypoint positions
+                        local healthAnim = getSetting("HealthGradientEnabled", ESPSettings.HealthGradientEnabled)
+                        local speed = getSetting("HealthGradientSpeed", ESPSettings.HealthGradientSpeed) or 0.5 -- cycles per second
+                        if healthAnim then
+                            espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0)
+                            espObj.HealthGradientPhase = (espObj.HealthGradientPhase + speed * dt) % 1
+                            if espObj.Player and espObj.Player.UserId then
+                                PERSIST.HealthPhase[tostring(espObj.Player.UserId)] = espObj.HealthGradientPhase
+                            end
+                        else
+                            -- preserve any persisted phase but do not advance it while animation disabled
+                            if espObj.Player and espObj.Player.UserId then
+                                espObj.HealthGradientPhase = PERSIST.HealthPhase[tostring(espObj.Player.UserId)] or (espObj.HealthGradientPhase or 0)
+                            else
+                                espObj.HealthGradientPhase = espObj.HealthGradientPhase or 0
+                            end
+                        end
+
+                        -- Health gradient: always use gradient stops
+                        local healthStops = espObj.HealthBarStops or ESPSettings.HealthBarGradientStops
+                        local function sampleBase(u)
+                            u = (u % 1 + 1) % 1
+                            return sampleStopsAtPosition(healthStops, u)
+                        end
+
+                        -- Build the health gradient from sampled keypoints so static and animated modes match
+                        local sampleCount = 12
+                        local samples = {}
+                        for i = 0, (sampleCount - 1) do
+                            local basePos = i / (sampleCount - 1)
+                            -- subtract phase so sampled colors appear to move upward
+                            local samplePos = (basePos - (espObj.HealthGradientPhase or 0)) % 1
+                            samples[i+1] = { pos = basePos, color = sampleBase(samplePos) }
+                        end
+                        local cs = {}
+                        for _, s in ipairs(samples) do
+                            table.insert(cs, ColorSequenceKeypoint.new(s.pos, s.color))
+                        end
+                        espObj.HealthBarGradient.Color = ColorSequence.new(cs)
+
+                        -- Determine a color sample for the health text (match gradient at filled/top position)
+                        local samplePhase = (espObj.HealthGradientPhase or 0)
+                        local samplePosForText = (healthRatio - samplePhase) % 1
+                        local healthTextColor = sampleBase(samplePosForText)
+                        -- Force health bar outline to 1px black (do not change)
+                        espObj.HealthBarBG.BorderColor3 = Color3.fromRGB(0, 0, 0)
+
+                        local thickness = getSetting("HealthBarThickness", ESPSettings.HealthBarThickness) or 2.5
+                        local padding = 4
+                        local posMode = getSetting("HealthBarPosition", ESPSettings.HealthBarPosition) or "Left"
+
+                        -- Gradient rotation every frame
+                        espObj.HealthBarGradient.Rotation = (posMode == "Bottom") and 0 or -90
+
+                        -- Build the shared below-box label text
+                        local showHPTxt  = getSetting("ShowHealthText", ESPSettings.ShowHealthText)
+                        local showDist   = getSetting("ShowDistance",   ESPSettings.ShowDistance)
+                        local hpVal      = hum.Health and math.max(0, math.floor(hum.Health)) or 0
+                        local maxVal     = hum.MaxHealth or 0
+                        -- Show only raw health values, no percentage
+                        local hpStr
+                        if maxVal > 0 then
+                            hpStr = string.format("%d/%d", hpVal, math.floor(maxVal))
+                        else
+                            hpStr = string.format("%d", hpVal)
+                        end
+                        local distStr    = string.format("[%d st]", math.floor(Dist))
+                        -- Build below-box text with per-label gradients
+                        local belowText
+                        local belowRich -- RichText version (used when any gradient is enabled)
+                        if showHPTxt and showDist then
+                            local hpPart   = htGradEnabled  and makeGradientText(hpStr,  htGradStops,   htPhase)   or hpStr
+                            local distPart = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
+                            belowText = hpStr .. "  " .. distStr
+                            belowRich = hpPart .. "  " .. distPart
+                        elseif showHPTxt then
+                            belowText = hpStr
+                            belowRich = htGradEnabled and makeGradientText(hpStr, htGradStops, htPhase) or hpStr
+                        elseif showDist then
+                            belowText = distStr
+                            belowRich = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
+                        end
+
+                        if posMode == "Bottom" then
+                            -- Horizontal bar below the box
+                            local barX = x
+                            local barY = y + h + padding
+                            local fullWidth = w
+                            local filledWidth = math.floor(fullWidth * (healthRatio or 0))
+
+                            if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
+                                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, barY)
+                                espObj.HealthBarBG.Size = UDim2.new(0, filledWidth, 0, thickness)
+                            else
+                                espObj.HealthBarBG.Position = UDim2.new(0, barX, 0, barY)
+                                espObj.HealthBarBG.Size = UDim2.new(0, fullWidth, 0, thickness)
+                            end
+                            espObj.HealthBar.Position = UDim2.new(0, barX, 0, barY)
+                            espObj.HealthBar.Size = UDim2.new(0, filledWidth, 0, thickness)
+                            espObj.HealthBarBG.Visible = true
+                            espObj.HealthBar.Visible = true
+
+                            -- HPText: same gap below bar as name text uses above box
+                            if espObj.HPText then
+                                if belowText then
+                                    espObj.HPText.Text = belowRich or belowText
+                                    espObj.HPText.Font = fontEnum
+                                    espObj.HPText.TextSize = scaledTextSize
+                                    -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
+                                    espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + 5)
+                                    espObj.HPText.Visible = true
+                                else
+                                    espObj.HPText.Visible = false
+                                end
                             end
 
-                            -- Firerate modifier
-                            if firerateMultiplier ~= 1 then
-                                if not tool:GetAttribute("_origFireRate") then
-                                    tool:SetAttribute("_origFireRate", cfg.FireRate)
-                                end
-                                local origRate = tool:GetAttribute("_origFireRate")
-                                local newRate = origRate * firerateMultiplier
-                                tool:SetAttribute("FireRate", newRate)
+                        else
+                            -- Vertical bar on left/right
+                            local bgX
+                            if posMode == "Right" then
+                                bgX = x + w + padding
+                            else
+                                bgX = x - (thickness + padding)
                             end
 
-                            -- Recoil modifier
-                            if recoilMultiplier ~= 1 then
-                                if not tool:GetAttribute("_origVRecoil1") then
-                                    tool:SetAttribute("_origVRecoil1", cfg.VRecoil[1])
-                                    tool:SetAttribute("_origVRecoil2", cfg.VRecoil[2])
-                                    tool:SetAttribute("_origHRecoil1", cfg.HRecoil[1])
-                                    tool:SetAttribute("_origHRecoil2", cfg.HRecoil[2])
+                            if getSetting("HealthOutlineFollow", ESPSettings.HealthOutlineFollow) then
+                                espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                                espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, barHeight)
+                            else
+                                espObj.HealthBarBG.Position = UDim2.new(0, bgX, 0, y)
+                                espObj.HealthBarBG.Size = UDim2.new(0, thickness, 0, h)
+                            end
+                            espObj.HealthBar.Position = UDim2.new(0, bgX, 0, y + h - barHeight)
+                            espObj.HealthBar.Size = UDim2.new(0, thickness, 0, barHeight)
+                            espObj.HealthBarBG.Visible = true
+                            espObj.HealthBar.Visible = true
+
+                            -- HPText: same gap below box as name text uses above box, always centered
+                            if espObj.HPText then
+                                if belowText then
+                                    espObj.HPText.Text = belowRich or belowText
+                                    espObj.HPText.Font = fontEnum
+                                    espObj.HPText.TextSize = scaledTextSize
+                                    espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
+                                    espObj.HPText.Visible = true
+                                else
+                                    espObj.HPText.Visible = false
                                 end
-                                local ov1 = tool:GetAttribute("_origVRecoil1")
-                                local ov2 = tool:GetAttribute("_origVRecoil2")
-                                local oh1 = tool:GetAttribute("_origHRecoil1")
-                                local oh2 = tool:GetAttribute("_origHRecoil2")
-                                tool:SetAttribute("VRecoil", Vector2.new(
-                                    math.floor(ov1 * recoilMultiplier),
-                                    math.floor(ov2 * recoilMultiplier)
-                                ))
-                                tool:SetAttribute("HRecoil", Vector2.new(
-                                    math.floor(oh1 * recoilMultiplier),
-                                    math.floor(oh2 * recoilMultiplier)
-                                ))
+                            end
+                        end
+
+                        -- HealthText retired: always hidden (everything is in HPText now)
+                        if espObj.HealthText then espObj.HealthText.Visible = false end
+                    else
+                        -- Health bar disabled
+                        if espObj.HealthBar then espObj.HealthBar.Visible = false end
+                        if espObj.HealthBarBG then espObj.HealthBarBG.Visible = false end
+                        if espObj.HealthText then espObj.HealthText.Visible = false end
+                        -- HPText: show distance-only if ShowDistance enabled (no health bar available)
+                        if espObj.HPText then
+                            local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
+                            if showDist then
+                                local distOnly = string.format("[%d st]", math.floor(Dist))
+                                espObj.HPText.Text = distGradEnabled and makeGradientText(distOnly, distGradStops, distPhase) or distOnly
+                                espObj.HPText.Font = fontEnum
+                                espObj.HPText.TextSize = scaledTextSize
+                                espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
+                                espObj.HPText.Visible = true
+                            else
+                                espObj.HPText.Visible = false
                             end
                         end
                     end
+                
+                -- Tracer
+                if ESPSettings.Tracers and espObj.Tracer then
+                    local tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                    if ESPSettings.TracerFrom == "Top" then
+                        tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, 0)
+                    elseif ESPSettings.TracerFrom == "Center" then
+                        tracerFrom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                    end
+                    
+                    local tracerTo = Vector2.new(x + w/2, y + h/2)
+                    local thickness = ESPSettings.TracerThickness or 2
+                    positionTracer(espObj.Tracer, tracerFrom.X, tracerFrom.Y, tracerTo.X, tracerTo.Y, thickness)
+                    espObj.Tracer.BackgroundColor3 = ESPSettings.TracerColor
+                    espObj.Tracer.Visible = true
+                    -- Configure tracer outline if present
+                    if espObj.TracerOutline then
+                        pcall(function()
+                            espObj.TracerOutline.Color = Color3.fromRGB(0,0,0)
+                            espObj.TracerOutline.Transparency = 0
+                            espObj.TracerOutline.Thickness = math.max(0.5, thickness * 0.6)
+                        end)
+                    end
                 end
+                
+                -- Chams
+                if ESPSettings.Highlight and espObj.Highlight then
+                    espObj.Highlight.Adornee = char
+                    espObj.Highlight.FillColor = ESPSettings.GlobalChamColor
+                    espObj.Highlight.OutlineColor = ESPSettings.GlobalChamColor
+                    espObj.Highlight.FillTransparency = ESPSettings.FillTransparency
+                    espObj.Highlight.OutlineTransparency = ESPSettings.OutlineTransparency
+                    espObj.Highlight.Enabled = true
+                end
+
+                -- Skeleton ESP
+                if getSetting("SkeletonEnabled", ESPSettings.SkeletonEnabled) and espObj.SkeletonBones then
+                    local boneList = (char:FindFirstChild("UpperTorso") and espObj._BONES_R15) or (char:FindFirstChild("Torso") and espObj._BONES_R6)
+                    if boneList then
+                        local skelGradEnabled = getSetting("SkeletonGradientEnabled", ESPSettings.SkeletonGradientEnabled)
+                        if skelGradEnabled then
+                            espObj.SkeletonGradientPhase = ((espObj.SkeletonGradientPhase or 0) + dt * (ESPSettings.SkeletonGradientSpeed or 0.4)) % 1
+                        end
+                        local boneColor = getSetting("BoneColor", ESPSettings.BoneColor)
+                        local boneThick = getSetting("BoneThickness", ESPSettings.BoneThickness)
+                        local outEnabled = getSetting("SkeletonOutlineEnabled", ESPSettings.SkeletonOutlineEnabled)
+                        local outColor = getSetting("SkeletonOutlineColor", ESPSettings.SkeletonOutlineColor)
+                        local outThick = getSetting("SkeletonOutlineThickness", ESPSettings.SkeletonOutlineThickness)
+                        local skelStops = ESPSettings.SkeletonGradientStops
+
+                        for i, boneDef in ipairs(boneList) do
+                            local boneObj = espObj.SkeletonBones[i]
+                            if not boneObj then continue end
+                            local partA = char:FindFirstChild(boneDef[1])
+                            local partB = char:FindFirstChild(boneDef[2])
+                            if not partA or not partB then
+                                boneObj.Line.Visible = false
+                                continue
+                            end
+                            local spA = Camera:WorldToViewportPoint(partA.Position)
+                            local spB = Camera:WorldToViewportPoint(partB.Position)
+                            if spA.Z <= 0 or spB.Z <= 0 then
+                                boneObj.Line.Visible = false
+                                continue
+                            end
+                            -- Position bone line
+                            local dx, dy = spB.X - spA.X, spB.Y - spA.Y
+                            local length = math.sqrt(dx * dx + dy * dy)
+                            boneObj.Line.Size = UDim2.new(0, math.max(1, length), 0, boneThick)
+                            boneObj.Line.Position = UDim2.new(0, (spA.X + spB.X) / 2, 0, (spA.Y + spB.Y) / 2)
+                            boneObj.Line.Rotation = math.deg(math.atan2(dy, dx))
+                            boneObj.Line.Visible = true
+                            -- Color / gradient
+                            if skelGradEnabled and skelStops and #skelStops >= 2 then
+                                boneObj.Gradient.Enabled = true
+                                pcall(function()
+                                    boneObj.Gradient.Color = buildGradientSequenceFromStops(skelStops, espObj.SkeletonGradientPhase)
+                                end)
+                                boneObj.Line.BackgroundColor3 = Color3.new(1, 1, 1)
+                            else
+                                boneObj.Gradient.Enabled = false
+                                boneObj.Line.BackgroundColor3 = boneColor
+                            end
+                            -- Outline
+                            boneObj.Outline.Transparency = outEnabled and 0 or 1
+                            boneObj.Outline.Color = outColor
+                            boneObj.Outline.Thickness = outThick
+                        end
+                        -- Hide unused bones
+                        for i = #boneList + 1, espObj._MAX_SKELETON_BONES do
+                            if espObj.SkeletonBones[i] then
+                                espObj.SkeletonBones[i].Line.Visible = false
+                            end
+                        end
+                    else
+                        for _, bone in ipairs(espObj.SkeletonBones) do bone.Line.Visible = false end
+                    end
+                else
+                    if espObj.SkeletonBones then
+                        for _, bone in ipairs(espObj.SkeletonBones) do bone.Line.Visible = false end
+                    end
+                end
+            else
+                hideESP(espObj)
             end
         end)
-        task.wait(0.25)
+    end
+end
+
+-- Add ESP for player
+addESP = function(player)
+    if ESPObjects[player] then return end
+    local espObj = createESPObject()
+    espObj.Player = player
+    -- Restore persistent phases/angles if available
+    if player and player.UserId then
+        local id = tostring(player.UserId)
+        espObj.HealthGradientPhase = PERSIST.HealthPhase[id] or math.random()
+        espObj.GradientAngle = PERSIST.GradientAngle[id] or 0
+    else
+        espObj.HealthGradientPhase = espObj.HealthGradientPhase or math.random()
+        espObj.GradientAngle = espObj.GradientAngle or 0
+    end
+    -- Copy gradient stops from global settings
+    espObj.BoxFillStops = ESPSettings.BoxFillGradientStops
+    espObj.BoxStops = ESPSettings.BoxGradientStops
+    espObj.HealthBarStops = ESPSettings.HealthBarGradientStops
+    espObj.NameStops = ESPSettings.NameGradientStops
+    espObj.DistanceStops = ESPSettings.DistanceGradientStops
+    espObj.HealthTextStops = ESPSettings.HealthTextGradientStops
+    ESPObjects[player] = espObj
+end
+
+-- Remove ESP for player
+local function removePlayerESP(player)
+    local espObj = ESPObjects[player]
+    if espObj then
+        hideESP(espObj)
+        removeESP(espObj)
+        ESPObjects[player] = nil
+    end
+end
+
+-- Initialize ESP for all players
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        addESP(player)
+    end
+end
+
+-- Player added/removed events
+Players.PlayerAdded:Connect(function(player)
+    if player ~= LocalPlayer then
+        addESP(player)
     end
 end)
 
--- Setup SaveManager and ThemeManager in settings tab
+Players.PlayerRemoving:Connect(function(player)
+    removePlayerESP(player)
+end)
 
---============================================================
--- WORLD TAB: World Visuals
---============================================================
-local Lighting = game:GetService("Lighting")
-local WorldGroup = Tabs.World:AddRightGroupbox("World Visuals", "globe")
+-- Main render loop
+renderConn = RunService.RenderStepped:Connect(function(delta)
+    updateESP(delta)
+end)
 
--- Store original values for reset
-local _origLighting = {
-    Brightness = Lighting.Brightness,
-    ClockTime = Lighting.ClockTime,
-    FogEnd = Lighting.FogEnd,
-    FogStart = Lighting.FogStart,
-    Ambient = Lighting.Ambient,
-    OutdoorAmbient = Lighting.OutdoorAmbient,
-    FogColor = Lighting.FogColor,
-    GlobalShadows = Lighting.GlobalShadows,
-    ColorShift_Bottom = Lighting.ColorShift_Bottom,
-    ColorShift_Top = Lighting.ColorShift_Top,
-    ExposureCompensation = Lighting.ExposureCompensation,
-    EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
-    EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+-- Global API
+getgenv().TrisESP = {
+    Settings = ESPSettings,
+    Unload = function()
+        if renderConn then renderConn:Disconnect() end
+        for player, espObj in pairs(ESPObjects) do
+            removeESP(espObj)
+        end
+        ESPObjects = {}
+        if ESPHolder then ESPHolder:Destroy() end
+    end,
+
+    -- Apply ulib gradient stops directly to a UIGradient instance
+    ApplyGradientToUIGradient = stopsToUIGradient,
+
+    -- Handle a ulib ColorPicker callback payload (Color3 or { Stops = [{pos,color,transparency},...] })
+    HandleColorPickerChange = function(settingPrefix, payload)
+        if not payload then return false end
+        local stops
+        if typeof and typeof(payload) == "Color3" then
+            -- Single color -> convert to uniform 2-stop gradient
+            stops = {
+                {pos = 0, color = payload, transparency = 0},
+                {pos = 1, color = payload, transparency = 0},
+            }
+        elseif type(payload) == "table" and payload.Stops then
+            stops = payload.Stops
+        else
+            return false
+        end
+        -- Store globally
+        ESPSettings[settingPrefix .. "GradientStops"] = stops
+        -- Update all existing ESP objects
+        local stopsKey = (settingPrefix == "BoxFill" and "BoxFillStops")
+            or (settingPrefix == "Box" and "BoxStops")
+            or (settingPrefix == "HealthBar" and "HealthBarStops")
+            or (settingPrefix == "Name" and "NameStops")
+            or (settingPrefix == "Distance" and "DistanceStops")
+            or (settingPrefix == "HealthText" and "HealthTextStops")
+            or (settingPrefix == "Skeleton" and "SkeletonStops")
+            or nil
+        if stopsKey then
+            for _, espObj in pairs(ESPObjects) do
+                espObj[stopsKey] = stops
+            end
+        end
+        return true
+    end,
+
+    -- Helper to resolve a player reference (player object, userId number, or player name)
+    _resolvePlayer = function(ref)
+        if not ref then return nil end
+        if type(ref) == "table" and ref.UserId then return ref end
+        if type(ref) == "number" then
+            for _,p in ipairs(Players:GetPlayers()) do
+                if p.UserId == ref then return p end
+            end
+            return nil
+        elseif type(ref) == "string" then
+            return Players:FindFirstChild(ref)
+        end
+        return nil
+    end,
+
+    AddCustomText = function(playerRef, text)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        if not ESPObjects[p] then addESP(p) end
+        local esp = ESPObjects[p]
+        esp.CustomTexts = esp.CustomTexts or {}
+        -- sanitize and limit external input to avoid UI overflow or malicious strings
+        local s = tostring(text or "")
+        if #s > 200 then
+            s = string.sub(s, 1, 200)
+        end
+        -- trim leading/trailing whitespace
+        s = s:gsub("^%s+", ""):gsub("%s+$", "")
+        table.insert(esp.CustomTexts, s)
+        return true
+    end,
+
+    RemoveCustomText = function(playerRef, idxOrText)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p or not ESPObjects[p] then return false end
+        local esp = ESPObjects[p]
+        esp.CustomTexts = esp.CustomTexts or {}
+        if type(idxOrText) == "number" then
+            if idxOrText >= 1 and idxOrText <= #esp.CustomTexts then
+                table.remove(esp.CustomTexts, idxOrText)
+                return true
+            end
+            return false
+        else
+            for i, v in ipairs(esp.CustomTexts) do
+                if v == tostring(idxOrText) then
+                    table.remove(esp.CustomTexts, i)
+                    return true
+                end
+            end
+            return false
+        end
+    end,
+
+    ClearCustomText = function(playerRef)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p or not ESPObjects[p] then return false end
+        local esp = ESPObjects[p]
+        esp.CustomTexts = {}
+        return true
+    end,
+
+    -- Team utilities
+    _resolveTeam = function(ref)
+        if not ref then return nil end
+        if typeof and typeof(ref) == "Instance" then
+            return ref
+        end
+        if type(ref) == "table" then
+            return ref
+        end
+        if type(ref) == "string" then
+            -- try to find a Team by name first
+            for _, t in ipairs(Teams:GetTeams()) do
+                if t.Name == ref then return t end
+            end
+            return ref -- fallback to name string
+        end
+        if type(ref) == "number" then
+            return ref
+        end
+        return nil
+    end,
+
+    AddCustomTeam = function(teamRef)
+        local t = getgenv().TrisESP._resolveTeam(teamRef)
+        if not t then return false end
+        if type(t) == "string" then
+            ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
+            for _, v in ipairs(ESPSettings.CustomTeams) do if v == t then return true end end
+            table.insert(ESPSettings.CustomTeams, t)
+            return true
+        else
+            ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
+            for _, v in ipairs(ESPSettings.CustomTeamObjects) do if v == t then return true end end
+            table.insert(ESPSettings.CustomTeamObjects, t)
+            return true
+        end
+    end,
+
+    RemoveCustomTeam = function(teamRef)
+        local t = getgenv().TrisESP._resolveTeam(teamRef)
+        if not t then return false end
+        if type(t) == "string" then
+            ESPSettings.CustomTeams = ESPSettings.CustomTeams or {}
+            for i, v in ipairs(ESPSettings.CustomTeams) do
+                if v == t then table.remove(ESPSettings.CustomTeams, i) return true end
+            end
+            return false
+        else
+            ESPSettings.CustomTeamObjects = ESPSettings.CustomTeamObjects or {}
+            for i, v in ipairs(ESPSettings.CustomTeamObjects) do
+                if v == t then table.remove(ESPSettings.CustomTeamObjects, i) return true end
+            end
+            return false
+        end
+    end,
+
+    ClearCustomTeams = function()
+        ESPSettings.CustomTeams = {}
+        ESPSettings.CustomTeamObjects = {}
+        return true
+    end,
+
+
+
+    -- Player-specific overrides helpers
+    AddPlayerOverride = function(playerRef, overrides)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
+        local key = tostring(p.UserId) or p.Name
+        ESPSettings.PlayerOverrides[key] = ESPSettings.PlayerOverrides[key] or {}
+        for k, v in pairs(overrides or {}) do
+            ESPSettings.PlayerOverrides[key][k] = v
+        end
+        return true
+    end,
+
+    SetPlayerColor = function(playerRef, colorKey, color3)
+        -- colorKey examples: "BoxColor", "BoxFillColor", "TracerColor"
+        if not colorKey or not color3 then return false end
+        return getgenv().TrisESP.AddPlayerOverride(playerRef, { [colorKey] = color3 })
+    end,
+
+    GetPlayerOverride = function(playerRef)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return nil end
+        local key = tostring(p.UserId)
+        return (ESPSettings.PlayerOverrides and (ESPSettings.PlayerOverrides[key] or ESPSettings.PlayerOverrides[p.Name])) or nil
+    end,
+
+    RemovePlayerOverride = function(playerRef)
+        local p = getgenv().TrisESP._resolvePlayer(playerRef)
+        if not p then return false end
+        local uid = tostring(p.UserId)
+        ESPSettings.PlayerOverrides = ESPSettings.PlayerOverrides or {}
+        ESPSettings.PlayerOverrides[uid] = nil
+        ESPSettings.PlayerOverrides[p.Name] = nil
+        return true
+    end,
+
+    ClearPlayerOverrides = function()
+        ESPSettings.PlayerOverrides = {}
+        return true
+    end,
 }
 
-WorldGroup:AddSlider("WorldBrightness", {
-    Text = "Brightness",
-    Default = math.floor(Lighting.Brightness),
-    Min = 0,
-    Max = 10,
-    Rounding = 1,
-    Callback = function(val) Lighting.Brightness = val end
-})
+-- allow module-style loading
+return getgenv().TrisESP
 
-WorldGroup:AddSlider("WorldClockTime", {
-    Text = "Time of Day",
-    Default = math.floor(Lighting.ClockTime),
-    Min = 0,
-    Max = 24,
-    Rounding = 1,
-    Callback = function(val) Lighting.ClockTime = val end
-})
-
-WorldGroup:AddSlider("WorldFogEnd", {
-    Text = "Fog End",
-    Default = math.clamp(math.floor(Lighting.FogEnd), 0, 100000),
-    Min = 0,
-    Max = 100000,
-    Rounding = 0,
-    Callback = function(val) Lighting.FogEnd = val end
-})
-
-WorldGroup:AddSlider("WorldFogStart", {
-    Text = "Fog Start",
-    Default = math.clamp(math.floor(Lighting.FogStart), 0, 50000),
-    Min = 0,
-    Max = 50000,
-    Rounding = 0,
-    Callback = function(val) Lighting.FogStart = val end
-})
-
-WorldGroup:AddLabel("Ambient Color"):AddColorPicker("WorldAmbient", {
-    Default = Lighting.Ambient,
-    Title = "Ambient",
-    Callback = function(val) Lighting.Ambient = val end
-})
-
-WorldGroup:AddLabel("Outdoor Ambient"):AddColorPicker("WorldOutdoorAmbient", {
-    Default = Lighting.OutdoorAmbient,
-    Title = "Outdoor Ambient",
-    Callback = function(val) Lighting.OutdoorAmbient = val end
-})
-
-WorldGroup:AddLabel("Fog Color"):AddColorPicker("WorldFogColor", {
-    Default = Lighting.FogColor,
-    Title = "Fog Color",
-    Callback = function(val) Lighting.FogColor = val end
-})
-
-WorldGroup:AddToggle("WorldShadows", {
-    Text = "Global Shadows",
-    Default = Lighting.GlobalShadows,
-    Callback = function(val) Lighting.GlobalShadows = val end
-})
-
-WorldGroup:AddLabel("Bottom Color"):AddColorPicker("WorldColorShiftBottom", {
-    Default = Lighting.ColorShift_Bottom,
-    Title = "ColorShift Bottom",
-    Callback = function(val) Lighting.ColorShift_Bottom = val end
-})
-
-WorldGroup:AddLabel("Top Color"):AddColorPicker("WorldColorShiftTop", {
-    Default = Lighting.ColorShift_Top,
-    Title = "ColorShift Top",
-    Callback = function(val) Lighting.ColorShift_Top = val end
-})
-
-WorldGroup:AddSlider("WorldExposure", {
-    Text = "Exposure",
-    Default = Lighting.ExposureCompensation,
-    Min = -5,
-    Max = 5,
-    Rounding = 1,
-    Callback = function(val) Lighting.ExposureCompensation = val end
-})
-
-WorldGroup:AddSlider("WorldDiffuseScale", {
-    Text = "Diffuse Scale",
-    Default = Lighting.EnvironmentDiffuseScale,
-    Min = 0,
-    Max = 5,
-    Rounding = 1,
-    Callback = function(val) Lighting.EnvironmentDiffuseScale = val end
-})
-
-WorldGroup:AddSlider("WorldSpecularScale", {
-    Text = "Specular Scale",
-    Default = Lighting.EnvironmentSpecularScale,
-    Min = 0,
-    Max = 5,
-    Rounding = 1,
-    Callback = function(val) Lighting.EnvironmentSpecularScale = val end
-})
-
-
-
-
--- Settings UI is handled by the UIcustomization addon
-if ThemeManager then
-    ThemeManager:SetLibrary(Library)
-    ThemeManager:SetFolder('TrisRocks/themes')
-    ThemeManager:CreateThemePanels(Tabs.Settings)
-end
-if SaveManager then
-    SaveManager:SetLibrary(Library)
-    SaveManager:IgnoreThemeSettings()
-    SaveManager:SetFolder('TrisRocks/jujutsu-shenanigans')
-    SaveManager:BuildConfigSection(Tabs.Settings)
-end
-
--- the rest of trisrocks game logic can follow below this UI setup
