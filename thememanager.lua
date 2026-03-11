@@ -140,9 +140,13 @@ do
             end
         end)
 
-        -- default notify globals/fields
-        library.NotifyOffsetX = library.NotifyOffsetX or 0
-        library.NotifyOffsetY = library.NotifyOffsetY or 0
+        -- default notify globals/fields — read getgenv() persistence early so
+        -- CreateWindow's SetNotifySide picks up the correct offsets
+        local _genv = (getgenv and getgenv()) or {}
+        library.NotifyOffsetX = library.NotifyOffsetX or _genv._notifyOffsetX or 0
+        library.NotifyOffsetY = library.NotifyOffsetY or _genv._notifyOffsetY or 0
+        library.NotifySide = library.NotifySide or _genv._notifySide or "Right"
+        library.NotifyAccentSide = library.NotifyAccentSide or _genv._notifyAccentSide or "Left"
         library.NotifyAlignment = library.NotifyAlignment or Enum.HorizontalAlignment.Left
 
         -- patch notifications: apply position/alignment before each notification
@@ -575,46 +579,58 @@ do
 
         -- notification settings
         box:AddDivider()
+        -- Restore persisted offsets so defaults survive re-builds
+        local _genv = (getgenv and getgenv()) or {}
+        lib.NotifyOffsetX = lib.NotifyOffsetX or _genv._notifyOffsetX or 0
+        lib.NotifyOffsetY = lib.NotifyOffsetY or _genv._notifyOffsetY or 0
+        lib.NotifySide = lib.NotifySide or _genv._notifySide or "Right"
+        lib.NotifyAccentSide = lib.NotifyAccentSide or _genv._notifyAccentSide or "Left"
+
         box:AddDropdown("NotifyBarSide", {
             Text    = "Notification Side",
             Values  = {"Right", "Left"},
-            Default = lib.NotifySide or "Right",
+            Default = lib.NotifySide,
             Tooltip = "Which side of the screen notifications appear on",
             Callback = function(val)
+                lib.NotifySide = val
+                _genv._notifySide = val
                 pcall(function() lib:SetNotifySide(val) end)
             end
         })
         box:AddSlider("NotifyPosX", {
             Text     = "X Offset",
-            Default  = lib.NotifyOffsetX or 0,
+            Default  = lib.NotifyOffsetX,
             Min      = -500,
             Max      = 500,
             Rounding = 0,
             Suffix   = "px",
             Callback = function(val)
                 lib.NotifyOffsetX = val
+                _genv._notifyOffsetX = val
                 pcall(function() lib:SetNotifySide(lib.NotifySide or "Right") end)
             end
         })
         box:AddSlider("NotifyPosY", {
             Text     = "Y Offset",
-            Default  = lib.NotifyOffsetY or 0,
+            Default  = lib.NotifyOffsetY,
             Min      = -500,
             Max      = 500,
             Rounding = 0,
             Suffix   = "px",
             Callback = function(val)
                 lib.NotifyOffsetY = val
+                _genv._notifyOffsetY = val
                 pcall(function() lib:SetNotifySide(lib.NotifySide or "Right") end)
             end
         })
         box:AddDropdown("NotifyAlignment", {
             Text    = "Accent Bar / Alignment",
             Values  = {"Left", "Right", "Top", "Bottom"},
-            Default = lib.NotifyAccentSide or "Left",
+            Default = lib.NotifyAccentSide,
             Tooltip = "Controls accent bar position and notification alignment",
             Callback = function(val)
                 lib.NotifyAccentSide = val
+                _genv._notifyAccentSide = val
                 -- Map alignment: Left/Top → Left, Right/Bottom → Right
                 local align = (val == "Right" or val == "Bottom") and "Right" or "Left"
                 lib.NotifyAlignment = Enum.HorizontalAlignment[align]
@@ -642,6 +658,9 @@ do
                 Time = 5,
             })
         end)
+
+        -- Re-apply persisted offsets now that sliders are created
+        pcall(function() lib:SetNotifySide(lib.NotifySide or "Right") end)
 
         return box
     end
