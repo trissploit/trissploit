@@ -1091,6 +1091,20 @@ end
 function Library:UpdateColorsUsingRegistry()
     for Instance, Properties in pairs(Library.Registry) do
         for Property, ColorIdx in pairs(Properties) do
+            -- Skip Color on Frames/non-stroke instances to prevent property mismatch errors
+            if Property == "Color" then
+                local ok = pcall(function() return Instance:IsA("UIStroke") or Instance:IsA("UIGradient") end)
+                if not ok then
+                    Properties[Property] = nil
+                    continue
+                end
+                local isColorable = Instance:IsA("UIStroke") or Instance:IsA("UIGradient")
+                if not isColorable then
+                    Properties[Property] = nil
+                    continue
+                end
+            end
+
             local val = nil
             if typeof(ColorIdx) == "string" then
                 val = Library.Scheme[ColorIdx]
@@ -1110,7 +1124,13 @@ function Library:UpdateColorsUsingRegistry()
             end
 
             if val ~= nil then
-                Instance[Property] = val
+                local ok, err = pcall(function()
+                    Instance[Property] = val
+                end)
+                if not ok then
+                    -- Remove invalid registry entry to prevent repeated errors
+                    Properties[Property] = nil
+                end
             end
         end
     end
