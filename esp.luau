@@ -560,6 +560,7 @@ local function createESPObject()
         Player = nil,
     }
     espObj.GradientAngle = nil
+    espObj.OutlineAngle = 0
     espObj.HealthGradientPhase = nil
     espObj.NameGradientPhase = nil
     espObj.DistanceGradientPhase = nil
@@ -617,53 +618,14 @@ local function createESPObject()
     espObj.Weapon.ZIndex = 10
     espObj.Weapon.Parent = container
     
-    -- Box outline frame (used for the 1px outline / corner boxes)
-    -- outer and inner black outlines
-    espObj.BoxOuterOutline = Instance.new("Frame")
-    espObj.BoxOuterOutline.Name = "BoxOuterOutline"
-    espObj.BoxOuterOutline.BackgroundTransparency = 1
-    espObj.BoxOuterOutline.BorderSizePixel = 0
-    espObj.BoxOuterOutline.Visible = false
-    espObj.BoxOuterOutline.ZIndex = 0
-    espObj.BoxOuterOutline.Parent = container
-    espObj.BoxOuterStroke = Instance.new("UIStroke")
-    espObj.BoxOuterStroke.Color = Color3.fromRGB(0, 0, 0)
-    espObj.BoxOuterStroke.Thickness = 1
-    espObj.BoxOuterStroke.Transparency = 0
-    espObj.BoxOuterStroke.LineJoinMode = Enum.LineJoinMode.Miter
-    espObj.BoxOuterStroke.Parent = espObj.BoxOuterOutline
-
     espObj.Box = Instance.new("Frame")
-    espObj.Box.Name = "BoxOutlineFrame"
+    espObj.Box.Name = "ESPBox"
     espObj.Box.BackgroundColor3 = Color3.fromRGB(1, 1, 1)
     espObj.Box.BackgroundTransparency = 1
     espObj.Box.BorderSizePixel = 0
     espObj.Box.Visible = false
     espObj.Box.ZIndex = 1
     espObj.Box.Parent = container
-
-    espObj.BoxOutline = Instance.new("UIStroke")
-    espObj.BoxOutline.Name = "BoxOutline"
-    espObj.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
-    espObj.BoxOutline.Thickness = 1
-    espObj.BoxOutline.Transparency = 0
-    espObj.BoxOutline.LineJoinMode = Enum.LineJoinMode.Miter
-    espObj.BoxOutline.Parent = espObj.Box
-
-    -- inner black outline frame
-    espObj.BoxInnerOutline = Instance.new("Frame")
-    espObj.BoxInnerOutline.Name = "BoxInnerOutline"
-    espObj.BoxInnerOutline.BackgroundTransparency = 1
-    espObj.BoxInnerOutline.BorderSizePixel = 0
-    espObj.BoxInnerOutline.Visible = false
-    espObj.BoxInnerOutline.ZIndex = 2
-    espObj.BoxInnerOutline.Parent = container
-    espObj.BoxInnerStroke = Instance.new("UIStroke")
-    espObj.BoxInnerStroke.Color = Color3.fromRGB(0, 0, 0)
-    espObj.BoxInnerStroke.Thickness = 1
-    espObj.BoxInnerStroke.Transparency = 0
-    espObj.BoxInnerStroke.LineJoinMode = Enum.LineJoinMode.Miter
-    espObj.BoxInnerStroke.Parent = espObj.BoxInnerOutline
 
     -- Box outline stroke (always 1px when enabled)
     espObj.BoxOutline = Instance.new("UIStroke")
@@ -678,9 +640,39 @@ local function createESPObject()
     -- Box outline gradient (for colored outlines - parented to UIStroke)
     espObj.OutlineGradient = Instance.new("UIGradient")
     espObj.OutlineGradient.Name = "OutlineGradient"
-    espObj.OutlineGradient.Enabled = false  -- outline always solid black
+    espObj.OutlineGradient.Enabled = true
     espObj.OutlineGradient.Rotation = -90
     espObj.OutlineGradient.Parent = espObj.BoxOutline
+
+    -- Inner black outline (1px inside the ESP box)
+    espObj.BoxInnerOutline = Instance.new("Frame")
+    espObj.BoxInnerOutline.Name = "BoxInnerOutline"
+    espObj.BoxInnerOutline.BackgroundTransparency = 1
+    espObj.BoxInnerOutline.BorderSizePixel = 0
+    espObj.BoxInnerOutline.Visible = false
+    espObj.BoxInnerOutline.ZIndex = 2
+    espObj.BoxInnerOutline.Parent = container
+    espObj.BoxInnerStroke = Instance.new("UIStroke")
+    espObj.BoxInnerStroke.Color = Color3.fromRGB(0, 0, 0)
+    espObj.BoxInnerStroke.Thickness = 1
+    espObj.BoxInnerStroke.Transparency = 0
+    espObj.BoxInnerStroke.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxInnerStroke.Parent = espObj.BoxInnerOutline
+
+    -- Outer black outline (1px outside the ESP box)
+    espObj.BoxOuterOutline = Instance.new("Frame")
+    espObj.BoxOuterOutline.Name = "BoxOuterOutline"
+    espObj.BoxOuterOutline.BackgroundTransparency = 1
+    espObj.BoxOuterOutline.BorderSizePixel = 0
+    espObj.BoxOuterOutline.Visible = false
+    espObj.BoxOuterOutline.ZIndex = 0
+    espObj.BoxOuterOutline.Parent = container
+    espObj.BoxOuterStroke = Instance.new("UIStroke")
+    espObj.BoxOuterStroke.Color = Color3.fromRGB(0, 0, 0)
+    espObj.BoxOuterStroke.Thickness = 1
+    espObj.BoxOuterStroke.Transparency = 0
+    espObj.BoxOuterStroke.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxOuterStroke.Parent = espObj.BoxOuterOutline
 
     -- Separate Box Fill frame (completely independent of Box outline)
     espObj.BoxFill = Instance.new("Frame")
@@ -1002,6 +994,13 @@ local function updateESP(deltaTime)
                 return 
             end
             
+            -- update outline rotation angle per-object
+            if getSetting("BoxOutlineRotation", ESPSettings.BoxOutlineRotation) then
+                local speed = getSetting("BoxOutlineRotationSpeed", ESPSettings.BoxOutlineRotationSpeed or 300)
+                espObj.OutlineAngle = ((espObj.OutlineAngle or 0) + speed * dt) % 360
+            else
+                espObj.OutlineAngle = -90
+            end
             
             local char = player.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -1092,15 +1091,33 @@ local function updateESP(deltaTime)
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
-                        -- adjust outer black border
-                        if espObj.BoxBorder then
-                            espObj.BoxBorder.Position = UDim2.new(0, x - 1, 0, y - 1)
-                            espObj.BoxBorder.Size = UDim2.new(0, w + 2, 0, h + 2)
-                            espObj.BoxBorder.Visible = true
+                        -- Inner black outline (1px inside the box)
+                        if espObj.BoxInnerOutline then
+                            espObj.BoxInnerOutline.Position = UDim2.new(0, x + 1, 0, y + 1)
+                            espObj.BoxInnerOutline.Size = UDim2.new(0, math.max(w - 2, 0), 0, math.max(h - 2, 0))
+                            espObj.BoxInnerOutline.Visible = true
                         end
-                        -- Outline thickness 1px black
+                        -- Outer black outline (1px outside the box)
+                        if espObj.BoxOuterOutline then
+                            espObj.BoxOuterOutline.Position = UDim2.new(0, x - 1, 0, y - 1)
+                            espObj.BoxOuterOutline.Size = UDim2.new(0, w + 2, 0, h + 2)
+                            espObj.BoxOuterOutline.Visible = true
+                        end
+                        -- Outline color fallback (used when gradient disabled)
+                        -- Force outline thickness to 1px per user request
                         espObj.BoxOutline.Thickness = 1
-                        espObj.BoxOutline.Color = Color3.fromRGB(0,0,0)
+                        -- Gradient always enabled on the box outline (parented to UIStroke)
+                        local outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
+                        if outlineStops then
+                            -- Set UIStroke Color to white so the UIGradient child is not multiplied by a dark color
+                            espObj.BoxOutline.Color = Color3.new(1, 1, 1)
+                            stopsToUIGradient(espObj.OutlineGradient, outlineStops)
+                            espObj.OutlineGradient.Enabled = true
+                        else
+                            espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
+                            espObj.OutlineGradient.Enabled = false
+                        end
+                        espObj.OutlineGradient.Rotation = espObj.OutlineAngle
                         -- Hide corner frames when square outline in use
                         for _, corner in ipairs(espObj.Corners) do
                             corner.Visible = false
@@ -1109,15 +1126,10 @@ local function updateESP(deltaTime)
                         espObj.Box.Visible = true
                         espObj.Box.BackgroundTransparency = 1
                         -- outer border for corner mode
-                        if espObj.BoxOuterOutline then
-                            espObj.BoxOuterOutline.Position = UDim2.new(0, x - 1, 0, y - 1)
-                            espObj.BoxOuterOutline.Size = UDim2.new(0, w + 2, 0, h + 2)
-                            espObj.BoxOuterOutline.Visible = true
-                        end
-                        if espObj.BoxInnerOutline then
-                            espObj.BoxInnerOutline.Position = UDim2.new(0, x + 1, 0, y + 1)
-                            espObj.BoxInnerOutline.Size = UDim2.new(0, math.max(w - 2,0), 0, math.max(h - 2,0))
-                            espObj.BoxInnerOutline.Visible = true
+                        if espObj.BoxBorder then
+                            espObj.BoxBorder.Position = UDim2.new(0, x - 1, 0, y - 1)
+                            espObj.BoxBorder.Size = UDim2.new(0, w + 2, 0, h + 2)
+                            espObj.BoxBorder.Visible = true
                         end
                         local cornerLen = math.min(w, h) * 0.25
                         espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
@@ -1147,8 +1159,7 @@ local function updateESP(deltaTime)
                     end
                 else
                     if espObj.Box then espObj.Box.Visible = false end
-                    if espObj.BoxOuterOutline then espObj.BoxOuterOutline.Visible = false end
-                    if espObj.BoxInnerOutline then espObj.BoxInnerOutline.Visible = false end
+                    if espObj.BoxBorder then espObj.BoxBorder.Visible = false end
                     for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
                 end
 
