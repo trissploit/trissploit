@@ -1824,9 +1824,17 @@ function Library:MakeLine(Frame: GuiObject, Info)
     return Line
 end
 
--- outline system imported from brokenui.lua; uses shadow frame with UIStroke
--- keep a registry of shadow corners so they follow library rounding
-Library._ShadowCorners = Library._ShadowCorners or {}
+function Library:AddHoverEffect(button, stroke, element)
+    -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
+    button.MouseEnter:Connect(function()
+        if element.Disabled then return end
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
+    end)
+    button.MouseLeave:Connect(function()
+        if element.Disabled then return end
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
+    end)
+end
 
 function Library:AddShadowFrame(Frame: GuiObject)
     -- Skip if the frame has a UIListLayout (shadow would become a layout member)
@@ -1854,6 +1862,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
     local ShadowCorner = Instance.new("UICorner")
     ShadowCorner.CornerRadius = shadowCornerRadius
     ShadowCorner.Parent = Shadow
+    -- track shadow corners so they can follow library rounding (+1 offset)
     Library._ShadowCorners = Library._ShadowCorners or {}
     table.insert(Library._ShadowCorners, ShadowCorner)
 
@@ -1864,6 +1873,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
 
+    -- If UIPadding exists now, counteract it. Also listen for future UIPadding.
     local function AdjustForPadding()
         local pad = Frame:FindFirstChildOfClass("UIPadding")
         if pad then
@@ -1880,6 +1890,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
         if child:IsA("UIPadding") then
             task.defer(AdjustForPadding)
         elseif child:IsA("UIListLayout") then
+            -- UIListLayout added after shadow — remove shadow to prevent layout issues
             pcall(function() Shadow:Destroy() end)
         end
     end)
@@ -1909,66 +1920,6 @@ function Library:AddOutline(Frame: GuiObject)
         Parent = Frame,
     })
     return Stroke, Stroke, Stroke
-end
-
-
-function Library:AddHoverEffect(button, stroke, element)
-    -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
-    -- Track hover state so it persists across toggle value changes
-    -- stroke may be a UIStroke (Color) or a sibling Frame (BackgroundColor3)
-    local isStroke = stroke and stroke:IsA("UIStroke")
-    local colorProp = isStroke and "Color" or "BackgroundColor3"
-    element._hovered = false
-    button.MouseEnter:Connect(function()
-        if element.Disabled then return end
-        element._hovered = true
-        TweenService:Create(stroke, Library.TweenInfo, { [colorProp] = Library.Scheme.AccentColor }):Play()
-    end)
-    button.MouseLeave:Connect(function()
-        element._hovered = false
-        if element.Disabled then return end
-        TweenService:Create(stroke, Library.TweenInfo, { [colorProp] = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
-    end)
-    -- Override registry entry so UpdateColorsUsingRegistry respects hover state
-    if Library.Registry[stroke] then
-        Library.Registry[stroke][colorProp] = function()
-            return element._hovered and Library.Scheme.AccentColor or (Library.Scheme.Dark or Color3.new(0, 0, 0))
-        end
-    end
-end
-
--- stripped legacy shadow outline; no-op stub
-function Library:AddShadowFrame(Frame: GuiObject)
-    -- modern border is handled by BorderColor3/BorderMode or UIStroke
-    return nil
-end
-
--- simplified outlines using frame borders + UIStroke for compatibility
-function Library:AddSmallOutline(Frame: GuiObject)
-    if not Frame then return nil, nil end
-    -- apply a border on the frame itself
-    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(1,1,1)
-    Frame.BorderMode = Enum.BorderMode.Inset
-    Frame.BorderSizePixel = 1
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Library.Scheme.OutlineColor or Color3.new(1,1,1)
-    stroke.Thickness = 1
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    stroke.Parent = Frame
-    return stroke, stroke
-end
-
-function Library:AddOutline(Frame: GuiObject)
-    if not Frame then return nil, nil, nil end
-    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(1,1,1)
-    Frame.BorderMode = Enum.BorderMode.Inset
-    Frame.BorderSizePixel = 1
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Library.Scheme.OutlineColor or Color3.new(1,1,1)
-    stroke.Thickness = 1
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    stroke.Parent = Frame
-    return stroke, stroke, stroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -5710,17 +5661,15 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = Checkbox,
         })
-        local CheckboxDarkFrame = Library:AddShadowFrame(Checkbox)
-        -- AddShadowFrame returns dark stroke; outline provided by CheckboxStroke below
+        local CheckboxDarkStroke = Library:AddShadowFrame(Checkbox)
 
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
             Thickness = 1,
-            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
             Parent = Checkbox,
         })
 
-        Library:AddHoverEffect(Button, CheckboxDarkFrame or CheckboxStroke, Toggle)
+        Library:AddHoverEffect(Button, CheckboxDarkStroke or CheckboxStroke, Toggle)
 
         local CheckboxGradient = New("UIGradient", {
             Color = Library:GetAccentGradientSequence(),
@@ -5859,12 +5808,10 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
-        -- apply shadow outline
         Library:AddShadowFrame(Switch)
-        -- simple border stroke
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
-            Thickness = 1,
+            Thickness = 2,
             ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
             Parent = Switch,
         })
@@ -8292,21 +8239,20 @@ function Library:CreateWindow(WindowInfo)
             end
         end
     end
-    -- update any shadow corners from the outline system
+    -- update any shadow corners (+1 offset)
     if Library._ShadowCorners then
         for _, sc in ipairs(Library._ShadowCorners) do
             if sc and sc.Parent and sc:IsA("UICorner") then
                 local base = sc.Parent:FindFirstChildOfClass("UICorner")
                 if base then
-                    local r = base.CornerRadius.Offset
-                    sc.CornerRadius = r > 0 and UDim.new(0, r + 1) or UDim.new(0, 0)
+                    sc.CornerRadius = UDim.new(base.CornerRadius.Scale, base.CornerRadius.Offset + 1)
                 else
-                    sc.CornerRadius = Library.CornerRadius > 0 and UDim.new(0, Library.CornerRadius + 1) or UDim.new(0, 0)
+                    sc.CornerRadius = UDim.new(0, Library.CornerRadius + 1)
                 end
             end
         end
     end
-    
+
     Library:SetNotifySide(WindowInfo.NotifySide)
     Library:SetNotifyAccentSide(WindowInfo.NotifyAccentSide)
     Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
