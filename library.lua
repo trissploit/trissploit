@@ -1548,6 +1548,7 @@ end
 
 -- Menu transparency: apply Library.MenuTransparency to floating menu backgrounds
 Library._menuTransparencyTargets = {}
+Library._menuTransparencyHooks = {}
 function Library:SetMenuTransparency(alpha)
     Library.MenuTransparency = math.clamp(alpha or 0, 0, 0.95)
     for _, target in ipairs(Library._menuTransparencyTargets) do
@@ -1555,10 +1556,17 @@ function Library:SetMenuTransparency(alpha)
             target.BackgroundTransparency = Library.MenuTransparency
         end
     end
+    for _, hook in ipairs(Library._menuTransparencyHooks) do
+        pcall(hook, Library.MenuTransparency)
+    end
 end
 function Library:RegisterMenuTransparencyTarget(frame)
     table.insert(Library._menuTransparencyTargets, frame)
     frame.BackgroundTransparency = Library.MenuTransparency
+end
+function Library:RegisterMenuTransparencyHook(callback)
+    table.insert(Library._menuTransparencyHooks, callback)
+    pcall(callback, Library.MenuTransparency)
 end
 
 function Library:GetBetterColor(Color: Color3, Add: number): Color3
@@ -1851,90 +1859,52 @@ function Library:AddShadowFrame(Frame: GuiObject)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- small outline: optionally keep shadow, draw 1px bars around the outside
-    local DarkStroke = Library:AddShadowFrame(Frame)
-    local function createEdges(thickness)
-        local cont = Instance.new("Frame")
-        cont.Name = "_OutlineContainer"
-        cont.BackgroundTransparency = 1
-        cont.Size = UDim2.new(1, thickness * 2, 1, thickness * 2)
-        cont.Position = UDim2.fromOffset(-thickness, -thickness)
-        cont.ZIndex = Frame.ZIndex - 1
-        cont.Parent = Frame
+    -- New model: explicit border frames for pixel-perfect edges.
+    pcall(function()
+        local old = Frame:FindFirstChild("_OutlineFrame")
+        if old then old:Destroy() end
+        local oldShadow = Frame:FindFirstChild("_OutlineShadow")
+        if oldShadow then oldShadow:Destroy() end
+    end)
 
-        local function makeEdge(pos, size)
-            local f = Instance.new("Frame")
-            f.BackgroundColor3 = Library.Scheme and Library.Scheme.OutlineColor or Color3.new(0,0,0)
-            f.BorderSizePixel = 0
-            f.ZIndex = cont.ZIndex
-            f.Position = pos
-            f.Size = size
-            f.Parent = cont
-            return f
-        end
+    local DarkFrame = Instance.new("Frame")
+    DarkFrame.Name = "_OutlineShadow"
+    DarkFrame.BackgroundTransparency = 1
+    DarkFrame.BorderSizePixel = 1
+    DarkFrame.BorderColor3 = (Library.Scheme and Library.Scheme.Dark) or Color3.new(0, 0, 0)
+    DarkFrame.Size = UDim2.new(1, 2, 1, 2)
+    DarkFrame.Position = UDim2.fromOffset(-1, -1)
+    DarkFrame.ZIndex = math.max(1, Frame.ZIndex - 2)
+    DarkFrame.Parent = Frame
 
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(1,0,0,thickness)) -- top
-        makeEdge(UDim2.new(0,0,1,-thickness), UDim2.new(1,0,0,thickness)) -- bottom
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(0,thickness,1,0)) -- left
-        makeEdge(UDim2.new(1,-thickness,0,0), UDim2.new(0,thickness,1,0)) -- right
+    local OutlineFrame = Instance.new("Frame")
+    OutlineFrame.Name = "_OutlineFrame"
+    OutlineFrame.BackgroundTransparency = 1
+    OutlineFrame.BorderSizePixel = 1
+    OutlineFrame.BorderColor3 = (Library.Scheme and Library.Scheme.OutlineColor) or Color3.new(0, 0, 0)
+    OutlineFrame.Size = UDim2.fromScale(1, 1)
+    OutlineFrame.Position = UDim2.fromOffset(0, 0)
+    OutlineFrame.ZIndex = math.max(1, Frame.ZIndex - 1)
+    OutlineFrame.Parent = Frame
 
-        Library.Registry[cont] = {
-            BackgroundColor3 = function()
-                for _, child in ipairs(cont:GetChildren()) do
-                    if child:IsA("Frame") then
-                        child.BackgroundColor3 = Library.Scheme.OutlineColor
-                    end
-                end
-            end,
-        }
-        return cont
+    local corner = Frame:FindFirstChildOfClass("UICorner")
+    if corner then
+        local oc = corner:Clone()
+        oc.Parent = OutlineFrame
+
+        local dc = corner:Clone()
+        dc.CornerRadius = UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + (Library.CornerRadius > 0 and 1 or 0))
+        dc.Parent = DarkFrame
     end
 
-    return createEdges(1), DarkStroke or createEdges(1)
+    Library.Registry[OutlineFrame] = { BorderColor3 = "OutlineColor" }
+    Library.Registry[DarkFrame] = { BorderColor3 = "Dark" }
+    return OutlineFrame, DarkFrame
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    -- return: outlineContainer, shadowStroke, outlineContainer (compat)
-    local darkStroke = Library:AddShadowFrame(Frame)
-    local function createEdges(thickness)
-        local cont = Instance.new("Frame")
-        cont.Name = "_OutlineContainer"
-        cont.BackgroundTransparency = 1
-        cont.Size = UDim2.new(1, thickness * 2, 1, thickness * 2)
-        cont.Position = UDim2.fromOffset(-thickness, -thickness)
-        cont.ZIndex = Frame.ZIndex - 1
-        cont.Parent = Frame
-
-        local function makeEdge(pos, size)
-            local f = Instance.new("Frame")
-            f.BackgroundColor3 = Library.Scheme and Library.Scheme.OutlineColor or Color3.new(0,0,0)
-            f.BorderSizePixel = 0
-            f.ZIndex = cont.ZIndex
-            f.Position = pos
-            f.Size = size
-            f.Parent = cont
-            return f
-        end
-
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(1,0,0,thickness))
-        makeEdge(UDim2.new(0,0,1,-thickness), UDim2.new(1,0,0,thickness))
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(0,thickness,1,0))
-        makeEdge(UDim2.new(1,-thickness,0,0), UDim2.new(0,thickness,1,0))
-
-        Library.Registry[cont] = {
-            BackgroundColor3 = function()
-                for _, child in ipairs(cont:GetChildren()) do
-                    if child:IsA("Frame") then
-                        child.BackgroundColor3 = Library.Scheme.OutlineColor
-                    end
-                end
-            end,
-        }
-        return cont
-    end
-
-    local outline = createEdges(1)
-    return outline, darkStroke, outline
+    local Main, Dark = Library:AddSmallOutline(Frame)
+    return Main, Dark or Main, Dark or Main
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -2257,6 +2227,43 @@ do
 
         Library.Registry[WM.Holder] = { BackgroundColor3 = "BackgroundColor" }
         Library.Registry[WM.Label] = { TextColor3 = "FontColor", FontFace = "Font" }
+
+        -- Watermark should fully follow menu transparency (background, line, gradients, text, icon, outlines).
+        Library:RegisterMenuTransparencyHook(function(alpha)
+            if not WM.Holder or not WM.Holder.Parent then
+                return
+            end
+
+            WM.Holder.BackgroundTransparency = alpha
+
+            if WM.AccentLine then
+                WM.AccentLine.BackgroundTransparency = alpha
+            end
+
+            if WM.BGGradient then
+                WM.BGGradient.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, math.clamp(alpha + 0.05, 0, 1)),
+                    NumberSequenceKeypoint.new(1, math.clamp(alpha + 0.15, 0, 1)),
+                })
+            end
+
+            if WM.Label then
+                WM.Label.TextTransparency = alpha
+            end
+            if WM.IconLabel then
+                WM.IconLabel.TextTransparency = alpha
+            end
+
+            if WM.OutlineStroke and WM.OutlineStroke:IsA("GuiObject") then
+                WM.OutlineStroke.BorderSizePixel = alpha >= 0.98 and 0 or 1
+            end
+            if WM.ShadowStroke and WM.ShadowStroke:IsA("GuiObject") then
+                WM.ShadowStroke.BorderSizePixel = alpha >= 0.98 and 0 or 1
+            end
+            if WM.OuterBlackStroke and WM.OuterBlackStroke:IsA("GuiObject") then
+                WM.OuterBlackStroke.BorderSizePixel = alpha >= 0.98 and 0 or 1
+            end
+        end)
 
         Library:MakeDraggable(WM.Holder, WM.Holder, WM.AlwaysVisible)
 
@@ -4218,21 +4225,21 @@ do
             end,
             1
         )
-        ColorMenu.List.Padding = UDim.new(0, 8)
+        ColorMenu.List.Padding = UDim.new(0, 10)
         ColorPicker.ColorMenu = ColorMenu
 
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 6),
-            PaddingLeft = UDim.new(0, 6),
-            PaddingRight = UDim.new(0, 6),
-            PaddingTop = UDim.new(0, 6),
+            PaddingBottom = UDim.new(0, 8),
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 8),
+            PaddingTop = UDim.new(0, 8),
             Parent = ColorMenu.Menu,
         })
 
         if typeof(ColorPicker.Title) == "string" then
             New("TextLabel", {
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 8),
+                Size = UDim2.new(1, 0, 0, 14),
                 Text = ColorPicker.Title,
                 TextSize = 14,
                 TextXAlignment = Enum.TextXAlignment.Left,
@@ -4338,13 +4345,13 @@ do
 
         local InfoHolder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 20),
+            Size = UDim2.new(1, 0, 0, 24),
             Parent = ColorMenu.Menu,
         })
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalFlex = Enum.UIFlexAlignment.Fill,
-            Padding = UDim.new(0, 8),
+            Padding = UDim.new(0, 10),
             Parent = InfoHolder,
         })
 
@@ -4358,6 +4365,11 @@ do
             TextSize = 14,
             Parent = InfoHolder,
         })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            Parent = HueBox,
+        })
 
         local RgbBox = New("TextBox", {
             BackgroundColor3 = "MainColor",
@@ -4368,6 +4380,11 @@ do
             Text = "?, ?, ?",
             TextSize = 14,
             Parent = InfoHolder,
+        })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            Parent = RgbBox,
         })
 
         --// Context Menu \\--
@@ -7778,10 +7795,11 @@ function Library:SetFont(FontFace)
 end
 
 function Library:SetNotifySide(Side: string)
+    Side = (typeof(Side) == "string" and Side) or Library.NotifySide or "Right"
     Library.NotifySide = Side
 
-    local ox = Library.NotifyOffsetX or 0
-    local oy = Library.NotifyOffsetY or 0
+    local ox = tonumber(Library.NotifyOffsetX) or 0
+    local oy = tonumber(Library.NotifyOffsetY) or 0
 
     if Side:lower() == "left" then
         NotificationArea.AnchorPoint = Vector2.new(0, 0)
@@ -7792,6 +7810,17 @@ function Library:SetNotifySide(Side: string)
         NotificationArea.Position = UDim2.new(1, -6 + ox, 0, 6 + oy)
         NotificationList.HorizontalAlignment = Enum.HorizontalAlignment.Right
     end
+end
+
+function Library:SetNotifyOffsets(X: number?, Y: number?)
+    if X ~= nil then
+        Library.NotifyOffsetX = tonumber(X) or 0
+    end
+    if Y ~= nil then
+        Library.NotifyOffsetY = tonumber(Y) or 0
+    end
+
+    Library:SetNotifySide(Library.NotifySide or "Right")
 end
 
 -- Expose notification area for external access (offsets, etc.)
@@ -9319,21 +9348,10 @@ function Library:CreateWindow(WindowInfo)
 			WarningBox.BackgroundColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.BackgroundColor
 				or Color3.fromRGB(127, 0, 0)
 
-			-- Shadow stroke always UIStroke
 			WarningBoxShadowOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.Dark
 				or Color3.fromRGB(169, 0, 0)
-			-- outline may be container frame or stroke
-			local outlineColor = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
+			WarningBoxOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
 				or Color3.fromRGB(255, 50, 50)
-			if WarningBoxOutline:IsA("UIStroke") then
-				WarningBoxOutline.Color = outlineColor
-			else
-				for _, edge in ipairs(WarningBoxOutline:GetChildren()) do
-					if edge:IsA("Frame") then
-						edge.BackgroundColor3 = outlineColor
-					end
-				end
-			end
 			
 			WarningTitle.TextColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.FontColor
 				or Color3.fromRGB(255, 50, 50)
@@ -9363,21 +9381,9 @@ function Library:CreateWindow(WindowInfo)
 			Library.Registry[WarningBoxShadowOutline].Color = function()
 				return Tab.WarningBox.IsNormal == true and Library.Scheme.Dark or Color3.fromRGB(169, 0, 0)
 			end
-			-- registry entry depends on type
-			if WarningBoxOutline:IsA("UIStroke") then
-				Library.Registry[WarningBoxOutline].Color = function()
-					return Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
-				end
-			else
-				Library.Registry[WarningBoxOutline].BackgroundColor3 = function()
-					local col = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
-					for _, edge in ipairs(WarningBoxOutline:GetChildren()) do
-						if edge:IsA("Frame") then
-							edge.BackgroundColor3 = col
-						end
-					end
-					return col
-				end
+			
+			Library.Registry[WarningBoxOutline].Color = function()
+				return Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
 			end
 
 			Library.Registry[WarningTitle].TextColor3 = function()
