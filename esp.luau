@@ -1085,13 +1085,7 @@ local function updateESP(deltaTime)
                         -- Force outline thickness to 1px per user request
                         espObj.BoxOutline.Thickness = 1
                         -- Gradient always enabled on the box outline (parented to UIStroke)
-                        local useFill = getSetting("BoxFill", ESPSettings.BoxFill)
-                        local outlineStops
-                        if useFill then
-                            outlineStops = espObj.BoxFillStops or ESPSettings.BoxFillGradientStops
-                        else
-                            outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
-                        end
+                        local outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
                         if outlineStops then
                             -- Set UIStroke Color to white so the UIGradient child is not multiplied by a dark color
                             espObj.BoxOutline.Color = Color3.new(1, 1, 1)
