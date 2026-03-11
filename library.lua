@@ -1857,7 +1857,7 @@ function Library:AddSmallOutline(Frame: GuiObject)
     OutlineFrame.Name = "_OutlineFrame"
     OutlineFrame.BackgroundTransparency = 1
     OutlineFrame.BorderSizePixel = 1
-    OutlineFrame.BorderColor3 = Library.Scheme.OutlineColor
+    OutlineFrame.BorderColor3 = (Library.Scheme and Library.Scheme.OutlineColor) or Color3.new(0,0,0)
     OutlineFrame.Size = UDim2.new(1, 2, 1, 2)
     OutlineFrame.Position = UDim2.fromOffset(-1, -1)
     OutlineFrame.ZIndex = Frame.ZIndex - 1
@@ -1884,7 +1884,7 @@ function Library:AddOutline(Frame: GuiObject)
     OutlineFrame.Name = "_OutlineFrame"
     OutlineFrame.BackgroundTransparency = 1
     OutlineFrame.BorderSizePixel = 1
-    OutlineFrame.BorderColor3 = Library.Scheme.OutlineColor
+    OutlineFrame.BorderColor3 = (Library.Scheme and Library.Scheme.OutlineColor) or Color3.new(0,0,0)
     OutlineFrame.Size = UDim2.new(1, 2, 1, 2)
     OutlineFrame.Position = UDim2.fromOffset(-1, -1)
     OutlineFrame.ZIndex = Frame.ZIndex - 1
