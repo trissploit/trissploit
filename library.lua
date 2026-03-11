@@ -1824,107 +1824,22 @@ function Library:MakeLine(Frame: GuiObject, Info)
     return Line
 end
 
--- ────────────────────────────────────────────────────────────────────────────
--- OUTLINE SYSTEM — completely rewritten to use solid sibling-Frame borders
--- instead of UIStroke.  UIStroke is kept only as a fallback for frames whose
--- parent has a UIListLayout (e.g. elements inside groupboxes).
--- ────────────────────────────────────────────────────────────────────────────
-Library._BorderCorners = Library._BorderCorners or {}
+-- outline system removed in favor of external library control.
+-- stub functions below provide a minimal compatible interface.
 
-local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
-    local parent = Frame.Parent
-    if not parent then return nil end
-    local corner = Frame:FindFirstChildOfClass("UICorner")
-    local radius = corner and corner.CornerRadius.Offset or Library.CornerRadius
-
-    -- Ensure the target frame renders in front of the border siblings.
-    -- Roblox clamps ZIndex to a minimum of 1, so ZIndex-1 on a ZIndex=1 frame
-    -- would still be 1, making the border render on top (added later = drawn last).
-    -- Bump the target frame so the border can sit one step below it.
-    if Frame.ZIndex <= 1 then
-        Frame.ZIndex = 2
-    end
-
-    local bf = Instance.new("Frame")
-    bf.BackgroundColor3 = Library.Scheme[colorKey] or colorFallback
-    bf.BorderSizePixel = 0
-    bf.Name = name
-    bf.ZIndex = Frame.ZIndex - 1
-    bf.Visible = Frame.Visible
-
-    local bfc = Instance.new("UICorner")
-    bfc.CornerRadius = UDim.new(0, radius > 0 and math.max(0, radius + outset) or 0)
-    bfc.Parent = bf
-    Library._BorderCorners = Library._BorderCorners or {}
-    table.insert(Library._BorderCorners, { corner = bfc, targetFrame = Frame, offset = outset })
-
-    local function syncCornerRadius()
-        local c = Frame:FindFirstChildOfClass("UICorner")
-        local r = c and c.CornerRadius.Offset or Library.CornerRadius
-        bfc.CornerRadius = UDim.new(0, r > 0 and math.max(0, r + outset) or 0)
-    end
-
-    local function sync()
-        if not bf.Parent or not Frame.Parent then return end
-        local ax, ay = Frame.AnchorPoint.X, Frame.AnchorPoint.Y
-        bf.AnchorPoint = Frame.AnchorPoint
-        bf.Position = UDim2.new(
-            Frame.Position.X.Scale, Frame.Position.X.Offset + outset * (2 * ax - 1),
-            Frame.Position.Y.Scale, Frame.Position.Y.Offset + outset * (2 * ay - 1)
-        )
-        -- Use AbsoluteSize for dimensions that use AutomaticSize
-        local szXScale, szXOff = Frame.Size.X.Scale, Frame.Size.X.Offset
-        local szYScale, szYOff = Frame.Size.Y.Scale, Frame.Size.Y.Offset
-        local autoSize = Frame.AutomaticSize
-        if autoSize ~= Enum.AutomaticSize.None then
-            local abs = Frame.AbsoluteSize
-            if autoSize == Enum.AutomaticSize.X or autoSize == Enum.AutomaticSize.XY then
-                szXScale = 0
-                szXOff = abs.X
-            end
-            if autoSize == Enum.AutomaticSize.Y or autoSize == Enum.AutomaticSize.XY then
-                szYScale = 0
-                szYOff = abs.Y
-            end
-        end
-        bf.Size = UDim2.new(szXScale, szXOff + outset * 2, szYScale, szYOff + outset * 2)
-        -- Keep frame elevated so border renders behind it
-        if Frame.ZIndex <= 1 then Frame.ZIndex = 2 end
-        bf.ZIndex = Frame.ZIndex - 1
-    end
-    sync()
-    bf.Parent = parent
-    Library.Registry[bf] = { BackgroundColor3 = colorKey }
-
-    Frame:GetPropertyChangedSignal("Position"):Connect(sync)
-    Frame:GetPropertyChangedSignal("Size"):Connect(sync)
-    Frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(sync)
-    Frame:GetPropertyChangedSignal("ZIndex"):Connect(sync)
-    Frame:GetPropertyChangedSignal("AnchorPoint"):Connect(sync)
-    Frame:GetPropertyChangedSignal("Visible"):Connect(function()
-        bf.Visible = Frame.Visible
-    end)
-    Frame:GetPropertyChangedSignal("Parent"):Connect(function()
-        local newParent = Frame.Parent
-        if newParent then
-            bf.Parent = newParent
-            sync()
-        else
-            pcall(function() bf:Destroy() end)
-        end
-    end)
-    Frame.ChildAdded:Connect(function(child)
-        if child:IsA("UICorner") then
-            task.defer(syncCornerRadius)
-            child:GetPropertyChangedSignal("CornerRadius"):Connect(syncCornerRadius)
-        end
-    end)
-    if corner then
-        corner:GetPropertyChangedSignal("CornerRadius"):Connect(syncCornerRadius)
-    end
-    Frame.Destroying:Connect(function() pcall(function() bf:Destroy() end) end)
-    return bf
+local function applySimpleBorder(Frame)
+    if not Frame then return nil end
+    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(1,1,1)
+    Frame.BorderMode = Enum.BorderMode.Inset
+    Frame.BorderSizePixel = 1
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Library.Scheme.OutlineColor or Color3.new(1,1,1)
+    stroke.Thickness = 1
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = Frame
+    return stroke
 end
+
 
 function Library:AddHoverEffect(button, stroke, element)
     -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
@@ -1951,107 +1866,38 @@ function Library:AddHoverEffect(button, stroke, element)
     end
 end
 
--- AddShadowFrame: legacy UIStroke-based outline kept for UIListLayout containers.
+-- stripped legacy shadow outline; no-op stub
 function Library:AddShadowFrame(Frame: GuiObject)
-    if Frame:FindFirstChildOfClass("UIListLayout") then return nil end
-
-    local corner = Frame:FindFirstChildOfClass("UICorner")
-    local cornerOffset = corner and corner.CornerRadius.Offset or Library.CornerRadius
-    local shadowCornerRadius = cornerOffset > 0
-        and UDim.new(0, cornerOffset + 1)
-        or UDim.new(0, 0)
-
-    local Shadow = Instance.new("Frame")
-    Shadow.BackgroundTransparency = 1
-    Shadow.Size = UDim2.new(1, 2, 1, 2)
-    Shadow.Position = UDim2.fromOffset(-1, -1)
-    Shadow.ZIndex = Frame.ZIndex - 1
-    Shadow.Name = "_OutlineShadow"
-    Shadow.Parent = Frame
-
-    local ShadowCorner = Instance.new("UICorner")
-    ShadowCorner.CornerRadius = shadowCornerRadius
-    ShadowCorner.Parent = Shadow
-    Library._ShadowCorners = Library._ShadowCorners or {}
-    table.insert(Library._ShadowCorners, ShadowCorner)
-
-    local DarkStroke = Instance.new("UIStroke")
-    DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
-    DarkStroke.Thickness = 1
-    DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-    DarkStroke.Parent = Shadow
-    Library.Registry[DarkStroke] = { Color = "Dark" }
-
-    local function syncShadowCorner()
-        local c = Frame:FindFirstChildOfClass("UICorner")
-        local r = c and c.CornerRadius.Offset or Library.CornerRadius
-        ShadowCorner.CornerRadius = r > 0 and UDim.new(0, r + 1) or UDim.new(0, 0)
-    end
-    Frame.ChildAdded:Connect(function(child)
-        if child:IsA("UICorner") then
-            task.defer(syncShadowCorner)
-            child:GetPropertyChangedSignal("CornerRadius"):Connect(syncShadowCorner)
-        end
-    end)
-    if corner then
-        corner:GetPropertyChangedSignal("CornerRadius"):Connect(syncShadowCorner)
-    end
-
-    local function AdjustForPadding()
-        local pad = Frame:FindFirstChildOfClass("UIPadding")
-        if pad then
-            local pl, pr = pad.PaddingLeft.Offset, pad.PaddingRight.Offset
-            local pt, pb = pad.PaddingTop.Offset, pad.PaddingBottom.Offset
-            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
-            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
-        end
-    end
-    AdjustForPadding()
-    Frame.ChildAdded:Connect(function(child)
-        if child:IsA("UIPadding") then
-            task.defer(AdjustForPadding)
-        elseif child:IsA("UIListLayout") then
-            pcall(function() Shadow:Destroy() end)
-        end
-    end)
-    return DarkStroke
+    -- modern border is handled by BorderColor3/BorderMode or UIStroke
+    return nil
 end
 
--- AddSmallOutline: sibling solid-Frame borders for free-floating frames;
--- UIStroke fallback only when the DIRECT parent has a UIListLayout (e.g. groupboxes).
+-- simplified outlines using frame borders + UIStroke for compatibility
 function Library:AddSmallOutline(Frame: GuiObject)
-    local parent = Frame.Parent
-    local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
-    if inLayout then
-        -- Direct parent has UIListLayout; siblings would be positioned by the layout.
-        -- Use a single Dark UIStroke as the outline.
-        local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local DarkStroke = New("UIStroke", { Color = "Dark", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
-        return DarkStroke, DarkStroke
-    end
-    -- Sibling approach: solid colored frames rendered behind the target via ZIndex.
-    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
-    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 1)
-    local outRef = OutlineFrame or DarkFrame or Frame
-    local darkRef = DarkFrame or outRef
-    return outRef, darkRef
+    if not Frame then return nil, nil end
+    -- apply a border on the frame itself
+    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(1,1,1)
+    Frame.BorderMode = Enum.BorderMode.Inset
+    Frame.BorderSizePixel = 1
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Library.Scheme.OutlineColor or Color3.new(1,1,1)
+    stroke.Thickness = 1
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = Frame
+    return stroke, stroke
 end
 
--- AddOutline: same sibling approach as AddSmallOutline, three-return-value variant.
 function Library:AddOutline(Frame: GuiObject)
-    local parent = Frame.Parent
-    local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
-    if inLayout then
-        local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local DarkStroke = New("UIStroke", { Color = "Dark", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
-        return DarkStroke, DarkStroke, DarkStroke
-    end
-    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
-    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 1)
-    local outRef = OutlineFrame or DarkFrame or Frame
-    local darkRef = DarkFrame or outRef
-    return outRef, darkRef, darkRef
+    if not Frame then return nil, nil, nil end
+    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(1,1,1)
+    Frame.BorderMode = Enum.BorderMode.Inset
+    Frame.BorderSizePixel = 1
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Library.Scheme.OutlineColor or Color3.new(1,1,1)
+    stroke.Thickness = 1
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = Frame
+    return stroke, stroke, stroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -5793,8 +5639,8 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = Checkbox,
         })
-        local CheckboxDarkFrame = _makeBorderSibling(Checkbox, "_OutlineShadow", "Dark", Color3.new(0,0,0), 2)
-        _makeBorderSibling(Checkbox, "_OutlineBorder", "OutlineColor", Color3.new(1,1,1), 1)
+        local CheckboxDarkFrame = applySimpleBorder(Checkbox)
+        -- border applied via Color3/BorderMode; additional stroke not needed
 
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
@@ -5942,8 +5788,8 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
-        _makeBorderSibling(Switch, "_OutlineShadow", "Dark", Color3.new(0,0,0), 2)
-        _makeBorderSibling(Switch, "_OutlineBorder", "OutlineColor", Color3.new(1,1,1), 1)
+        -- simple border applied via BorderColor3/BorderMode
+        -- explicit SwitchStroke created below handles visuals
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
             Thickness = 1,
@@ -8374,30 +8220,7 @@ function Library:CreateWindow(WindowInfo)
             end
         end
     end
-    -- update any shadow corners (UIStroke-based outlines in layout containers)
-    if Library._ShadowCorners then
-        for _, sc in ipairs(Library._ShadowCorners) do
-            if sc and sc.Parent and sc:IsA("UICorner") then
-                local base = sc.Parent:FindFirstChildOfClass("UICorner")
-                if base then
-                    local r = base.CornerRadius.Offset
-                    sc.CornerRadius = r > 0 and UDim.new(0, r + 1) or UDim.new(0, 0)
-                else
-                    sc.CornerRadius = Library.CornerRadius > 0 and UDim.new(0, Library.CornerRadius + 1) or UDim.new(0, 0)
-                end
-            end
-        end
-    end
-    -- update sibling border frame corners (solid-Frame outline system)
-    if Library._BorderCorners then
-        for _, entry in ipairs(Library._BorderCorners) do
-            if entry.corner and entry.corner.Parent and entry.targetFrame and entry.targetFrame.Parent then
-                local tc = entry.targetFrame:FindFirstChildOfClass("UICorner")
-                local base = tc and tc.CornerRadius.Offset or Library.CornerRadius
-                entry.corner.CornerRadius = UDim.new(0, base > 0 and math.max(0, base + entry.offset) or 0)
-            end
-        end
-    end
+    -- legacy corner-update logic removed; modern borders use BorderMode/BorderColor3
     
     Library:SetNotifySide(WindowInfo.NotifySide)
     Library:SetNotifyAccentSide(WindowInfo.NotifyAccentSide)
