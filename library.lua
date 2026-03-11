@@ -1802,9 +1802,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
 
     local Shadow = Instance.new("Frame")
     Shadow.BackgroundTransparency = 1
-    -- keep the black outline tight against the element (1px gap)
-    Shadow.Size = UDim2.new(1, 2, 1, 2)
-    Shadow.Position = UDim2.fromOffset(-1, -1)
+    Shadow.Size = UDim2.new(1, 4, 1, 4)
+    Shadow.Position = UDim2.fromOffset(-2, -2)
     Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
     Shadow.Name = "_OutlineShadow"
     Shadow.Parent = Frame
@@ -1831,8 +1830,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
             local pr = pad.PaddingRight.Offset
             local pt = pad.PaddingTop.Offset
             local pb = pad.PaddingBottom.Offset
-            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
-            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
+            Shadow.Position = UDim2.fromOffset(-2 - pl, -2 - pt)
+            Shadow.Size = UDim2.new(1, 4 + pl + pr, 1, 4 + pt + pb)
         end
     end
     AdjustForPadding()
@@ -6389,13 +6388,7 @@ do
             local itemHeight = 21 * Library.DPIScale
             local actualHeight = actualCount * itemHeight
             local maxHeight = Info.MaxVisibleDropdownItems * itemHeight
-
-            -- include menu padding so the bottom item is fully visible when not scrolling
-            local pad = MenuTable.Menu:FindFirstChildOfClass("UIPadding")
-            local padTop = (pad and pad.PaddingTop.Offset or 0) * Library.DPIScale
-            local padBottom = (pad and pad.PaddingBottom.Offset or 0) * Library.DPIScale
-
-            local Y = math.clamp(actualHeight + padTop + padBottom, 0, maxHeight)
+            local Y = math.clamp(actualHeight, 0, maxHeight)
 
             MenuTable:SetSize(function()
                 return UDim2.fromOffset(Display.AbsoluteSize.X, Y)
