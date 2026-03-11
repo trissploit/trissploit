@@ -225,9 +225,6 @@ local Library = {
     ImageManager = CustomImageManager,
 }
 
--- alias for legacy code and registry lookups; always kept in sync
-Library.OutlineColor = Library.Scheme.OutlineColor
-
     -- Watch for changes to ScrollingDropdown and clean up existing dropdowns
     do
         local raw_newindex = rawset
@@ -1098,10 +1095,6 @@ function Library:UpdateColorsUsingRegistry()
             end
         end
     end
-
-    -- keep legacy alias in sync with scheme so callers filtering Library.OutlineColor
-    -- won't break and static analysis warnings disappear
-    Library.OutlineColor = Library.Scheme.OutlineColor
 end
 
 function Library:UpdateDPI(Instance, Properties)
@@ -1772,70 +1765,122 @@ function Library:MakeLine(Frame: GuiObject, Info)
 end
 
 function Library:AddHoverEffect(button, stroke, element)
-    -- Hover effect for outlines.  Depending on whether a separate stroke object is
-    -- provided we either tween that stroke or simply change the element's border
-    -- color directly.  The hover state persists through element disabled states.
+    -- Hover effect tweens the outer dark shadow stroke: accent on enter, dark on leave
+    -- Track hover state so it persists across toggle value changes
     element._hovered = false
-
-    local function applyColor(col)
-        if stroke then
-            TweenService:Create(stroke, Library.TweenInfo, { Color = col }):Play()
-        else
-            -- no stroke; adjust frame border
-            if element and element:IsA("GuiObject") then
-                element.BorderColor3 = col
-            end
-        end
-    end
-
     button.MouseEnter:Connect(function()
         if element.Disabled then return end
         element._hovered = true
-        applyColor(Library.Scheme.AccentColor)
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
     end)
     button.MouseLeave:Connect(function()
         element._hovered = false
         if element.Disabled then return end
-        applyColor(Library.Scheme.Dark or Color3.new(0, 0, 0))
+        TweenService:Create(stroke, Library.TweenInfo, { Color = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
     end)
-
-    -- update registry for stroke if available; otherwise we cannot easily track
-    -- border colors, so skip registry.
-    if stroke and Library.Registry[stroke] then
+    -- Override registry entry so UpdateColorsUsingRegistry respects hover state
+    if Library.Registry[stroke] then
         Library.Registry[stroke].Color = function()
             return element._hovered and Library.Scheme.AccentColor or (Library.Scheme.Dark or Color3.new(0, 0, 0))
         end
     end
 end
 
--- Linoria outlines are implemented using regular frame borders.  There
--- is no fancy shadow/outer stroke; every frame simply sets
--- BorderColor3/BorderSizePixel and BorderMode.  This keeps our look
--- identical to Linoria's library.
-
 function Library:AddShadowFrame(Frame: GuiObject)
-    -- no shadow frame necessary in the Linoria style
-    return nil
+    -- Skip if the frame has a UIListLayout (shadow would become a layout member)
+    if Frame:FindFirstChildOfClass("UIListLayout") then
+        return nil
+    end
+
+    -- Transparent child frame with a dark UIStroke. Gives a black outer border
+    -- visible around the colored outline without stacking UIStrokes on the same object.
+    local corner = Frame:FindFirstChildOfClass("UICorner")
+    local baseRadius = corner and corner.CornerRadius.Offset or Library.CornerRadius
+    -- shadow radius matches the element's radius exactly; previous +1 offset caused
+    -- corner bulging when the gap was only 1px, making the outline look uneven.
+    local shadowCornerRadius = corner
+        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset)
+        or UDim.new(0, Library.CornerRadius)
+
+    local Shadow = Instance.new("Frame")
+    Shadow.BackgroundTransparency = 1
+    -- keep the black outline tight against the element (1px gap)
+    Shadow.Size = UDim2.new(1, 2, 1, 2)
+    Shadow.Position = UDim2.fromOffset(-1, -1)
+    Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
+    Shadow.Name = "_OutlineShadow"
+    Shadow.Parent = Frame
+
+    local ShadowCorner = Instance.new("UICorner")
+    ShadowCorner.CornerRadius = shadowCornerRadius
+    ShadowCorner.Parent = Shadow
+    -- track shadow corners so they can follow library rounding (+1 offset)
+    Library._ShadowCorners = Library._ShadowCorners or {}
+    table.insert(Library._ShadowCorners, ShadowCorner)
+
+    local DarkStroke = Instance.new("UIStroke")
+    DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
+    DarkStroke.Thickness = 1
+    DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    DarkStroke.Parent = Shadow
+    Library.Registry[DarkStroke] = { Color = "Dark" }
+
+    -- If UIPadding exists now, counteract it. Also listen for future UIPadding.
+    local function AdjustForPadding()
+        local pad = Frame:FindFirstChildOfClass("UIPadding")
+        if pad then
+            local pl = pad.PaddingLeft.Offset
+            local pr = pad.PaddingRight.Offset
+            local pt = pad.PaddingTop.Offset
+            local pb = pad.PaddingBottom.Offset
+            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
+            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
+        end
+    end
+    AdjustForPadding()
+    Frame.ChildAdded:Connect(function(child)
+        if child:IsA("UIPadding") then
+            task.defer(AdjustForPadding)
+        elseif child:IsA("UIListLayout") then
+            -- UIListLayout added after shadow — remove shadow to prevent layout issues
+            pcall(function() Shadow:Destroy() end)
+        end
+    end)
+
+    return DarkStroke
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- apply a simple 1px border, same as Linoria
-    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(0,0,0)
-    Frame.BorderSizePixel = 1
+    -- replicate Linoria outlines: directly apply border colour/mode to the frame
+    Frame.BorderColor3 = Library.OutlineColor
     Frame.BorderMode = Enum.BorderMode.Inset
-    -- register so theme changes recolor the border
-    Library:AddToRegistry(Frame, { BorderColor3 = 'OutlineColor' })
-    return nil
+
+    local DarkStroke = Library:AddShadowFrame(Frame)
+    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    local Stroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Thickness = 1,
+        LineJoinMode = joinMode,
+        Parent = Frame,
+    })
+    return Stroke, DarkStroke or Stroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    -- Linoria uses frame borders for outlines, not UIStroke.
-    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(0,0,0)
-    Frame.BorderSizePixel = 1
+    -- Linoria-style outline: ensure the frame itself has the proper border
+    Frame.BorderColor3 = Library.OutlineColor
     Frame.BorderMode = Enum.BorderMode.Inset
-    Library:AddToRegistry(Frame, { BorderColor3 = 'OutlineColor' })
-    -- return nils for compatibility with callers expecting strokes
-    return nil, nil, nil
+
+    Library:AddShadowFrame(Frame)
+    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    local Stroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Thickness = 1,
+        LineJoinMode = joinMode,
+        Parent = Frame,
+    })
+    -- return stroke values in the same pattern as before for compatibility
+    return Stroke, Stroke, Stroke
 end
 
 function Library:AddDraggableLabel(Text: string)
