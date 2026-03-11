@@ -9319,8 +9319,22 @@ function Library:CreateWindow(WindowInfo)
 			WarningBox.BackgroundColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.BackgroundColor
 				or Color3.fromRGB(127, 0, 0)
 
+			-- Shadow stroke always UIStroke
 			WarningBoxShadowOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.Dark
-				or Color3.fromRGB(169, 0, 0)			
+				or Color3.fromRGB(169, 0, 0)
+			-- outline may be container frame or stroke
+			local outlineColor = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
+				or Color3.fromRGB(255, 50, 50)
+			if WarningBoxOutline:IsA("UIStroke") then
+				WarningBoxOutline.Color = outlineColor
+			else
+				for _, edge in ipairs(WarningBoxOutline:GetChildren()) do
+					if edge:IsA("Frame") then
+						edge.BackgroundColor3 = outlineColor
+					end
+				end
+			end
+			
 			WarningTitle.TextColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.FontColor
 				or Color3.fromRGB(255, 50, 50)
 			WarningStroke.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
@@ -9349,16 +9363,21 @@ function Library:CreateWindow(WindowInfo)
 			Library.Registry[WarningBoxShadowOutline].Color = function()
 				return Tab.WarningBox.IsNormal == true and Library.Scheme.Dark or Color3.fromRGB(169, 0, 0)
 			end
-			
-			Library.Registry[WarningBoxOutline].BackgroundColor3 = function()
-				local c = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
-				-- update every edge child
-				for _, edge in ipairs(WarningBoxOutline:GetChildren()) do
-					if edge:IsA("Frame") then
-						edge.BackgroundColor3 = c
-					end
+			-- registry entry depends on type
+			if WarningBoxOutline:IsA("UIStroke") then
+				Library.Registry[WarningBoxOutline].Color = function()
+					return Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
 				end
-				return c
+			else
+				Library.Registry[WarningBoxOutline].BackgroundColor3 = function()
+					local col = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
+					for _, edge in ipairs(WarningBoxOutline:GetChildren()) do
+						if edge:IsA("Frame") then
+							edge.BackgroundColor3 = col
+						end
+					end
+					return col
+				end
 			end
 
 			Library.Registry[WarningTitle].TextColor3 = function()
