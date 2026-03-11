@@ -653,7 +653,7 @@ function Library:UpdateKeybindFrame()
         end
 
         visibleCount += 1
-        local FullSize = KeybindToggle.Label.Size.X.Offset + KeybindToggle.Label.Position.X.Offset
+        local FullSize = KeybindToggle.TotalWidth or (KeybindToggle.Label.Size.X.Offset + KeybindToggle.Label.Position.X.Offset)
         if FullSize > XSize then
             XSize = FullSize
         end
@@ -1060,7 +1060,7 @@ function Library:UpdateSearch(SearchText)
     end
 
     if Library.GlobalSearch then
-        if ActiveHasVisible and Library.ActiveTab and Library.ActiveTab.RefreshSides then
+        if ActiveHasVisible and Library.ActiveTab then
             Library.ActiveTab:RefreshSides()
         elseif FirstVisibleTab then
             local SearchMarker = SearchText
@@ -3746,39 +3746,77 @@ do
         do
             local Holder = New("TextButton", {
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 16),
+                Size = UDim2.new(1, 0, 0, 22),
                 Text = "",
                 Visible = not Info.NoUI,
                 Parent = Library.KeybindContainer,
             })
 
-            local Label = New("TextLabel", {
+            -- Left: action name label
+            local NameLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Size = UDim2.fromScale(1, 1),
+                Position = UDim2.fromOffset(0, 0),
+                Size = UDim2.new(1, -60, 1, 0),
                 Text = "",
                 TextSize = 14,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextYAlignment = Enum.TextYAlignment.Center,
+                TextTruncate = Enum.TextTruncate.AtEnd,
                 Parent = Holder,
-
-                DPIExclude = {
-                    Size = true,
-                },
+                DPIExclude = { Size = true },
             })
 
-            -- omit checkbox; display simply uses label color
+            -- Right: key badge pill
+            local KeyBadge = New("Frame", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                BackgroundColor3 = "MainColor",
+                Position = UDim2.new(1, 0, 0.5, 0),
+                Size = UDim2.fromOffset(50, 18),
+                Parent = Holder,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, 6),
+                Parent = KeyBadge,
+            })
+            New("UIStroke", {
+                Thickness = 1,
+                Color = "OutlineColor",
+                Parent = KeyBadge,
+            })
+            local KeyLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "",
+                TextSize = 12,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                TextYAlignment = Enum.TextYAlignment.Center,
+                Parent = KeyBadge,
+                DPIExclude = { Size = true },
+            })
+
             function KeybindsToggle:Display(State)
-                Label.TextTransparency = State and 0 or 0.5
+                NameLabel.TextTransparency = State and 0 or 0.5
             end
 
             function KeybindsToggle:SetText(Text)
-                local X, Y = Library:GetTextBounds(Text, Label.FontFace, Label.TextSize)
-                Label.Text = Text
-                Label.Size = UDim2.new(0, math.ceil(X) + 4, 1, 0)
-                -- Dynamically size holder height to fit font metrics
-                local newH = math.max(16, math.ceil(Y) + 4)
-                Holder.Size = UDim2.new(1, 0, 0, newH)
+                -- parse "[KEY] Action Name (Mode)"
+                local key, name = Text:match("^%[(.-)%]%s*(.-)%s*%(%a+%)%s*$")
+                if not key then key = ""; name = Text end
+
+                NameLabel.Text = name
+                KeyLabel.Text = key
+
+                local kw = Library:GetTextBounds(key, KeyLabel.FontFace, KeyLabel.TextSize)
+                local badgeW = math.max(32, math.ceil(kw) + 14)
+                KeyBadge.Size = UDim2.fromOffset(badgeW, 18)
+                NameLabel.Size = UDim2.new(1, -(badgeW + 8), 1, 0)
+
+                local nw = Library:GetTextBounds(name, NameLabel.FontFace, NameLabel.TextSize)
+                KeybindsToggle.TotalWidth = math.ceil(nw) + 4 + badgeW + 8
+
+                local _, nameH = Library:GetTextBounds(name, NameLabel.FontFace, NameLabel.TextSize)
+                Holder.Size = UDim2.new(1, 0, 0, math.max(22, math.ceil(nameH) + 6))
             end
 
             function KeybindsToggle:SetVisibility(Visibility)
@@ -3787,9 +3825,7 @@ do
 
             function KeybindsToggle:SetNormal(Normal)
                 KeybindsToggle.Normal = Normal
-
                 Holder.Active = not Normal
-                Label.Position = UDim2.fromOffset(0, 0)
             end
 
             KeyPicker.DoClick = function(...) end --// make luau lsp shut up
@@ -3810,7 +3846,7 @@ do
             end)
 
             KeybindsToggle.Holder = Holder
-            KeybindsToggle.Label = Label
+            KeybindsToggle.Label = NameLabel
             KeybindsToggle.Checkbox = Checkbox
             KeybindsToggle.Loaded = true
             table.insert(Library.KeybindToggles, KeybindsToggle)
@@ -9411,7 +9447,6 @@ function Library:CreateWindow(WindowInfo)
 					or Color3.fromRGB(169, 0, 0)
 			end
 		end
-			end
 			if not Library.Registry[WarningBoxShadowOutline] then
 				Library:AddToRegistry(WarningBoxShadowOutline, {})
 			end
@@ -9460,7 +9495,7 @@ Library.Registry[WarningBoxOutline][ WarningBoxOutline:IsA("UIStroke") and "Colo
 
         -- Connect to TabContainer size changes to refresh sides automatically
         TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if Tab == Library.ActiveTab and Tab and Tab.RefreshSides then
+            if Tab == Library.ActiveTab then
                 Tab:RefreshSides()
             end
         end)
@@ -9490,9 +9525,7 @@ Library.Registry[WarningBoxOutline][ WarningBoxOutline:IsA("UIStroke") and "Colo
                 Library:UpdateDPI(WarningBox, { Size = WarningBox.Size })
 			end
 
-if Tab and Tab.RefreshSides then
 			Tab:RefreshSides()
-		end
 		end
 
         function Tab:AddGroupbox(Info)
