@@ -9320,10 +9320,7 @@ function Library:CreateWindow(WindowInfo)
 				or Color3.fromRGB(127, 0, 0)
 
 			WarningBoxShadowOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.Dark
-				or Color3.fromRGB(169, 0, 0)
-			WarningBoxOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
-				or Color3.fromRGB(255, 50, 50)
-			
+				or Color3.fromRGB(169, 0, 0)			
 			WarningTitle.TextColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.FontColor
 				or Color3.fromRGB(255, 50, 50)
 			WarningStroke.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
@@ -9353,8 +9350,15 @@ function Library:CreateWindow(WindowInfo)
 				return Tab.WarningBox.IsNormal == true and Library.Scheme.Dark or Color3.fromRGB(169, 0, 0)
 			end
 			
-			Library.Registry[WarningBoxOutline].Color = function()
-				return Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
+			Library.Registry[WarningBoxOutline].BackgroundColor3 = function()
+				local c = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
+				-- update every edge child
+				for _, edge in ipairs(WarningBoxOutline:GetChildren()) do
+					if edge:IsA("Frame") then
+						edge.BackgroundColor3 = c
+					end
+				end
+				return c
 			end
 
 			Library.Registry[WarningTitle].TextColor3 = function()
