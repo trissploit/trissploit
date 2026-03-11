@@ -1796,11 +1796,9 @@ function Library:AddShadowFrame(Frame: GuiObject)
     -- visible around the colored outline without stacking UIStrokes on the same object.
     local corner = Frame:FindFirstChildOfClass("UICorner")
     local baseRadius = corner and corner.CornerRadius.Offset or Library.CornerRadius
-    -- shadow radius matches the element's radius exactly; previous +1 offset caused
-    -- corner bulging when the gap was only 1px, making the outline look uneven.
     local shadowCornerRadius = corner
-        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset)
-        or UDim.new(0, Library.CornerRadius)
+        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + (baseRadius > 0 and 1 or 0))
+        or UDim.new(0, Library.CornerRadius + (Library.CornerRadius > 0 and 1 or 0))
 
     local Shadow = Instance.new("Frame")
     Shadow.BackgroundTransparency = 1
@@ -1851,90 +1849,27 @@ function Library:AddShadowFrame(Frame: GuiObject)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- small outline: optionally keep shadow, draw 1px bars around the outside
     local DarkStroke = Library:AddShadowFrame(Frame)
-    local function createEdges(thickness)
-        local cont = Instance.new("Frame")
-        cont.Name = "_OutlineContainer"
-        cont.BackgroundTransparency = 1
-        cont.Size = UDim2.new(1, thickness * 2, 1, thickness * 2)
-        cont.Position = UDim2.fromOffset(-thickness, -thickness)
-        cont.ZIndex = Frame.ZIndex - 1
-        cont.Parent = Frame
-
-        local function makeEdge(pos, size)
-            local f = Instance.new("Frame")
-            f.BackgroundColor3 = Library.Scheme and Library.Scheme.OutlineColor or Color3.new(0,0,0)
-            f.BorderSizePixel = 0
-            f.ZIndex = cont.ZIndex
-            f.Position = pos
-            f.Size = size
-            f.Parent = cont
-            return f
-        end
-
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(1,0,0,thickness)) -- top
-        makeEdge(UDim2.new(0,0,1,-thickness), UDim2.new(1,0,0,thickness)) -- bottom
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(0,thickness,1,0)) -- left
-        makeEdge(UDim2.new(1,-thickness,0,0), UDim2.new(0,thickness,1,0)) -- right
-
-        Library.Registry[cont] = {
-            BackgroundColor3 = function()
-                for _, child in ipairs(cont:GetChildren()) do
-                    if child:IsA("Frame") then
-                        child.BackgroundColor3 = Library.Scheme.OutlineColor
-                    end
-                end
-            end,
-        }
-        return cont
-    end
-
-    return createEdges(1), DarkStroke or createEdges(1)
+    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    local Stroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Thickness = 1,
+        LineJoinMode = joinMode,
+        Parent = Frame,
+    })
+    return Stroke, DarkStroke or Stroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
     Library:AddShadowFrame(Frame)
-    -- full outline uses same edge-frame logic as small, returning three references
-    local function createEdges(thickness)
-        local cont = Instance.new("Frame")
-        cont.Name = "_OutlineContainer"
-        cont.BackgroundTransparency = 1
-        cont.Size = UDim2.new(1, thickness * 2, 1, thickness * 2)
-        cont.Position = UDim2.fromOffset(-thickness, -thickness)
-        cont.ZIndex = Frame.ZIndex - 1
-        cont.Parent = Frame
-
-        local function makeEdge(pos, size)
-            local f = Instance.new("Frame")
-            f.BackgroundColor3 = Library.Scheme and Library.Scheme.OutlineColor or Color3.new(0,0,0)
-            f.BorderSizePixel = 0
-            f.ZIndex = cont.ZIndex
-            f.Position = pos
-            f.Size = size
-            f.Parent = cont
-            return f
-        end
-
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(1,0,0,thickness))
-        makeEdge(UDim2.new(0,0,1,-thickness), UDim2.new(1,0,0,thickness))
-        makeEdge(UDim2.new(0,0,0,0), UDim2.new(0,thickness,1,0))
-        makeEdge(UDim2.new(1,-thickness,0,0), UDim2.new(0,thickness,1,0))
-
-        Library.Registry[cont] = {
-            BackgroundColor3 = function()
-                for _, child in ipairs(cont:GetChildren()) do
-                    if child:IsA("Frame") then
-                        child.BackgroundColor3 = Library.Scheme.OutlineColor
-                    end
-                end
-            end,
-        }
-        return cont
-    end
-
-    local outline = createEdges(1)
-    return outline, outline, outline
+    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    local Stroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Thickness = 1,
+        LineJoinMode = joinMode,
+        Parent = Frame,
+    })
+    return Stroke, Stroke, Stroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -6432,8 +6367,6 @@ do
                     if scrollLabel then
                         scrollLabel:Destroy()
                     end
-                    -- Recalculate list size using current absolute position now that menu is visible
-                    Dropdown:RecalculateListSize()
                 elseif not Active then
                     -- Resume scrolling when menu closes
                     Dropdown:Display()
@@ -6454,31 +6387,23 @@ do
         function Dropdown:RecalculateListSize(Count)
             local actualCount = Count or GetTableSize(Dropdown.Values)
             local itemHeight = 21 * Library.DPIScale
-            local totalItemHeight = actualCount * itemHeight
+            local actualHeight = actualCount * itemHeight
+            local maxHeight = Info.MaxVisibleDropdownItems * itemHeight
 
             -- include menu padding so the bottom item is fully visible when not scrolling
             local pad = MenuTable.Menu:FindFirstChildOfClass("UIPadding")
             local padTop = (pad and pad.PaddingTop.Offset or 0) * Library.DPIScale
             local padBottom = (pad and pad.PaddingBottom.Offset or 0) * Library.DPIScale
-            local totalPad = padTop + padBottom
 
-            -- max height: fill available screen space below the display button,
-            -- only scroll when the list would go off-screen
-            local function computeY()
-                local viewportH = workspace.CurrentCamera.ViewportSize.Y
-                local dispBottom = Display.AbsolutePosition.Y + Display.AbsoluteSize.Y
-                local available = math.max(60, viewportH - dispBottom - 6)
-                return math.min(totalItemHeight + totalPad, available)
-            end
+            local Y = math.clamp(actualHeight + padTop + padBottom, 0, maxHeight)
 
             MenuTable:SetSize(function()
-                return UDim2.fromOffset(Display.AbsoluteSize.X, computeY())
+                return UDim2.fromOffset(Display.AbsoluteSize.X, Y)
             end)
 
-            -- enable scrolling only if content overflows available space
+            -- enable scrolling only if content overflows menu height
             if MenuTable.Menu:IsA("ScrollingFrame") then
-                local Y = computeY()
-                MenuTable.Menu.ScrollingEnabled = (totalItemHeight + totalPad) > Y
+                MenuTable.Menu.ScrollingEnabled = actualHeight > Y
             end
         end
 
@@ -9320,7 +9245,10 @@ function Library:CreateWindow(WindowInfo)
 				or Color3.fromRGB(127, 0, 0)
 
 			WarningBoxShadowOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.Dark
-				or Color3.fromRGB(169, 0, 0)			
+				or Color3.fromRGB(169, 0, 0)
+			WarningBoxOutline.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
+				or Color3.fromRGB(255, 50, 50)
+			
 			WarningTitle.TextColor3 = Tab.WarningBox.IsNormal == true and Library.Scheme.FontColor
 				or Color3.fromRGB(255, 50, 50)
 			WarningStroke.Color = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor
@@ -9350,15 +9278,8 @@ function Library:CreateWindow(WindowInfo)
 				return Tab.WarningBox.IsNormal == true and Library.Scheme.Dark or Color3.fromRGB(169, 0, 0)
 			end
 			
-			Library.Registry[WarningBoxOutline].BackgroundColor3 = function()
-				local c = Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
-				-- update every edge child
-				for _, edge in ipairs(WarningBoxOutline:GetChildren()) do
-					if edge:IsA("Frame") then
-						edge.BackgroundColor3 = c
-					end
-				end
-				return c
+			Library.Registry[WarningBoxOutline].Color = function()
+				return Tab.WarningBox.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
 			end
 
 			Library.Registry[WarningTitle].TextColor3 = function()
