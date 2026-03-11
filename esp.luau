@@ -560,8 +560,6 @@ local function createESPObject()
         Player = nil,
     }
     espObj.GradientAngle = nil
-    espObj.OutlineAngle = 0
-    espObj.BoxRotation = 0
     espObj.HealthGradientPhase = nil
     espObj.NameGradientPhase = nil
     espObj.DistanceGradientPhase = nil
@@ -620,6 +618,21 @@ local function createESPObject()
     espObj.Weapon.Parent = container
     
     -- Box outline frame (used for the 1px outline / corner boxes)
+    -- outer and inner black outlines
+    espObj.BoxOuterOutline = Instance.new("Frame")
+    espObj.BoxOuterOutline.Name = "BoxOuterOutline"
+    espObj.BoxOuterOutline.BackgroundTransparency = 1
+    espObj.BoxOuterOutline.BorderSizePixel = 0
+    espObj.BoxOuterOutline.Visible = false
+    espObj.BoxOuterOutline.ZIndex = 0
+    espObj.BoxOuterOutline.Parent = container
+    espObj.BoxOuterStroke = Instance.new("UIStroke")
+    espObj.BoxOuterStroke.Color = Color3.fromRGB(0, 0, 0)
+    espObj.BoxOuterStroke.Thickness = 1
+    espObj.BoxOuterStroke.Transparency = 0
+    espObj.BoxOuterStroke.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxOuterStroke.Parent = espObj.BoxOuterOutline
+
     espObj.Box = Instance.new("Frame")
     espObj.Box.Name = "BoxOutlineFrame"
     espObj.Box.BackgroundColor3 = Color3.fromRGB(1, 1, 1)
@@ -629,15 +642,6 @@ local function createESPObject()
     espObj.Box.ZIndex = 1
     espObj.Box.Parent = container
 
-    -- black outer stroke (thickness 2) always on the box
-    espObj.BoxBlack = Instance.new("UIStroke")
-    espObj.BoxBlack.Name = "BoxBlackStroke"
-    espObj.BoxBlack.Color = Color3.new(0, 0, 0)
-    espObj.BoxBlack.Thickness = 3
-    espObj.BoxBlack.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    espObj.BoxBlack.Parent = espObj.Box
-
-    -- gradient/outline stroke sits above the black stroke
     espObj.BoxOutline = Instance.new("UIStroke")
     espObj.BoxOutline.Name = "BoxOutline"
     espObj.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
@@ -645,6 +649,21 @@ local function createESPObject()
     espObj.BoxOutline.Transparency = 0
     espObj.BoxOutline.LineJoinMode = Enum.LineJoinMode.Miter
     espObj.BoxOutline.Parent = espObj.Box
+
+    -- inner black outline frame
+    espObj.BoxInnerOutline = Instance.new("Frame")
+    espObj.BoxInnerOutline.Name = "BoxInnerOutline"
+    espObj.BoxInnerOutline.BackgroundTransparency = 1
+    espObj.BoxInnerOutline.BorderSizePixel = 0
+    espObj.BoxInnerOutline.Visible = false
+    espObj.BoxInnerOutline.ZIndex = 2
+    espObj.BoxInnerOutline.Parent = container
+    espObj.BoxInnerStroke = Instance.new("UIStroke")
+    espObj.BoxInnerStroke.Color = Color3.fromRGB(0, 0, 0)
+    espObj.BoxInnerStroke.Thickness = 1
+    espObj.BoxInnerStroke.Transparency = 0
+    espObj.BoxInnerStroke.LineJoinMode = Enum.LineJoinMode.Miter
+    espObj.BoxInnerStroke.Parent = espObj.BoxInnerOutline
 
     -- Box outline stroke (always 1px when enabled)
     espObj.BoxOutline = Instance.new("UIStroke")
@@ -659,7 +678,7 @@ local function createESPObject()
     -- Box outline gradient (for colored outlines - parented to UIStroke)
     espObj.OutlineGradient = Instance.new("UIGradient")
     espObj.OutlineGradient.Name = "OutlineGradient"
-    espObj.OutlineGradient.Enabled = true
+    espObj.OutlineGradient.Enabled = false  -- outline always solid black
     espObj.OutlineGradient.Rotation = -90
     espObj.OutlineGradient.Parent = espObj.BoxOutline
 
@@ -983,16 +1002,6 @@ local function updateESP(deltaTime)
                 return 
             end
             
-            -- update outline rotation angle per-object
-            if getSetting("BoxOutlineRotation", ESPSettings.BoxOutlineRotation) then
-                local speed = getSetting("BoxOutlineRotationSpeed", ESPSettings.BoxOutlineRotationSpeed or 300)
-                espObj.OutlineAngle = (espObj.OutlineAngle or 0) + speed * dt
-                espObj.OutlineAngle = espObj.OutlineAngle % 360
-                espObj.BoxRotation = espObj.OutlineAngle
-            else
-                espObj.OutlineAngle = espObj.OutlineAngle or -90
-                espObj.BoxRotation = 0
-            end
             
             local char = player.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -1083,23 +1092,15 @@ local function updateESP(deltaTime)
                         espObj.Box.Position = UDim2.new(0, x, 0, y)
                         espObj.Box.Size = UDim2.new(0, w, 0, h)
                         espObj.Box.Visible = true
-                        espObj.Box.Rotation = espObj.BoxRotation or 0
-                        -- Outline color fallback (used when gradient disabled)
-                        -- Force outline thickness to 1px per user request
-                        espObj.BoxOutline.Thickness = 1
-                        -- Gradient always enabled on the box outline (parented to UIStroke)
-                        local outlineStops = espObj.BoxStops or ESPSettings.BoxGradientStops
-                        if outlineStops then
-                            -- Set UIStroke Color to white so the UIGradient child is not multiplied by a dark color
-                            espObj.BoxOutline.Color = Color3.new(1, 1, 1)
-                            stopsToUIGradient(espObj.OutlineGradient, outlineStops)
-                            espObj.OutlineGradient.Enabled = true
-                        else
-                            espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
-                            espObj.OutlineGradient.Enabled = false
+                        -- adjust outer black border
+                        if espObj.BoxBorder then
+                            espObj.BoxBorder.Position = UDim2.new(0, x - 1, 0, y - 1)
+                            espObj.BoxBorder.Size = UDim2.new(0, w + 2, 0, h + 2)
+                            espObj.BoxBorder.Visible = true
                         end
-                        local rot = getSetting("BoxOutlineRotation", ESPSettings.BoxOutlineRotation) and (espObj.OutlineAngle or 0) or -90
-                        espObj.OutlineGradient.Rotation = rot
+                        -- Outline thickness 1px black
+                        espObj.BoxOutline.Thickness = 1
+                        espObj.BoxOutline.Color = Color3.fromRGB(0,0,0)
                         -- Hide corner frames when square outline in use
                         for _, corner in ipairs(espObj.Corners) do
                             corner.Visible = false
@@ -1107,8 +1108,17 @@ local function updateESP(deltaTime)
                     elseif getSetting("BoxType", ESPSettings.BoxType) == "Corner" then
                         espObj.Box.Visible = true
                         espObj.Box.BackgroundTransparency = 1
-                        espObj.Box.Rotation = espObj.BoxRotation or 0
                         -- outer border for corner mode
+                        if espObj.BoxOuterOutline then
+                            espObj.BoxOuterOutline.Position = UDim2.new(0, x - 1, 0, y - 1)
+                            espObj.BoxOuterOutline.Size = UDim2.new(0, w + 2, 0, h + 2)
+                            espObj.BoxOuterOutline.Visible = true
+                        end
+                        if espObj.BoxInnerOutline then
+                            espObj.BoxInnerOutline.Position = UDim2.new(0, x + 1, 0, y + 1)
+                            espObj.BoxInnerOutline.Size = UDim2.new(0, math.max(w - 2,0), 0, math.max(h - 2,0))
+                            espObj.BoxInnerOutline.Visible = true
+                        end
                         local cornerLen = math.min(w, h) * 0.25
                         espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
                         espObj.Corners[1].Size = UDim2.new(0, cornerLen, 0, 1)
@@ -1137,7 +1147,8 @@ local function updateESP(deltaTime)
                     end
                 else
                     if espObj.Box then espObj.Box.Visible = false end
--- box border frame removed
+                    if espObj.BoxOuterOutline then espObj.BoxOuterOutline.Visible = false end
+                    if espObj.BoxInnerOutline then espObj.BoxInnerOutline.Visible = false end
                     for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
                 end
 
