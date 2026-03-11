@@ -1548,7 +1548,7 @@ end
 
 -- Menu transparency: apply Library.MenuTransparency to floating menu backgrounds
 Library._menuTransparencyTargets = {}
-Library._menuTransparencyHooks = {}
+Library._menuTransparencyCallbacks = {}
 function Library:SetMenuTransparency(alpha)
     Library.MenuTransparency = math.clamp(alpha or 0, 0, 0.95)
     for _, target in ipairs(Library._menuTransparencyTargets) do
@@ -1556,17 +1556,17 @@ function Library:SetMenuTransparency(alpha)
             target.BackgroundTransparency = Library.MenuTransparency
         end
     end
-    for _, hook in ipairs(Library._menuTransparencyHooks) do
-        pcall(hook, Library.MenuTransparency)
+    for _, cb in ipairs(Library._menuTransparencyCallbacks) do
+        pcall(cb, Library.MenuTransparency)
     end
 end
 function Library:RegisterMenuTransparencyTarget(frame)
     table.insert(Library._menuTransparencyTargets, frame)
     frame.BackgroundTransparency = Library.MenuTransparency
 end
-function Library:RegisterMenuTransparencyHook(callback)
-    table.insert(Library._menuTransparencyHooks, callback)
-    pcall(callback, Library.MenuTransparency)
+function Library:RegisterMenuTransparencyCallback(fn)
+    table.insert(Library._menuTransparencyCallbacks, fn)
+    pcall(fn, Library.MenuTransparency)
 end
 
 function Library:GetBetterColor(Color: Color3, Add: number): Color3
@@ -1676,13 +1676,14 @@ function Library:MakeDraggable(UI: GuiObject, DragFrame: GuiObject, IgnoreToggle
         end
     end))
 
-    -- RenderStepped for smooth, lag-free dragging
+    -- RenderStepped for smooth, lag-free dragging with slight animation
     Library:GiveSignal(RunService.RenderStepped:Connect(function()
         if Dragging and not ((not IgnoreToggled and not Library.Toggled) or (IsMainWindow and Library.CantDragForced) or not (ScreenGui and ScreenGui.Parent)) then
             local MousePos = UserInputService:GetMouseLocation()
             local Delta = MousePos - StartPos
-            UI.Position =
+            local targetPos =
                 UDim2.new(FramePos.X.Scale, FramePos.X.Offset + Delta.X, FramePos.Y.Scale, FramePos.Y.Offset + Delta.Y)
+            UI.Position = UI.Position:Lerp(targetPos, 0.45)
         end
     end))
 end
@@ -1692,6 +1693,7 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
     local FrameSize
     local Dragging = false
     local Changed
+    local _resizeDeferred = false
 
     DragFrame.InputBegan:Connect(function(Input: InputObject)
         if not IsClickInput(Input) then
@@ -1711,6 +1713,11 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
             if Changed and Changed.Connected then
                 Changed:Disconnect()
                 Changed = nil
+            end
+            -- Final callback on release to ensure layout is up to date
+            if Callback then
+                _resizeDeferred = false
+                Library:SafeCallback(Callback)
             end
         end)
     end)
@@ -1737,8 +1744,13 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
                 FrameSize.Y.Scale,
                 math.clamp(FrameSize.Y.Offset + Delta.Y, Library.MinSize.Y, math.huge)
             )
-            if Callback then
-                Library:SafeCallback(Callback)
+            -- Defer callback to avoid heavy layout work every frame
+            if Callback and not _resizeDeferred then
+                _resizeDeferred = true
+                task.defer(function()
+                    _resizeDeferred = false
+                    Library:SafeCallback(Callback)
+                end)
             end
         end
     end))
@@ -1807,14 +1819,14 @@ function Library:AddShadowFrame(Frame: GuiObject)
     -- shadow radius matches the element's radius exactly; previous +1 offset caused
     -- corner bulging when the gap was only 1px, making the outline look uneven.
     local shadowCornerRadius = corner
-        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset)
-        or UDim.new(0, Library.CornerRadius)
+        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 2)
+        or UDim.new(0, Library.CornerRadius + 2)
 
     local Shadow = Instance.new("Frame")
     Shadow.BackgroundTransparency = 1
-    -- keep the black outline tight against the element (1px gap)
-    Shadow.Size = UDim2.new(1, 2, 1, 2)
-    Shadow.Position = UDim2.fromOffset(-1, -1)
+    -- keep the black outline tight against the element (2px gap for thicker strokes)
+    Shadow.Size = UDim2.new(1, 4, 1, 4)
+    Shadow.Position = UDim2.fromOffset(-2, -2)
     Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
     Shadow.Name = "_OutlineShadow"
     Shadow.Parent = Frame
@@ -1841,8 +1853,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
             local pr = pad.PaddingRight.Offset
             local pt = pad.PaddingTop.Offset
             local pb = pad.PaddingBottom.Offset
-            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
-            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
+            Shadow.Position = UDim2.fromOffset(-2 - pl, -2 - pt)
+            Shadow.Size = UDim2.new(1, 4 + pl + pr, 1, 4 + pt + pb)
         end
     end
     AdjustForPadding()
@@ -1859,52 +1871,27 @@ function Library:AddShadowFrame(Frame: GuiObject)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- New model: explicit border frames for pixel-perfect edges.
-    pcall(function()
-        local old = Frame:FindFirstChild("_OutlineFrame")
-        if old then old:Destroy() end
-        local oldShadow = Frame:FindFirstChild("_OutlineShadow")
-        if oldShadow then oldShadow:Destroy() end
-    end)
-
-    local DarkFrame = Instance.new("Frame")
-    DarkFrame.Name = "_OutlineShadow"
-    DarkFrame.BackgroundTransparency = 1
-    DarkFrame.BorderSizePixel = 1
-    DarkFrame.BorderColor3 = (Library.Scheme and Library.Scheme.Dark) or Color3.new(0, 0, 0)
-    DarkFrame.Size = UDim2.new(1, 2, 1, 2)
-    DarkFrame.Position = UDim2.fromOffset(-1, -1)
-    DarkFrame.ZIndex = math.max(1, Frame.ZIndex - 2)
-    DarkFrame.Parent = Frame
-
-    local OutlineFrame = Instance.new("Frame")
-    OutlineFrame.Name = "_OutlineFrame"
-    OutlineFrame.BackgroundTransparency = 1
-    OutlineFrame.BorderSizePixel = 1
-    OutlineFrame.BorderColor3 = (Library.Scheme and Library.Scheme.OutlineColor) or Color3.new(0, 0, 0)
-    OutlineFrame.Size = UDim2.fromScale(1, 1)
-    OutlineFrame.Position = UDim2.fromOffset(0, 0)
-    OutlineFrame.ZIndex = math.max(1, Frame.ZIndex - 1)
-    OutlineFrame.Parent = Frame
-
-    local corner = Frame:FindFirstChildOfClass("UICorner")
-    if corner then
-        local oc = corner:Clone()
-        oc.Parent = OutlineFrame
-
-        local dc = corner:Clone()
-        dc.CornerRadius = UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + (Library.CornerRadius > 0 and 1 or 0))
-        dc.Parent = DarkFrame
-    end
-
-    Library.Registry[OutlineFrame] = { BorderColor3 = "OutlineColor" }
-    Library.Registry[DarkFrame] = { BorderColor3 = "Dark" }
-    return OutlineFrame, DarkFrame
+    local DarkStroke = Library:AddShadowFrame(Frame)
+    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    local Stroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Thickness = 2,
+        LineJoinMode = joinMode,
+        Parent = Frame,
+    })
+    return Stroke, DarkStroke or Stroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    local Main, Dark = Library:AddSmallOutline(Frame)
-    return Main, Dark or Main, Dark or Main
+    Library:AddShadowFrame(Frame)
+    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    local Stroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Thickness = 2,
+        LineJoinMode = joinMode,
+        Parent = Frame,
+    })
+    return Stroke, Stroke, Stroke
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -2228,40 +2215,22 @@ do
         Library.Registry[WM.Holder] = { BackgroundColor3 = "BackgroundColor" }
         Library.Registry[WM.Label] = { TextColor3 = "FontColor", FontFace = "Font" }
 
-        -- Watermark should fully follow menu transparency (background, line, gradients, text, icon, outlines).
-        Library:RegisterMenuTransparencyHook(function(alpha)
-            if not WM.Holder or not WM.Holder.Parent then
-                return
-            end
-
-            WM.Holder.BackgroundTransparency = alpha
-
-            if WM.AccentLine then
+        -- Make watermark fully follow menu transparency (label, accent line, outlines)
+        Library:RegisterMenuTransparencyCallback(function(alpha)
+            if WM.AccentLine and WM.AccentLine.Parent then
                 WM.AccentLine.BackgroundTransparency = alpha
             end
-
-            if WM.BGGradient then
-                WM.BGGradient.Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, math.clamp(alpha + 0.05, 0, 1)),
-                    NumberSequenceKeypoint.new(1, math.clamp(alpha + 0.15, 0, 1)),
-                })
-            end
-
-            if WM.Label then
+            if WM.Label and WM.Label.Parent then
                 WM.Label.TextTransparency = alpha
             end
-            if WM.IconLabel then
-                WM.IconLabel.TextTransparency = alpha
+            if WM.OutlineStroke then
+                WM.OutlineStroke.Transparency = alpha
             end
-
-            if WM.OutlineStroke and WM.OutlineStroke:IsA("GuiObject") then
-                WM.OutlineStroke.BorderSizePixel = alpha >= 0.98 and 0 or 1
-            end
-            if WM.ShadowStroke and WM.ShadowStroke:IsA("GuiObject") then
-                WM.ShadowStroke.BorderSizePixel = alpha >= 0.98 and 0 or 1
-            end
-            if WM.OuterBlackStroke and WM.OuterBlackStroke:IsA("GuiObject") then
-                WM.OuterBlackStroke.BorderSizePixel = alpha >= 0.98 and 0 or 1
+            -- Shadow stroke on the outline shadow child
+            local shadow = WM.Holder:FindFirstChild("_OutlineShadow")
+            if shadow then
+                local ds = shadow:FindFirstChildOfClass("UIStroke")
+                if ds then ds.Transparency = alpha end
             end
         end)
 
@@ -4219,7 +4188,7 @@ do
         --// Color Menu \\--
         local ColorMenu = Library:AddContextMenu(
             Holder,
-            UDim2.fromOffset(Info.Transparency and 256 or 234, 0),
+            UDim2.fromOffset(Info.Transparency and 268 or 246, 0),
             function()
                 return { 0.5, Holder.AbsoluteSize.Y + 1.5 }
             end,
@@ -4239,7 +4208,7 @@ do
         if typeof(ColorPicker.Title) == "string" then
             New("TextLabel", {
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 14),
+                Size = UDim2.new(1, 0, 0, 8),
                 Text = ColorPicker.Title,
                 TextSize = 14,
                 TextXAlignment = Enum.TextXAlignment.Left,
@@ -4345,13 +4314,13 @@ do
 
         local InfoHolder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 24),
+            Size = UDim2.new(1, 0, 0, 20),
             Parent = ColorMenu.Menu,
         })
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalFlex = Enum.UIFlexAlignment.Fill,
-            Padding = UDim.new(0, 10),
+            Padding = UDim.new(0, 8),
             Parent = InfoHolder,
         })
 
@@ -4365,11 +4334,6 @@ do
             TextSize = 14,
             Parent = InfoHolder,
         })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 6),
-            PaddingRight = UDim.new(0, 6),
-            Parent = HueBox,
-        })
 
         local RgbBox = New("TextBox", {
             BackgroundColor3 = "MainColor",
@@ -4380,11 +4344,6 @@ do
             Text = "?, ?, ?",
             TextSize = 14,
             Parent = InfoHolder,
-        })
-        New("UIPadding", {
-            PaddingLeft = UDim.new(0, 6),
-            PaddingRight = UDim.new(0, 6),
-            Parent = RgbBox,
         })
 
         --// Context Menu \\--
@@ -7795,11 +7754,10 @@ function Library:SetFont(FontFace)
 end
 
 function Library:SetNotifySide(Side: string)
-    Side = (typeof(Side) == "string" and Side) or Library.NotifySide or "Right"
     Library.NotifySide = Side
 
-    local ox = tonumber(Library.NotifyOffsetX) or 0
-    local oy = tonumber(Library.NotifyOffsetY) or 0
+    local ox = Library.NotifyOffsetX or 0
+    local oy = Library.NotifyOffsetY or 0
 
     if Side:lower() == "left" then
         NotificationArea.AnchorPoint = Vector2.new(0, 0)
@@ -7810,17 +7768,6 @@ function Library:SetNotifySide(Side: string)
         NotificationArea.Position = UDim2.new(1, -6 + ox, 0, 6 + oy)
         NotificationList.HorizontalAlignment = Enum.HorizontalAlignment.Right
     end
-end
-
-function Library:SetNotifyOffsets(X: number?, Y: number?)
-    if X ~= nil then
-        Library.NotifyOffsetX = tonumber(X) or 0
-    end
-    if Y ~= nil then
-        Library.NotifyOffsetY = tonumber(Y) or 0
-    end
-
-    Library:SetNotifySide(Library.NotifySide or "Right")
 end
 
 -- Expose notification area for external access (offsets, etc.)
@@ -8196,9 +8143,9 @@ function Library:CreateWindow(WindowInfo)
             if sc and sc.Parent and sc:IsA("UICorner") then
                 local base = sc.Parent:FindFirstChildOfClass("UICorner")
                 if base then
-                    sc.CornerRadius = UDim.new(base.CornerRadius.Scale, base.CornerRadius.Offset + 1)
+                    sc.CornerRadius = UDim.new(base.CornerRadius.Scale, base.CornerRadius.Offset + 2)
                 else
-                    sc.CornerRadius = UDim.new(0, Library.CornerRadius + 1)
+                    sc.CornerRadius = UDim.new(0, Library.CornerRadius + 2)
                 end
             end
         end
@@ -10655,23 +10602,28 @@ function Library:CreateWindow(WindowInfo)
             Library.Toggled = not Library.Toggled
         end
 
-        local animTime = 0.18
+        local animTime = 0.25
 
         if Library.Toggled then
-            -- Opening: show frame, then animate in
+            -- Opening: show frame, then animate in with visible fade
             MainFrame.Visible = true
+            MainFrame.BackgroundTransparency = 0.6
+
             if LayoutRefs.TabBarWindow then
                 LayoutRefs.TabBarWindow.Visible = true
+                LayoutRefs.TabBarWindow.BackgroundTransparency = 0.6
             end
-
-            -- Start from slightly transparent
-            MainFrame.BackgroundTransparency = 0.15
 
             _toggleAnimating = true
             local tween = TweenService:Create(MainFrame, TweenInfo.new(animTime, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
                 BackgroundTransparency = 0,
             })
             tween:Play()
+            if LayoutRefs.TabBarWindow then
+                TweenService:Create(LayoutRefs.TabBarWindow, TweenInfo.new(animTime, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                    BackgroundTransparency = 0,
+                }):Play()
+            end
             tween.Completed:Once(function()
                 _toggleAnimating = false
             end)
@@ -10679,22 +10631,23 @@ function Library:CreateWindow(WindowInfo)
             -- Closing: animate out, then hide
             _toggleAnimating = true
             local tween = TweenService:Create(MainFrame, TweenInfo.new(animTime, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-                BackgroundTransparency = 0.15,
+                BackgroundTransparency = 0.6,
             })
             tween:Play()
+            if LayoutRefs.TabBarWindow then
+                TweenService:Create(LayoutRefs.TabBarWindow, TweenInfo.new(animTime, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+                    BackgroundTransparency = 0.6,
+                }):Play()
+            end
             tween.Completed:Once(function()
                 MainFrame.Visible = false
+                MainFrame.BackgroundTransparency = 0
                 if LayoutRefs.TabBarWindow then
                     LayoutRefs.TabBarWindow.Visible = false
+                    LayoutRefs.TabBarWindow.BackgroundTransparency = 0
                 end
-                MainFrame.BackgroundTransparency = 0
                 _toggleAnimating = false
             end)
-        end
-        
-        -- Also toggle the tab bar window visibility
-        if LayoutRefs.TabBarWindow then
-            LayoutRefs.TabBarWindow.Visible = Library.Toggled
         end
 
         if WindowInfo.UnlockMouseWhileOpen then
