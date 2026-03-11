@@ -622,7 +622,9 @@ local function createESPObject()
     espObj.Box.Name = "BoxOutlineFrame"
     espObj.Box.BackgroundColor3 = Color3.fromRGB(1, 1, 1)
     espObj.Box.BackgroundTransparency = 1
-    espObj.Box.BorderSizePixel = 0
+    -- always draw a thin black border around the actual box frame
+    espObj.Box.BorderSizePixel = 1
+    espObj.Box.BorderColor3 = Color3.new(0, 0, 0)
     espObj.Box.Visible = false
     espObj.Box.ZIndex = 1
     espObj.Box.Parent = container
@@ -630,6 +632,7 @@ local function createESPObject()
     -- Box outline stroke (always 1px when enabled)
     espObj.BoxOutline = Instance.new("UIStroke")
     espObj.BoxOutline.Name = "BoxOutline"
+    -- stroke color will be overridden by gradient logic later; start black for fallback
     espObj.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
     espObj.BoxOutline.Thickness = 1
     espObj.BoxOutline.Transparency = 0
