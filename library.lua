@@ -1574,7 +1574,7 @@ do
         AnchorPoint = Vector2.new(1, 0),
         BackgroundTransparency = 1,
         Position = UDim2.new(1, -6, 0, 6),
-        Size = UDim2.new(0, 300, 1, -6),
+        Size = UDim2.new(1, -12, 1, -6),
         Parent = ScreenGui,
     })
     NotificationList = New("UIListLayout", {
@@ -2009,21 +2009,16 @@ function Library:AddShadowFrame(Frame: GuiObject)
 end
 
 -- AddSmallOutline: sibling solid-Frame borders for free-floating frames;
--- UIStroke fallback for elements inside UIListLayout containers.
+-- UIStroke fallback only when the DIRECT parent has a UIListLayout (e.g. groupboxes).
 function Library:AddSmallOutline(Frame: GuiObject)
     local parent = Frame.Parent
     local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
-    -- Also check grandparent: if the Holder is inside a UIListLayout, sibling
-    -- borders would protrude past Holder bounds and be overlapped by the next item.
-    if not inLayout and parent then
-        local gp = parent.Parent
-        inLayout = gp and gp:FindFirstChildOfClass("UIListLayout")
-    end
     if inLayout then
-        local DarkStroke = Library:AddShadowFrame(Frame)
+        -- Direct parent has UIListLayout; siblings would be positioned by the layout.
+        -- Use a single Dark UIStroke as the outline.
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
-        return Stroke, DarkStroke or Stroke
+        local DarkStroke = New("UIStroke", { Color = "Dark", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
+        return DarkStroke, DarkStroke
     end
     -- Sibling approach: solid colored frames rendered behind the target via ZIndex.
     local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
@@ -2037,15 +2032,10 @@ end
 function Library:AddOutline(Frame: GuiObject)
     local parent = Frame.Parent
     local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
-    if not inLayout and parent then
-        local gp = parent.Parent
-        inLayout = gp and gp:FindFirstChildOfClass("UIListLayout")
-    end
     if inLayout then
-        local DarkStroke = Library:AddShadowFrame(Frame)
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
-        return Stroke, DarkStroke or Stroke, DarkStroke or Stroke
+        local DarkStroke = New("UIStroke", { Color = "Dark", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
+        return DarkStroke, DarkStroke, DarkStroke
     end
     local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
     local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 1)
@@ -5793,7 +5783,8 @@ do
             CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = Checkbox,
         })
-        local CheckboxDarkStroke = Library:AddShadowFrame(Checkbox)
+        local CheckboxDarkFrame = _makeBorderSibling(Checkbox, "_OutlineShadow", "Dark", Color3.new(0,0,0), 2)
+        _makeBorderSibling(Checkbox, "_OutlineBorder", "OutlineColor", Color3.new(1,1,1), 1)
 
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
@@ -5802,7 +5793,7 @@ do
             Parent = Checkbox,
         })
 
-        Library:AddHoverEffect(Button, CheckboxDarkStroke or CheckboxStroke, Toggle)
+        Library:AddHoverEffect(Button, CheckboxDarkFrame or CheckboxStroke, Toggle)
 
         local CheckboxGradient = New("UIGradient", {
             Color = Library:GetAccentGradientSequence(),
@@ -5941,7 +5932,8 @@ do
             PaddingTop = UDim.new(0, 2),
             Parent = Switch,
         })
-        Library:AddShadowFrame(Switch)
+        _makeBorderSibling(Switch, "_OutlineShadow", "Dark", Color3.new(0,0,0), 2)
+        _makeBorderSibling(Switch, "_OutlineBorder", "OutlineColor", Color3.new(1,1,1), 1)
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
             Thickness = 1,
@@ -8165,7 +8157,7 @@ function Library:Notify(...)
             DescX = X
         end
 
-        FakeBackground.Size = UDim2.fromOffset((TitleX > DescX and TitleX or DescX) + (24 * Library.DPIScale), 0)
+        FakeBackground.Size = UDim2.fromOffset(math.min((TitleX > DescX and TitleX or DescX) + (24 * Library.DPIScale), NotificationArea.AbsoluteSize.X), 0)
     end
 
     function Data:ChangeTitle(NewText)
