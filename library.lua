@@ -1837,6 +1837,14 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
     local corner = Frame:FindFirstChildOfClass("UICorner")
     local radius = corner and corner.CornerRadius.Offset or Library.CornerRadius
 
+    -- Ensure the target frame renders in front of the border siblings.
+    -- Roblox clamps ZIndex to a minimum of 1, so ZIndex-1 on a ZIndex=1 frame
+    -- would still be 1, making the border render on top (added later = drawn last).
+    -- Bump the target frame so the border can sit one step below it.
+    if Frame.ZIndex <= 1 then
+        Frame.ZIndex = 2
+    end
+
     local bf = Instance.new("Frame")
     bf.BackgroundColor3 = Library.Scheme[colorKey] or colorFallback
     bf.BorderSizePixel = 0
@@ -1880,6 +1888,8 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
             end
         end
         bf.Size = UDim2.new(szXScale, szXOff + outset * 2, szYScale, szYOff + outset * 2)
+        -- Keep frame elevated so border renders behind it
+        if Frame.ZIndex <= 1 then Frame.ZIndex = 2 end
         bf.ZIndex = Frame.ZIndex - 1
     end
     sync()
