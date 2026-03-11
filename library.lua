@@ -324,6 +324,7 @@ local Templates = {
         GlobalSearch = false,
         CornerRadius = 4,
         NotifySide = "Right",
+        NotifyAccentSide = "Left",
         ShowCustomCursor = true,
         Font = Enum.Font.Code,
         ToggleKeybind = Enum.KeyCode.RightControl,
@@ -1844,7 +1845,7 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
     bf.Visible = Frame.Visible
 
     local bfc = Instance.new("UICorner")
-    bfc.CornerRadius = UDim.new(0, math.max(0, radius + outset))
+    bfc.CornerRadius = UDim.new(0, radius > 0 and math.max(0, radius + outset) or 0)
     bfc.Parent = bf
     Library._BorderCorners = Library._BorderCorners or {}
     table.insert(Library._BorderCorners, { corner = bfc, targetFrame = Frame, offset = outset })
@@ -1852,7 +1853,7 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
     local function syncCornerRadius()
         local c = Frame:FindFirstChildOfClass("UICorner")
         local r = c and c.CornerRadius.Offset or Library.CornerRadius
-        bfc.CornerRadius = UDim.new(0, math.max(0, r + outset))
+        bfc.CornerRadius = UDim.new(0, r > 0 and math.max(0, r + outset) or 0)
     end
 
     local function sync()
@@ -1863,10 +1864,22 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
             Frame.Position.X.Scale, Frame.Position.X.Offset + outset * (2 * ax - 1),
             Frame.Position.Y.Scale, Frame.Position.Y.Offset + outset * (2 * ay - 1)
         )
-        bf.Size = UDim2.new(
-            Frame.Size.X.Scale, Frame.Size.X.Offset + outset * 2,
-            Frame.Size.Y.Scale, Frame.Size.Y.Offset + outset * 2
-        )
+        -- Use AbsoluteSize for dimensions that use AutomaticSize
+        local szXScale, szXOff = Frame.Size.X.Scale, Frame.Size.X.Offset
+        local szYScale, szYOff = Frame.Size.Y.Scale, Frame.Size.Y.Offset
+        local autoSize = Frame.AutomaticSize
+        if autoSize ~= Enum.AutomaticSize.None then
+            local abs = Frame.AbsoluteSize
+            if autoSize == Enum.AutomaticSize.X or autoSize == Enum.AutomaticSize.XY then
+                szXScale = 0
+                szXOff = abs.X
+            end
+            if autoSize == Enum.AutomaticSize.Y or autoSize == Enum.AutomaticSize.XY then
+                szYScale = 0
+                szYOff = abs.Y
+            end
+        end
+        bf.Size = UDim2.new(szXScale, szXOff + outset * 2, szYScale, szYOff + outset * 2)
         bf.ZIndex = Frame.ZIndex - 1
     end
     sync()
@@ -1875,6 +1888,7 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
 
     Frame:GetPropertyChangedSignal("Position"):Connect(sync)
     Frame:GetPropertyChangedSignal("Size"):Connect(sync)
+    Frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(sync)
     Frame:GetPropertyChangedSignal("ZIndex"):Connect(sync)
     Frame:GetPropertyChangedSignal("AnchorPoint"):Connect(sync)
     Frame:GetPropertyChangedSignal("Visible"):Connect(function()
@@ -1932,14 +1946,15 @@ function Library:AddShadowFrame(Frame: GuiObject)
     if Frame:FindFirstChildOfClass("UIListLayout") then return nil end
 
     local corner = Frame:FindFirstChildOfClass("UICorner")
-    local shadowCornerRadius = corner
-        and UDim.new(corner.CornerRadius.Scale, corner.CornerRadius.Offset + 2)
-        or UDim.new(0, Library.CornerRadius + 2)
+    local cornerOffset = corner and corner.CornerRadius.Offset or Library.CornerRadius
+    local shadowCornerRadius = cornerOffset > 0
+        and UDim.new(0, cornerOffset + 1)
+        or UDim.new(0, 0)
 
     local Shadow = Instance.new("Frame")
     Shadow.BackgroundTransparency = 1
-    Shadow.Size = UDim2.new(1, 4, 1, 4)
-    Shadow.Position = UDim2.fromOffset(-2, -2)
+    Shadow.Size = UDim2.new(1, 2, 1, 2)
+    Shadow.Position = UDim2.fromOffset(-1, -1)
     Shadow.ZIndex = Frame.ZIndex - 1
     Shadow.Name = "_OutlineShadow"
     Shadow.Parent = Frame
@@ -1959,8 +1974,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
 
     local function syncShadowCorner()
         local c = Frame:FindFirstChildOfClass("UICorner")
-        local r = c and UDim.new(c.CornerRadius.Scale, c.CornerRadius.Offset + 2) or UDim.new(0, Library.CornerRadius + 2)
-        ShadowCorner.CornerRadius = r
+        local r = c and c.CornerRadius.Offset or Library.CornerRadius
+        ShadowCorner.CornerRadius = r > 0 and UDim.new(0, r + 1) or UDim.new(0, 0)
     end
     Frame.ChildAdded:Connect(function(child)
         if child:IsA("UICorner") then
@@ -1977,8 +1992,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
         if pad then
             local pl, pr = pad.PaddingLeft.Offset, pad.PaddingRight.Offset
             local pt, pb = pad.PaddingTop.Offset, pad.PaddingBottom.Offset
-            Shadow.Position = UDim2.fromOffset(-2 - pl, -2 - pt)
-            Shadow.Size = UDim2.new(1, 4 + pl + pr, 1, 4 + pt + pb)
+            Shadow.Position = UDim2.fromOffset(-1 - pl, -1 - pt)
+            Shadow.Size = UDim2.new(1, 2 + pl + pr, 1, 2 + pt + pb)
         end
     end
     AdjustForPadding()
@@ -2000,14 +2015,15 @@ function Library:AddSmallOutline(Frame: GuiObject)
     if inLayout then
         local DarkStroke = Library:AddShadowFrame(Frame)
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 2, LineJoinMode = joinMode, Parent = Frame })
+        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, LineJoinMode = joinMode, Parent = Frame })
         return Stroke, DarkStroke or Stroke
     end
     -- Sibling approach: solid colored frames rendered behind the target via ZIndex.
     local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
     local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 1)
-    local ref = OutlineFrame or DarkFrame or Frame
-    return ref, DarkFrame or ref
+    local outRef = OutlineFrame or DarkFrame or Frame
+    local darkRef = DarkFrame or outRef
+    return outRef, darkRef
 end
 
 -- AddOutline: same sibling approach as AddSmallOutline, three-return-value variant.
@@ -2015,15 +2031,16 @@ function Library:AddOutline(Frame: GuiObject)
     local parent = Frame.Parent
     local inLayout = parent and parent:FindFirstChildOfClass("UIListLayout")
     if inLayout then
-        Library:AddShadowFrame(Frame)
+        local DarkStroke = Library:AddShadowFrame(Frame)
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 2, LineJoinMode = joinMode, Parent = Frame })
-        return Stroke, Stroke, Stroke
+        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, LineJoinMode = joinMode, Parent = Frame })
+        return Stroke, DarkStroke or Stroke, DarkStroke or Stroke
     end
     local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
     local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 1)
-    local ref = OutlineFrame or DarkFrame or Frame
-    return ref, ref, ref
+    local outRef = OutlineFrame or DarkFrame or Frame
+    local darkRef = DarkFrame or outRef
+    return outRef, darkRef, darkRef
 end
 
 function Library:AddDraggableLabel(Text: string)
@@ -2361,13 +2378,18 @@ do
                 WM.Label.TextTransparency = alpha
             end
             if WM.OutlineStroke then
-                WM.OutlineStroke.Transparency = alpha
+                if WM.OutlineStroke:IsA("UIStroke") then
+                    WM.OutlineStroke.Transparency = alpha
+                else
+                    WM.OutlineStroke.BackgroundTransparency = alpha
+                end
             end
-            -- Shadow stroke on the outline shadow child
-            local shadow = WM.Holder:FindFirstChild("_OutlineShadow")
-            if shadow then
-                local ds = shadow:FindFirstChildOfClass("UIStroke")
-                if ds then ds.Transparency = alpha end
+            if WM.ShadowStroke then
+                if WM.ShadowStroke:IsA("UIStroke") then
+                    WM.ShadowStroke.Transparency = alpha
+                elseif WM.ShadowStroke:IsA("GuiObject") then
+                    WM.ShadowStroke.BackgroundTransparency = alpha
+                end
             end
         end)
 
@@ -2768,14 +2790,15 @@ do
         })
         local LoadBtnMain, LoadBtnDark = Library:AddSmallOutline(LoadBtn)
         local LoadBtnStroke = LoadBtnDark or LoadBtnMain
+        local _loadBtnColorProp = LoadBtnStroke and LoadBtnStroke:IsA("UIStroke") and "Color" or "BackgroundColor3"
 
         LoadBtn.MouseEnter:Connect(function()
             TweenService:Create(LoadBtn, Library.TweenInfo, { TextTransparency = 0 }):Play()
-            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
+            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { [_loadBtnColorProp] = Library.Scheme.AccentColor }):Play()
         end)
         LoadBtn.MouseLeave:Connect(function()
             TweenService:Create(LoadBtn, Library.TweenInfo, { TextTransparency = 0.3 }):Play()
-            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { Color = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
+            TweenService:Create(LoadBtnStroke, Library.TweenInfo, { [_loadBtnColorProp] = Library.Scheme.Dark or Color3.new(0, 0, 0) }):Play()
         end)
 
         LoadBtn.MouseButton1Click:Connect(function()
@@ -4336,14 +4359,14 @@ do
 
         local Holder = New("TextButton", {
             BackgroundColor3 = ColorPicker.Value,
-            BorderColor3 = Library:GetDarkerColor(ColorPicker.Value),
-            BorderSizePixel = 1,
+            BorderSizePixel = 0,
             Size = UDim2.fromOffset(18, 18),
             Text = "",
             Parent = ToggleLabel,
         })
         -- make the small holder respect the library corner radius
         New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Holder })
+        Library:AddSmallOutline(Holder)
 
         local _transImg = (CustomImageManager and CustomImageManager.GetAsset) and CustomImageManager.GetAsset("TransparencyTexture") or ""
         local HolderTransparency = New("ImageLabel", {
@@ -5387,6 +5410,7 @@ do
         end
 
         local function InitEvents(Button)
+            local strokeColorProp = Button.Stroke and Button.Stroke:IsA("UIStroke") and "Color" or "BackgroundColor3"
             Button.Base.MouseEnter:Connect(function()
                 if Button.Disabled then
                     return
@@ -5397,7 +5421,7 @@ do
                 })
                 Button.Tween:Play()
                 TweenService:Create(Button.Stroke, Library.TweenInfo, {
-                    Color = Library.Scheme.AccentColor,
+                    [strokeColorProp] = Library.Scheme.AccentColor,
                 }):Play()
             end)
             Button.Base.MouseLeave:Connect(function()
@@ -5410,7 +5434,7 @@ do
                 })
                 Button.Tween:Play()
                 TweenService:Create(Button.Stroke, Library.TweenInfo, {
-                    Color = Library.Scheme.Dark or Color3.new(0, 0, 0),
+                    [strokeColorProp] = Library.Scheme.Dark or Color3.new(0, 0, 0),
                 }):Play()
             end)
 
@@ -5482,7 +5506,8 @@ do
                 SubButton.Base.BackgroundColor3 = SubButton.Disabled and Library.Scheme.BackgroundColor
                     or Library.Scheme.MainColor
                 SubButton.Base.TextTransparency = SubButton.Disabled and 0.8 or 0.4
-                SubButton.Stroke.Transparency = SubButton.Disabled and 0.5 or 0
+                local _trans = SubButton.Disabled and 0.5 or 0
+                if SubButton.Stroke:IsA("UIStroke") then SubButton.Stroke.Transparency = _trans else SubButton.Stroke.BackgroundTransparency = _trans end
 
                 Library.Registry[SubButton.Base].BackgroundColor3 = SubButton.Disabled and "BackgroundColor"
                     or "MainColor"
@@ -5543,7 +5568,8 @@ do
             Button.Base.BackgroundColor3 = Button.Disabled and Library.Scheme.BackgroundColor
                 or Library.Scheme.MainColor
             Button.Base.TextTransparency = Button.Disabled and 0.8 or 0.4
-            Button.Stroke.Transparency = Button.Disabled and 0.5 or 0
+            local _trans = Button.Disabled and 0.5 or 0
+            if Button.Stroke:IsA("UIStroke") then Button.Stroke.Transparency = _trans else Button.Stroke.BackgroundTransparency = _trans end
 
             Library.Registry[Button.Base].BackgroundColor3 = Button.Disabled and "BackgroundColor" or "MainColor"
         end
@@ -5799,8 +5825,9 @@ do
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
 
-            -- Hide main outline when checked; only the dark shadow border shows
-            CheckboxStroke.Transparency = Toggle.Value and 1 or 0
+            -- Keep outline visible always; darken it when checked
+            CheckboxStroke.Color = Toggle.Value and Library:GetDarkerColor(Library.Scheme.AccentColor) or Library.Scheme.OutlineColor
+            Library.Registry[CheckboxStroke].Color = Toggle.Value and function() return Library:GetDarkerColor(Library.Scheme.AccentColor) end or "OutlineColor"
 
             -- Enable gradient only when checked, restore accent gradient colors
             CheckboxGradient.Color = Library:GetAccentGradientSequence()
@@ -5890,7 +5917,7 @@ do
         Library:AddShadowFrame(Switch)
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
-            Thickness = 2,
+            Thickness = 1,
             ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
             Parent = Switch,
         })
@@ -7947,6 +7974,10 @@ function Library:SetNotifySide(Side: string)
     end
 end
 
+function Library:SetNotifyAccentSide(Side: string)
+    Library.NotifyAccentSide = Side
+end
+
 -- Expose notification area for external access (offsets, etc.)
 Library.NotificationArea = NotificationArea
 Library.NotificationList = NotificationList
@@ -8320,9 +8351,10 @@ function Library:CreateWindow(WindowInfo)
             if sc and sc.Parent and sc:IsA("UICorner") then
                 local base = sc.Parent:FindFirstChildOfClass("UICorner")
                 if base then
-                    sc.CornerRadius = UDim.new(base.CornerRadius.Scale, base.CornerRadius.Offset + 2)
+                    local r = base.CornerRadius.Offset
+                    sc.CornerRadius = r > 0 and UDim.new(0, r + 1) or UDim.new(0, 0)
                 else
-                    sc.CornerRadius = UDim.new(0, Library.CornerRadius + 2)
+                    sc.CornerRadius = Library.CornerRadius > 0 and UDim.new(0, Library.CornerRadius + 1) or UDim.new(0, 0)
                 end
             end
         end
@@ -8333,12 +8365,13 @@ function Library:CreateWindow(WindowInfo)
             if entry.corner and entry.corner.Parent and entry.targetFrame and entry.targetFrame.Parent then
                 local tc = entry.targetFrame:FindFirstChildOfClass("UICorner")
                 local base = tc and tc.CornerRadius.Offset or Library.CornerRadius
-                entry.corner.CornerRadius = UDim.new(0, math.max(0, base + entry.offset))
+                entry.corner.CornerRadius = UDim.new(0, base > 0 and math.max(0, base + entry.offset) or 0)
             end
         end
     end
     
     Library:SetNotifySide(WindowInfo.NotifySide)
+    Library:SetNotifyAccentSide(WindowInfo.NotifyAccentSide)
     Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
     Library.Scheme.Font = WindowInfo.Font
     if typeof(Library.SetWatermarkName) == "function" then
