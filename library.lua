@@ -2022,7 +2022,7 @@ function Library:AddSmallOutline(Frame: GuiObject)
     if inLayout then
         local DarkStroke = Library:AddShadowFrame(Frame)
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, LineJoinMode = joinMode, Parent = Frame })
+        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
         return Stroke, DarkStroke or Stroke
     end
     -- Sibling approach: solid colored frames rendered behind the target via ZIndex.
@@ -2044,7 +2044,7 @@ function Library:AddOutline(Frame: GuiObject)
     if inLayout then
         local DarkStroke = Library:AddShadowFrame(Frame)
         local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, LineJoinMode = joinMode, Parent = Frame })
+        local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = joinMode, Parent = Frame })
         return Stroke, DarkStroke or Stroke, DarkStroke or Stroke
     end
     local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
@@ -3894,6 +3894,7 @@ do
             New("UIStroke", {
                 Thickness = 1,
                 Color = "OutlineColor",
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
                 Parent = KeyBadge,
             })
             local KeyLabel = New("TextLabel", {
@@ -5797,6 +5798,7 @@ do
         local CheckboxStroke = New("UIStroke", {
             Color = "OutlineColor",
             Thickness = 1,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
             Parent = Checkbox,
         })
 
