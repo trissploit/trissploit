@@ -225,6 +225,9 @@ local Library = {
     ImageManager = CustomImageManager,
 }
 
+-- alias for legacy code and registry lookups; always kept in sync
+Library.OutlineColor = Library.Scheme.OutlineColor
+
     -- Watch for changes to ScrollingDropdown and clean up existing dropdowns
     do
         local raw_newindex = rawset
@@ -1095,6 +1098,10 @@ function Library:UpdateColorsUsingRegistry()
             end
         end
     end
+
+    -- keep legacy alias in sync with scheme so callers filtering Library.OutlineColor
+    -- won't break and static analysis warnings disappear
+    Library.OutlineColor = Library.Scheme.OutlineColor
 end
 
 function Library:UpdateDPI(Instance, Properties)
@@ -1813,7 +1820,7 @@ end
 
 function Library:AddSmallOutline(Frame: GuiObject)
     -- apply a simple 1px border, same as Linoria
-    Frame.BorderColor3 = Library.OutlineColor
+    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(0,0,0)
     Frame.BorderSizePixel = 1
     Frame.BorderMode = Enum.BorderMode.Inset
     -- register so theme changes recolor the border
@@ -1823,7 +1830,7 @@ end
 
 function Library:AddOutline(Frame: GuiObject)
     -- Linoria uses frame borders for outlines, not UIStroke.
-    Frame.BorderColor3 = Library.OutlineColor
+    Frame.BorderColor3 = Library.Scheme.OutlineColor or Color3.new(0,0,0)
     Frame.BorderSizePixel = 1
     Frame.BorderMode = Enum.BorderMode.Inset
     Library:AddToRegistry(Frame, { BorderColor3 = 'OutlineColor' })
