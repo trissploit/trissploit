@@ -1840,7 +1840,8 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
     bf.BackgroundColor3 = Library.Scheme[colorKey] or colorFallback
     bf.BorderSizePixel = 0
     bf.Name = name
-    bf.ZIndex = math.max(1, Frame.ZIndex - 1)
+    bf.ZIndex = Frame.ZIndex - 1
+    bf.Visible = Frame.Visible
 
     local bfc = Instance.new("UICorner")
     bfc.CornerRadius = UDim.new(0, math.max(0, radius + outset))
@@ -1848,11 +1849,15 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
     Library._BorderCorners = Library._BorderCorners or {}
     table.insert(Library._BorderCorners, { corner = bfc, targetFrame = Frame, offset = outset })
 
+    local function syncCornerRadius()
+        local c = Frame:FindFirstChildOfClass("UICorner")
+        local r = c and c.CornerRadius.Offset or Library.CornerRadius
+        bfc.CornerRadius = UDim.new(0, math.max(0, r + outset))
+    end
+
     local function sync()
         if not bf.Parent or not Frame.Parent then return end
         local ax, ay = Frame.AnchorPoint.X, Frame.AnchorPoint.Y
-        -- With matching AnchorPoint, enlarging by 2*outset centres the extra pixels.
-        -- Position must shift so the extra pixels appear equally on all four sides.
         bf.AnchorPoint = Frame.AnchorPoint
         bf.Position = UDim2.new(
             Frame.Position.X.Scale, Frame.Position.X.Offset + outset * (2 * ax - 1),
@@ -1862,7 +1867,7 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
             Frame.Size.X.Scale, Frame.Size.X.Offset + outset * 2,
             Frame.Size.Y.Scale, Frame.Size.Y.Offset + outset * 2
         )
-        bf.ZIndex = math.max(1, Frame.ZIndex - 1)
+        bf.ZIndex = Frame.ZIndex - 1
     end
     sync()
     bf.Parent = parent
@@ -1872,6 +1877,27 @@ local function _makeBorderSibling(Frame, name, colorKey, colorFallback, outset)
     Frame:GetPropertyChangedSignal("Size"):Connect(sync)
     Frame:GetPropertyChangedSignal("ZIndex"):Connect(sync)
     Frame:GetPropertyChangedSignal("AnchorPoint"):Connect(sync)
+    Frame:GetPropertyChangedSignal("Visible"):Connect(function()
+        bf.Visible = Frame.Visible
+    end)
+    Frame:GetPropertyChangedSignal("Parent"):Connect(function()
+        local newParent = Frame.Parent
+        if newParent then
+            bf.Parent = newParent
+            sync()
+        else
+            pcall(function() bf:Destroy() end)
+        end
+    end)
+    Frame.ChildAdded:Connect(function(child)
+        if child:IsA("UICorner") then
+            task.defer(syncCornerRadius)
+            child:GetPropertyChangedSignal("CornerRadius"):Connect(syncCornerRadius)
+        end
+    end)
+    if corner then
+        corner:GetPropertyChangedSignal("CornerRadius"):Connect(syncCornerRadius)
+    end
     Frame.Destroying:Connect(function() pcall(function() bf:Destroy() end) end)
     return bf
 end
@@ -1914,7 +1940,7 @@ function Library:AddShadowFrame(Frame: GuiObject)
     Shadow.BackgroundTransparency = 1
     Shadow.Size = UDim2.new(1, 4, 1, 4)
     Shadow.Position = UDim2.fromOffset(-2, -2)
-    Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
+    Shadow.ZIndex = Frame.ZIndex - 1
     Shadow.Name = "_OutlineShadow"
     Shadow.Parent = Frame
 
@@ -1930,6 +1956,21 @@ function Library:AddShadowFrame(Frame: GuiObject)
     DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
     DarkStroke.Parent = Shadow
     Library.Registry[DarkStroke] = { Color = "Dark" }
+
+    local function syncShadowCorner()
+        local c = Frame:FindFirstChildOfClass("UICorner")
+        local r = c and UDim.new(c.CornerRadius.Scale, c.CornerRadius.Offset + 2) or UDim.new(0, Library.CornerRadius + 2)
+        ShadowCorner.CornerRadius = r
+    end
+    Frame.ChildAdded:Connect(function(child)
+        if child:IsA("UICorner") then
+            task.defer(syncShadowCorner)
+            child:GetPropertyChangedSignal("CornerRadius"):Connect(syncShadowCorner)
+        end
+    end)
+    if corner then
+        corner:GetPropertyChangedSignal("CornerRadius"):Connect(syncShadowCorner)
+    end
 
     local function AdjustForPadding()
         local pad = Frame:FindFirstChildOfClass("UIPadding")
@@ -1963,8 +2004,8 @@ function Library:AddSmallOutline(Frame: GuiObject)
         return Stroke, DarkStroke or Stroke
     end
     -- Sibling approach: solid colored frames rendered behind the target via ZIndex.
-    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 3)
-    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 2)
+    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
+    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 1)
     local ref = OutlineFrame or DarkFrame or Frame
     return ref, DarkFrame or ref
 end
@@ -1979,8 +2020,8 @@ function Library:AddOutline(Frame: GuiObject)
         local Stroke = New("UIStroke", { Color = "OutlineColor", Thickness = 2, LineJoinMode = joinMode, Parent = Frame })
         return Stroke, Stroke, Stroke
     end
-    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 3)
-    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 2)
+    local DarkFrame    = _makeBorderSibling(Frame, "_OutlineShadow",  "Dark",         Color3.new(0,0,0), 2)
+    local OutlineFrame = _makeBorderSibling(Frame, "_OutlineBorder",  "OutlineColor", Color3.new(1,1,1), 1)
     local ref = OutlineFrame or DarkFrame or Frame
     return ref, ref, ref
 end
