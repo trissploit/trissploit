@@ -1851,59 +1851,90 @@ function Library:AddShadowFrame(Frame: GuiObject)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- add the new-style outline inside the frame and keep the shadow
+    -- small outline: optionally keep shadow, draw 1px bars around the outside
     local DarkStroke = Library:AddShadowFrame(Frame)
-    local OutlineFrame = Instance.new("Frame")
-    OutlineFrame.Name = "_OutlineFrame"
-    OutlineFrame.BackgroundTransparency = 1
-    OutlineFrame.BorderSizePixel = 1
-    OutlineFrame.BorderColor3 = (Library.Scheme and Library.Scheme.OutlineColor) or Color3.new(0,0,0)
-    OutlineFrame.Size = UDim2.new(1, 2, 1, 2)
-    OutlineFrame.Position = UDim2.fromOffset(-1, -1)
-    OutlineFrame.ZIndex = Frame.ZIndex - 1
-    OutlineFrame.Parent = Frame
+    local function createEdges(thickness)
+        local cont = Instance.new("Frame")
+        cont.Name = "_OutlineContainer"
+        cont.BackgroundTransparency = 1
+        cont.Size = UDim2.new(1, thickness * 2, 1, thickness * 2)
+        cont.Position = UDim2.fromOffset(-thickness, -thickness)
+        cont.ZIndex = Frame.ZIndex - 1
+        cont.Parent = Frame
 
-    local corner = Frame:FindFirstChildOfClass("UICorner")
-    if corner then
-        local oc = corner:Clone()
-        oc.Parent = OutlineFrame
-    else
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = OutlineFrame,
-        })
+        local function makeEdge(pos, size)
+            local f = Instance.new("Frame")
+            f.BackgroundColor3 = Library.Scheme and Library.Scheme.OutlineColor or Color3.new(0,0,0)
+            f.BorderSizePixel = 0
+            f.ZIndex = cont.ZIndex
+            f.Position = pos
+            f.Size = size
+            f.Parent = cont
+            return f
+        end
+
+        makeEdge(UDim2.new(0,0,0,0), UDim2.new(1,0,0,thickness)) -- top
+        makeEdge(UDim2.new(0,0,1,-thickness), UDim2.new(1,0,0,thickness)) -- bottom
+        makeEdge(UDim2.new(0,0,0,0), UDim2.new(0,thickness,1,0)) -- left
+        makeEdge(UDim2.new(1,-thickness,0,0), UDim2.new(0,thickness,1,0)) -- right
+
+        Library.Registry[cont] = {
+            BackgroundColor3 = function()
+                for _, child in ipairs(cont:GetChildren()) do
+                    if child:IsA("Frame") then
+                        child.BackgroundColor3 = Library.Scheme.OutlineColor
+                    end
+                end
+            end,
+        }
+        return cont
     end
 
-    Library.Registry[OutlineFrame] = { BorderColor3 = "OutlineColor" }
-    return OutlineFrame, DarkStroke or OutlineFrame
+    return createEdges(1), DarkStroke or createEdges(1)
 end
 
 function Library:AddOutline(Frame: GuiObject)
     Library:AddShadowFrame(Frame)
-    local OutlineFrame = Instance.new("Frame")
-    OutlineFrame.Name = "_OutlineFrame"
-    OutlineFrame.BackgroundTransparency = 1
-    OutlineFrame.BorderSizePixel = 1
-    OutlineFrame.BorderColor3 = (Library.Scheme and Library.Scheme.OutlineColor) or Color3.new(0,0,0)
-    OutlineFrame.Size = UDim2.new(1, 2, 1, 2)
-    OutlineFrame.Position = UDim2.fromOffset(-1, -1)
-    OutlineFrame.ZIndex = Frame.ZIndex - 1
-    OutlineFrame.Parent = Frame
+    -- full outline uses same edge-frame logic as small, returning three references
+    local function createEdges(thickness)
+        local cont = Instance.new("Frame")
+        cont.Name = "_OutlineContainer"
+        cont.BackgroundTransparency = 1
+        cont.Size = UDim2.new(1, thickness * 2, 1, thickness * 2)
+        cont.Position = UDim2.fromOffset(-thickness, -thickness)
+        cont.ZIndex = Frame.ZIndex - 1
+        cont.Parent = Frame
 
-    local corner = Frame:FindFirstChildOfClass("UICorner")
-    if corner then
-        local oc = corner:Clone()
-        oc.Parent = OutlineFrame
-    else
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = OutlineFrame,
-        })
+        local function makeEdge(pos, size)
+            local f = Instance.new("Frame")
+            f.BackgroundColor3 = Library.Scheme and Library.Scheme.OutlineColor or Color3.new(0,0,0)
+            f.BorderSizePixel = 0
+            f.ZIndex = cont.ZIndex
+            f.Position = pos
+            f.Size = size
+            f.Parent = cont
+            return f
+        end
+
+        makeEdge(UDim2.new(0,0,0,0), UDim2.new(1,0,0,thickness))
+        makeEdge(UDim2.new(0,0,1,-thickness), UDim2.new(1,0,0,thickness))
+        makeEdge(UDim2.new(0,0,0,0), UDim2.new(0,thickness,1,0))
+        makeEdge(UDim2.new(1,-thickness,0,0), UDim2.new(0,thickness,1,0))
+
+        Library.Registry[cont] = {
+            BackgroundColor3 = function()
+                for _, child in ipairs(cont:GetChildren()) do
+                    if child:IsA("Frame") then
+                        child.BackgroundColor3 = Library.Scheme.OutlineColor
+                    end
+                end
+            end,
+        }
+        return cont
     end
 
-    Library.Registry[OutlineFrame] = { BorderColor3 = "OutlineColor" }
-    -- return three values for compatibility
-    return OutlineFrame, OutlineFrame, OutlineFrame
+    local outline = createEdges(1)
+    return outline, outline, outline
 end
 
 function Library:AddDraggableLabel(Text: string)
