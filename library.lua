@@ -1060,7 +1060,7 @@ function Library:UpdateSearch(SearchText)
     end
 
     if Library.GlobalSearch then
-        if ActiveHasVisible and Library.ActiveTab then
+        if ActiveHasVisible and Library.ActiveTab and Library.ActiveTab.RefreshSides then
             Library.ActiveTab:RefreshSides()
         elseif FirstVisibleTab then
             local SearchMarker = SearchText
@@ -9459,10 +9459,9 @@ Library.Registry[WarningBoxOutline][ WarningBoxOutline:IsA("UIStroke") and "Colo
 		end
 
         -- Connect to TabContainer size changes to refresh sides automatically
-        local _thisTab = Tab -- capture current iteration Tab so closure doesn't see later nil
         TabContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if _thisTab == Library.ActiveTab then
-                _thisTab:RefreshSides()
+            if Tab == Library.ActiveTab and Tab and Tab.RefreshSides then
+                Tab:RefreshSides()
             end
         end)
 
@@ -9491,7 +9490,9 @@ Library.Registry[WarningBoxOutline][ WarningBoxOutline:IsA("UIStroke") and "Colo
                 Library:UpdateDPI(WarningBox, { Size = WarningBox.Size })
 			end
 
+if Tab and Tab.RefreshSides then
 			Tab:RefreshSides()
+		end
 		end
 
         function Tab:AddGroupbox(Info)
