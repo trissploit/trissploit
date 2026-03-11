@@ -885,6 +885,8 @@ local function hideESP(espObj)
     if espObj.Distance then espObj.Distance.Visible = false end
     if espObj.Weapon then espObj.Weapon.Visible = false end
     if espObj.Box then espObj.Box.Visible = false end
+    if espObj.BoxInnerOutline then espObj.BoxInnerOutline.Visible = false end
+    if espObj.BoxOuterOutline then espObj.BoxOuterOutline.Visible = false end
     if espObj.BoxFill then espObj.BoxFill.Visible = false end
     if espObj.Tracer then espObj.Tracer.Visible = false end
     if espObj.TracerOutline then pcall(function() espObj.TracerOutline.Transparency = 1 end) end
@@ -1125,12 +1127,8 @@ local function updateESP(deltaTime)
                     elseif getSetting("BoxType", ESPSettings.BoxType) == "Corner" then
                         espObj.Box.Visible = true
                         espObj.Box.BackgroundTransparency = 1
-                        -- outer border for corner mode
-                        if espObj.BoxBorder then
-                            espObj.BoxBorder.Position = UDim2.new(0, x - 1, 0, y - 1)
-                            espObj.BoxBorder.Size = UDim2.new(0, w + 2, 0, h + 2)
-                            espObj.BoxBorder.Visible = true
-                        end
+                        if espObj.BoxInnerOutline then espObj.BoxInnerOutline.Visible = false end
+                        if espObj.BoxOuterOutline then espObj.BoxOuterOutline.Visible = false end
                         local cornerLen = math.min(w, h) * 0.25
                         espObj.Corners[1].Position = UDim2.new(0, x, 0, y)
                         espObj.Corners[1].Size = UDim2.new(0, cornerLen, 0, 1)
@@ -1159,7 +1157,8 @@ local function updateESP(deltaTime)
                     end
                 else
                     if espObj.Box then espObj.Box.Visible = false end
-                    if espObj.BoxBorder then espObj.BoxBorder.Visible = false end
+                    if espObj.BoxInnerOutline then espObj.BoxInnerOutline.Visible = false end
+                    if espObj.BoxOuterOutline then espObj.BoxOuterOutline.Visible = false end
                     for _, corner in ipairs(espObj.Corners) do corner.Visible = false end
                 end
 
@@ -1446,6 +1445,9 @@ local function updateESP(deltaTime)
                             espObj.TracerOutline.Thickness = math.max(0.5, thickness * 0.6)
                         end)
                     end
+                else
+                    if espObj.Tracer then espObj.Tracer.Visible = false end
+                    if espObj.TracerOutline then pcall(function() espObj.TracerOutline.Transparency = 1 end) end
                 end
                 
                 -- Chams
