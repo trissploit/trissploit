@@ -1851,36 +1851,59 @@ function Library:AddShadowFrame(Frame: GuiObject)
 end
 
 function Library:AddSmallOutline(Frame: GuiObject)
-    -- replicate Linoria outlines: directly apply border colour/mode to the frame
-    Frame.BorderColor3 = Library.OutlineColor
-    Frame.BorderMode = Enum.BorderMode.Inset
-
+    -- add the new-style outline inside the frame and keep the shadow
     local DarkStroke = Library:AddShadowFrame(Frame)
-    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-    local Stroke = New("UIStroke", {
-        Color = "OutlineColor",
-        Thickness = 1,
-        LineJoinMode = joinMode,
-        Parent = Frame,
-    })
-    return Stroke, DarkStroke or Stroke
+    local OutlineFrame = Instance.new("Frame")
+    OutlineFrame.Name = "_OutlineFrame"
+    OutlineFrame.BackgroundTransparency = 1
+    OutlineFrame.BorderSizePixel = 1
+    OutlineFrame.BorderColor3 = Library.Scheme.OutlineColor
+    OutlineFrame.Size = UDim2.new(1, 2, 1, 2)
+    OutlineFrame.Position = UDim2.fromOffset(-1, -1)
+    OutlineFrame.ZIndex = Frame.ZIndex - 1
+    OutlineFrame.Parent = Frame
+
+    local corner = Frame:FindFirstChildOfClass("UICorner")
+    if corner then
+        local oc = corner:Clone()
+        oc.Parent = OutlineFrame
+    else
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = OutlineFrame,
+        })
+    end
+
+    Library.Registry[OutlineFrame] = { BorderColor3 = "OutlineColor" }
+    return OutlineFrame, DarkStroke or OutlineFrame
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    -- Linoria-style outline: ensure the frame itself has the proper border
-    Frame.BorderColor3 = Library.OutlineColor
-    Frame.BorderMode = Enum.BorderMode.Inset
-
     Library:AddShadowFrame(Frame)
-    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-    local Stroke = New("UIStroke", {
-        Color = "OutlineColor",
-        Thickness = 1,
-        LineJoinMode = joinMode,
-        Parent = Frame,
-    })
-    -- return stroke values in the same pattern as before for compatibility
-    return Stroke, Stroke, Stroke
+    local OutlineFrame = Instance.new("Frame")
+    OutlineFrame.Name = "_OutlineFrame"
+    OutlineFrame.BackgroundTransparency = 1
+    OutlineFrame.BorderSizePixel = 1
+    OutlineFrame.BorderColor3 = Library.Scheme.OutlineColor
+    OutlineFrame.Size = UDim2.new(1, 2, 1, 2)
+    OutlineFrame.Position = UDim2.fromOffset(-1, -1)
+    OutlineFrame.ZIndex = Frame.ZIndex - 1
+    OutlineFrame.Parent = Frame
+
+    local corner = Frame:FindFirstChildOfClass("UICorner")
+    if corner then
+        local oc = corner:Clone()
+        oc.Parent = OutlineFrame
+    else
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = OutlineFrame,
+        })
+    end
+
+    Library.Registry[OutlineFrame] = { BorderColor3 = "OutlineColor" }
+    -- return three values for compatibility
+    return OutlineFrame, OutlineFrame, OutlineFrame
 end
 
 function Library:AddDraggableLabel(Text: string)
