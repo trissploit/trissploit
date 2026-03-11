@@ -1870,28 +1870,69 @@ function Library:AddShadowFrame(Frame: GuiObject)
     return DarkStroke
 end
 
+-- Outline implementation using a separate underlay frame rather than UIStroke.
+-- This avoids stroke-rendering quirks and lets us control exact thickness.
+local function createOutlineFrame(Frame: GuiObject, thickness)
+    thickness = thickness or 2
+    if not Frame.Parent then return nil end
+    local Outline = Instance.new("Frame")
+    Outline.Name = "_OutlineFrame"
+    Outline.BackgroundColor3 = Library.Scheme.OutlineColor
+    Outline.BorderSizePixel = 0
+    Outline.ZIndex = Frame.ZIndex - 1
+    Outline.AnchorPoint = Frame.AnchorPoint
+    Outline.Parent = Frame.Parent
+
+    local function resync()
+        if not Frame.Parent then return end
+        Outline.ZIndex = Frame.ZIndex - 1
+        Outline.AnchorPoint = Frame.AnchorPoint
+        Outline.Position = UDim2.new(
+            Frame.Position.X.Scale,
+            Frame.Position.X.Offset - thickness,
+            Frame.Position.Y.Scale,
+            Frame.Position.Y.Offset - thickness
+        )
+        Outline.Size = UDim2.new(
+            Frame.Size.X.Scale,
+            Frame.Size.X.Offset + thickness * 2,
+            Frame.Size.Y.Scale,
+            Frame.Size.Y.Offset + thickness * 2
+        )
+        local baseCorner = Frame:FindFirstChildOfClass("UICorner")
+        if baseCorner then
+            local oc = Outline:FindFirstChildOfClass("UICorner")
+            if not oc then
+                oc = Instance.new("UICorner", Outline)
+            end
+            oc.CornerRadius = UDim.new(baseCorner.CornerRadius.Scale, baseCorner.CornerRadius.Offset + thickness)
+        end
+    end
+
+    resync()
+    Frame:GetPropertyChangedSignal("Position"):Connect(resync)
+    Frame:GetPropertyChangedSignal("Size"):Connect(resync)
+    Frame:GetPropertyChangedSignal("ZIndex"):Connect(resync)
+    Frame.ChildAdded:Connect(function(c)
+        if c:IsA("UICorner") then
+            resync()
+        end
+    end)
+
+    Library.Registry[Outline] = { BackgroundColor3 = "OutlineColor" }
+    return Outline
+end
+
 function Library:AddSmallOutline(Frame: GuiObject)
     local DarkStroke = Library:AddShadowFrame(Frame)
-    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-    local Stroke = New("UIStroke", {
-        Color = "OutlineColor",
-        Thickness = 2,
-        LineJoinMode = joinMode,
-        Parent = Frame,
-    })
-    return Stroke, DarkStroke or Stroke
+    local outline = createOutlineFrame(Frame, 1)
+    return outline or DarkStroke, DarkStroke or outline
 end
 
 function Library:AddOutline(Frame: GuiObject)
     Library:AddShadowFrame(Frame)
-    local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-    local Stroke = New("UIStroke", {
-        Color = "OutlineColor",
-        Thickness = 2,
-        LineJoinMode = joinMode,
-        Parent = Frame,
-    })
-    return Stroke, Stroke, Stroke
+    local outline = createOutlineFrame(Frame, 2)
+    return outline, outline, outline
 end
 
 function Library:AddDraggableLabel(Text: string)
