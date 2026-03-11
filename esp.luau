@@ -152,16 +152,6 @@ local ESPSettings = {
     -- Whether the healthbar outline thickness scales with the filled height
     HealthOutlineFollow = false,
     
-    -- Glow effect (per-element glow strokes / text glow)
-    BoxGlowEnabled = false,
-    NameGlowEnabled = false,
-    HealthGlowEnabled = false,
-    TracerGlowEnabled = false,
-    GlowColor = Color3.fromRGB(0, 170, 255),
-    GlowTransparency = 0.65,
-    GlowThickness = 3,
-    GlowFollowGradient = true,  -- when true, BoxGlow tints from the outline gradient
-    
     -- Minimum box size (pixels) to prevent tiny boxes at long range
     MinBoxWidth = 8,
     MinBoxHeight = 12,
@@ -547,9 +537,10 @@ local function getScreenRectForCharacter(char)
                 if w < minW then w = minW end
                 if h < minH then h = minH end
                 local cx = (spTop.X + spBottom.X) / 2
+                local cy = (spTop.Y + spBottom.Y) / 2
                 local x = cx - w / 2
-                local y = spTop.Y
-                return { x = x, y = y, w = w, h = h, cx = cx, cy = y + h/2 }
+                local y = cy - h / 2
+                return { x = x, y = y, w = w, h = h, cx = cx, cy = cy }
             end
         end
         return nil
@@ -783,26 +774,6 @@ local function createESPObject()
     espObj.Highlight.Parent = container
 
     -- Glow effect: outer UIStroke on box frame for glow
-    espObj.BoxGlow = Instance.new("UIStroke")
-    espObj.BoxGlow.Name = "BoxGlow"
-    espObj.BoxGlow.Color = Color3.new(1, 1, 1)  -- white so gradient isn't tinted
-    espObj.BoxGlow.Thickness = ESPSettings.GlowThickness or 3
-    espObj.BoxGlow.Transparency = 1
-    espObj.BoxGlow.LineJoinMode = Enum.LineJoinMode.Miter
-    espObj.BoxGlow.Parent = espObj.Box
-    -- Gradient child on BoxGlow so it follows the outline gradient
-    espObj.BoxGlowGradient = Instance.new("UIGradient")
-    espObj.BoxGlowGradient.Name = "BoxGlowGradient"
-    espObj.BoxGlowGradient.Rotation = -90
-    espObj.BoxGlowGradient.Parent = espObj.BoxGlow
-    -- Health bar glow UIStroke
-    espObj.HealthGlow = Instance.new("UIStroke")
-    espObj.HealthGlow.Name = "HealthGlow"
-    espObj.HealthGlow.Color = ESPSettings.GlowColor or Color3.fromRGB(0, 170, 255)
-    espObj.HealthGlow.Thickness = ESPSettings.GlowThickness or 3
-    espObj.HealthGlow.Transparency = 1
-    espObj.HealthGlow.LineJoinMode = Enum.LineJoinMode.Miter
-    espObj.HealthGlow.Parent = espObj.HealthBarBG
     -- Skeleton bone definitions
     local BONES_R15 = {
         { "HumanoidRootPart", "LowerTorso" },
@@ -1090,10 +1061,11 @@ local function updateESP(deltaTime)
                             -- Set UIStroke Color to white so the UIGradient child is not multiplied by a dark color
                             espObj.BoxOutline.Color = Color3.new(1, 1, 1)
                             stopsToUIGradient(espObj.OutlineGradient, outlineStops)
+                            espObj.OutlineGradient.Enabled = true
                         else
                             espObj.BoxOutline.Color = getSetting("BoxOutlineColor", ESPSettings.BoxOutlineColor) or Color3.fromRGB(0, 0, 0)
+                            espObj.OutlineGradient.Enabled = false
                         end
-                        espObj.OutlineGradient.Enabled = true
                         espObj.OutlineGradient.Rotation = -90
                         -- Hide corner frames when square outline in use
                         for _, corner in ipairs(espObj.Corners) do
@@ -1178,72 +1150,7 @@ local function updateESP(deltaTime)
                     if espObj.BoxFill then espObj.BoxFill.Visible = false end
                 end
 
-                -- Glow effect on box (separate BoxGlowEnabled; follows outline gradient)
-                if espObj.BoxGlow then
-                    local glowOn = getSetting("BoxGlowEnabled", ESPSettings.BoxGlowEnabled) and (espObj.Box and espObj.Box.Visible)
-                    if glowOn then
-                        local glowThickness = getSetting("GlowThickness", ESPSettings.GlowThickness) or 3
-                        local glowTrans = getSetting("GlowTransparency", ESPSettings.GlowTransparency) or 0.65
-                        espObj.BoxGlow.Thickness = glowThickness
-                        espObj.BoxGlow.Transparency = glowTrans
-                        -- Follow gradient: sync BoxGlowGradient with the current outline gradient
-                        if espObj.BoxGlowGradient and espObj.OutlineGradient then
-                            espObj.BoxGlowGradient.Color = espObj.OutlineGradient.Color
-                            espObj.BoxGlowGradient.Rotation = espObj.OutlineGradient.Rotation
-                        elseif espObj.BoxGlowGradient then
-                            -- fallback: solid glow color
-                            local glowColor = getSetting("GlowColor", ESPSettings.GlowColor) or Color3.fromRGB(0, 170, 255)
-                            espObj.BoxGlowGradient.Color = ColorSequence.new(glowColor)
-                        end
-                    else
-                        espObj.BoxGlow.Transparency = 1
-                    end
-                end
-                -- Glow on name/weapon text (NameGlowEnabled)
-                local nameGlowOn = getSetting("NameGlowEnabled", ESPSettings.NameGlowEnabled)
-                local glowColor = getSetting("GlowColor", ESPSettings.GlowColor) or Color3.fromRGB(0, 170, 255)
-                local glowTrans = getSetting("GlowTransparency", ESPSettings.GlowTransparency) or 0.65
-                if nameGlowOn then
-                    if espObj.Name and espObj.Name.Visible then
-                        espObj.Name.TextStrokeColor3 = glowColor
-                        espObj.Name.TextStrokeTransparency = glowTrans
-                    end
-                    if espObj.HealthText and espObj.HealthText.Visible then
-                        espObj.HealthText.TextStrokeColor3 = glowColor
-                        espObj.HealthText.TextStrokeTransparency = glowTrans
-                    end
-                else
-                    if espObj.Name then
-                        espObj.Name.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                        espObj.Name.TextStrokeTransparency = 0
-                    end
-                    if espObj.HealthText then
-                        espObj.HealthText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                        espObj.HealthText.TextStrokeTransparency = 0
-                    end
-                end
-                -- Glow on health bar (HealthGlowEnabled)
-                if espObj.HealthGlow then
-                    local healthGlowOn = getSetting("HealthGlowEnabled", ESPSettings.HealthGlowEnabled)
-                    if healthGlowOn and espObj.HealthBarBG and espObj.HealthBarBG.Visible then
-                        espObj.HealthGlow.Color = glowColor
-                        espObj.HealthGlow.Thickness = getSetting("GlowThickness", ESPSettings.GlowThickness) or 3
-                        espObj.HealthGlow.Transparency = glowTrans
-                    else
-                        espObj.HealthGlow.Transparency = 1
-                    end
-                end
-                -- Glow on tracer (TracerGlowEnabled via TracerOutline color override)
-                if espObj.TracerOutline then
-                    local tracerGlowOn = getSetting("TracerGlowEnabled", ESPSettings.TracerGlowEnabled)
-                    if tracerGlowOn and espObj.Tracer and espObj.Tracer.Visible then
-                        espObj.TracerOutline.Color = glowColor
-                        espObj.TracerOutline.Transparency = glowTrans
-                    else
-                        espObj.TracerOutline.Color = Color3.fromRGB(0, 0, 0)
-                        espObj.TracerOutline.Transparency = 0
-                    end
-                end
+                -- Health bar
 
                 -- Health bar
                     -- Custom text ESP: create/update right-side stacked labels
