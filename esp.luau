@@ -70,21 +70,21 @@ local ESPSettings = {
     -- Font selection: "ProggyClean" | "Tahoma"
     TextFont = "ProggyClean",
     -- Name label gradient (always enabled)
-    NameGradientRotation = 0, -- degrees [0-360]
+    NameGradientRotation = 0,
     NameGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0},
     },
     -- Distance label gradient (always enabled)
-    DistanceGradientRotation = 0, -- degrees [0-360]
+    DistanceGradientRotation = 0,
     DistanceGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB(255, 100,  50), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
     },
     -- Health text label gradient (always enabled)
-    HealthTextGradientRotation = 0, -- degrees [0-360]
+    HealthTextGradientRotation = 0,
     HealthTextGradientStops = {
         {pos = 0,   color = Color3.fromRGB(  0, 255,  80), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB(255, 255,   0), transparency = 0},
@@ -160,23 +160,12 @@ local ESPSettings = {
     SkeletonOutlineEnabled = true,
     SkeletonOutlineColor = Color3.fromRGB(0, 0, 0),
     SkeletonOutlineThickness = 1,
-    SkeletonGradientEnabled = true, -- always on
-    SkeletonGradientAnimate = true,
     SkeletonGradientSpeed = 0.4,
     SkeletonGradientStops = {
         { pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0 },
         { pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0 },
         { pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0 },
     },
-
-    -- Head circle overlay (drawn around head position)
-    HeadCircleEnabled = false,
-    HeadCircleRadius = 40,
-    HeadCircleGradientStops = {
-        { pos = 0,   color = Color3.fromRGB(255, 255, 255), transparency = 0 },
-        { pos = 1,   color = Color3.fromRGB(0, 255, 255), transparency = 0 },
-    },
-    HeadCircleGradientRotation = 0,
 
     -- Chams
     Highlight = false,
@@ -651,25 +640,6 @@ local function createESPObject()
     espObj.OutlineGradient.Rotation = -90
     espObj.OutlineGradient.Parent = espObj.BoxOutline
 
-    -- Head circle overlay
-    espObj.HeadCircle = Instance.new("Frame")
-    espObj.HeadCircle.Name = "HeadCircle"
-    espObj.HeadCircle.BackgroundTransparency = 1
-    espObj.HeadCircle.BorderSizePixel = 0
-    espObj.HeadCircle.Visible = false
-    espObj.HeadCircle.ZIndex = 5
-    espObj.HeadCircle.Parent = container
-
-    espObj.HeadCircleCorner = Instance.new("UICorner")
-    espObj.HeadCircleCorner.CornerRadius = UDim.new(1, 0)
-    espObj.HeadCircleCorner.Parent = espObj.HeadCircle
-
-    espObj.HeadCircleGradient = Instance.new("UIGradient")
-    espObj.HeadCircleGradient.Name = "HeadCircleGradient"
-    espObj.HeadCircleGradient.Enabled = true
-    espObj.HeadCircleGradient.Rotation = -90
-    espObj.HeadCircleGradient.Parent = espObj.HeadCircle
-
     -- Inner black outline (1px inside the ESP box)
     espObj.BoxInnerOutline = Instance.new("Frame")
     espObj.BoxInnerOutline.Name = "BoxInnerOutline"
@@ -1063,13 +1033,13 @@ local function updateESP(deltaTime)
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
                 -- Per-frame text gradient phases
                 local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
-                local namePhase = (ESPSettings.NameGradientRotation or 0) / 360
+                local namePhase = ((getSetting("NameGradientRotation", ESPSettings.NameGradientRotation) or 0) / 360) % 1
 
                 local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
-                local distPhase = (ESPSettings.DistanceGradientRotation or 0) / 360
+                local distPhase = ((getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation) or 0) / 360) % 1
 
                 local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
-                local htPhase = (ESPSettings.HealthTextGradientRotation or 0) / 360
+                local htPhase = ((getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation) or 0) / 360) % 1
 
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
@@ -1081,7 +1051,7 @@ local function updateESP(deltaTime)
                     else
                         nameText = (player.Name or player.DisplayName or "")
                     end
-                    espObj.Name.Text = makeGradientText(nameText, nameStops, namePhase)
+                    espObj.Name.Text = nameGradEnabled and makeGradientText(nameText, nameStops, namePhase) or nameText
                     espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
@@ -1334,16 +1304,16 @@ local function updateESP(deltaTime)
                         local belowText
                         local belowRich -- RichText version (used when any gradient is enabled)
                         if showHPTxt and showDist then
-                            local hpPart   = makeGradientText(hpStr,  htGradStops,   htPhase)
-                            local distPart = makeGradientText(distStr, distGradStops, distPhase)
+                            local hpPart   = htGradEnabled  and makeGradientText(hpStr,  htGradStops,   htPhase)   or hpStr
+                            local distPart = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
                             belowText = hpStr .. "  " .. distStr
                             belowRich = hpPart .. "  " .. distPart
                         elseif showHPTxt then
                             belowText = hpStr
-                            belowRich = makeGradientText(hpStr, htGradStops, htPhase)
+                            belowRich = htGradEnabled and makeGradientText(hpStr, htGradStops, htPhase) or hpStr
                         elseif showDist then
                             belowText = distStr
-                            belowRich = makeGradientText(distStr, distGradStops, distPhase)
+                            belowRich = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
                         end
 
                         if posMode == "Bottom" then
@@ -1426,7 +1396,7 @@ local function updateESP(deltaTime)
                             local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if showDist then
                                 local distOnly = string.format("[%d st]", math.floor(Dist))
-                                espObj.HPText.Text = makeGradientText(distOnly, distGradStops, distPhase)
+                                espObj.HPText.Text = distGradEnabled and makeGradientText(distOnly, distGradStops, distPhase) or distOnly
                                 espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
@@ -1478,12 +1448,11 @@ local function updateESP(deltaTime)
                 if getSetting("SkeletonEnabled", ESPSettings.SkeletonEnabled) and espObj.SkeletonBones then
                     local boneList = (char:FindFirstChild("UpperTorso") and espObj._BONES_R15) or (char:FindFirstChild("Torso") and espObj._BONES_R6)
                     if boneList then
-                        local skelAnim = getSetting("SkeletonGradientAnimate", ESPSettings.SkeletonGradientAnimate)
-                        if skelAnim then
-                            espObj.SkeletonGradientPhase = ((espObj.SkeletonGradientPhase or 0) + dt * (ESPSettings.SkeletonGradientSpeed or 0.4)) % 1
-                        end
-                        local skelPhase = espObj.SkeletonGradientPhase or 0
-
+                        espObj.SkeletonGradientPhase = ((espObj.SkeletonGradientPhase or 0) + dt * (ESPSettings.SkeletonGradientSpeed or 0.4)) % 1
+                        local boneColor = getSetting("BoneColor", ESPSettings.BoneColor)
+                        local boneThick = getSetting("BoneThickness", ESPSettings.BoneThickness)
+                        local outEnabled = getSetting("SkeletonOutlineEnabled", ESPSettings.SkeletonOutlineEnabled)
+                        local outColor = getSetting("SkeletonOutlineColor", ESPSettings.SkeletonOutlineColor)
                         local outThick = getSetting("SkeletonOutlineThickness", ESPSettings.SkeletonOutlineThickness)
                         local skelStops = ESPSettings.SkeletonGradientStops
 
@@ -1513,7 +1482,7 @@ local function updateESP(deltaTime)
                             if skelGradEnabled and skelStops and #skelStops >= 2 then
                                 boneObj.Gradient.Enabled = true
                                 pcall(function()
-                                    boneObj.Gradient.Color = buildGradientSequenceFromStops(skelStops, skelPhase)
+                                    boneObj.Gradient.Color = buildGradientSequenceFromStops(skelStops, espObj.SkeletonGradientPhase)
                                 end)
                                 boneObj.Line.BackgroundColor3 = Color3.new(1, 1, 1)
                             else
@@ -1538,35 +1507,6 @@ local function updateESP(deltaTime)
                     if espObj.SkeletonBones then
                         for _, bone in ipairs(espObj.SkeletonBones) do bone.Line.Visible = false end
                     end
-                end
-
-                -- Head circle (independent of skeleton)
-                local headCircleEnabled = getSetting("HeadCircleEnabled", ESPSettings.HeadCircleEnabled)
-                if headCircleEnabled and espObj.HeadCircle then
-                    local headPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-                    if headPart then
-                        local headPos = headPart.Position
-                        local sp = Camera:WorldToViewportPoint(headPos)
-                        if sp.Z > 0 then
-                            local radius = getSetting("HeadCircleRadius", ESPSettings.HeadCircleRadius) or 40
-                            local r = math.clamp(radius, 10, 500)
-                            espObj.HeadCircle.Size = UDim2.new(0, r * 2, 0, r * 2)
-                            espObj.HeadCircle.Position = UDim2.new(0, sp.X - r, 0, sp.Y - r)
-                            espObj.HeadCircle.Visible = true
-
-                            local rot = (ESPSettings.HeadCircleGradientRotation or 0) % 360
-                            espObj.HeadCircleGradient.Rotation = rot
-                            pcall(function()
-                                espObj.HeadCircleGradient.Color = buildGradientSequenceFromStops(getSetting("HeadCircleGradientStops", ESPSettings.HeadCircleGradientStops), (rot / 360) % 1)
-                            end)
-                        else
-                            espObj.HeadCircle.Visible = false
-                        end
-                    else
-                        espObj.HeadCircle.Visible = false
-                    end
-                else
-                    espObj.HeadCircle.Visible = false
                 end
             else
                 hideESP(espObj)
