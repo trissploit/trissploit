@@ -1484,34 +1484,6 @@ local function updateESP(deltaTime)
                         end
                         local skelPhase = espObj.SkeletonGradientPhase or 0
 
-                -- Head circle
-                local headCircleEnabled = getSetting("HeadCircleEnabled", ESPSettings.HeadCircleEnabled)
-                if headCircleEnabled and espObj.HeadCircle then
-                    local headPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-                    if headPart then
-                        local headPos = headPart.Position
-                        local sp = Camera:WorldToViewportPoint(headPos)
-                        if sp.Z > 0 then
-                            local radius = getSetting("HeadCircleRadius", ESPSettings.HeadCircleRadius) or 40
-                            local r = math.clamp(radius, 10, 500)
-                            espObj.HeadCircle.Size = UDim2.new(0, r * 2, 0, r * 2)
-                            espObj.HeadCircle.Position = UDim2.new(0, sp.X - r, 0, sp.Y - r)
-                            espObj.HeadCircle.Visible = true
-
-                            local rot = (ESPSettings.HeadCircleGradientRotation or 0) % 360
-                            espObj.HeadCircleGradient.Rotation = rot
-                            pcall(function()
-                                espObj.HeadCircleGradient.Color = buildGradientSequenceFromStops(getSetting("HeadCircleGradientStops", ESPSettings.HeadCircleGradientStops), (rot / 360) % 1)
-                            end)
-                        else
-                            espObj.HeadCircle.Visible = false
-                        end
-                    else
-                        espObj.HeadCircle.Visible = false
-                    end
-                else
-                    espObj.HeadCircle.Visible = false
-                end
                         local outThick = getSetting("SkeletonOutlineThickness", ESPSettings.SkeletonOutlineThickness)
                         local skelStops = ESPSettings.SkeletonGradientStops
 
@@ -1566,6 +1538,35 @@ local function updateESP(deltaTime)
                     if espObj.SkeletonBones then
                         for _, bone in ipairs(espObj.SkeletonBones) do bone.Line.Visible = false end
                     end
+                end
+
+                -- Head circle (independent of skeleton)
+                local headCircleEnabled = getSetting("HeadCircleEnabled", ESPSettings.HeadCircleEnabled)
+                if headCircleEnabled and espObj.HeadCircle then
+                    local headPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+                    if headPart then
+                        local headPos = headPart.Position
+                        local sp = Camera:WorldToViewportPoint(headPos)
+                        if sp.Z > 0 then
+                            local radius = getSetting("HeadCircleRadius", ESPSettings.HeadCircleRadius) or 40
+                            local r = math.clamp(radius, 10, 500)
+                            espObj.HeadCircle.Size = UDim2.new(0, r * 2, 0, r * 2)
+                            espObj.HeadCircle.Position = UDim2.new(0, sp.X - r, 0, sp.Y - r)
+                            espObj.HeadCircle.Visible = true
+
+                            local rot = (ESPSettings.HeadCircleGradientRotation or 0) % 360
+                            espObj.HeadCircleGradient.Rotation = rot
+                            pcall(function()
+                                espObj.HeadCircleGradient.Color = buildGradientSequenceFromStops(getSetting("HeadCircleGradientStops", ESPSettings.HeadCircleGradientStops), (rot / 360) % 1)
+                            end)
+                        else
+                            espObj.HeadCircle.Visible = false
+                        end
+                    else
+                        espObj.HeadCircle.Visible = false
+                    end
+                else
+                    espObj.HeadCircle.Visible = false
                 end
             else
                 hideESP(espObj)
