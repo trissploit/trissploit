@@ -69,22 +69,22 @@ local ESPSettings = {
     ShowDistance = false,
     -- Font selection: "ProggyClean" | "Tahoma"
     TextFont = "ProggyClean",
-    -- Name label gradient (always enabled)
-    NameGradientRotation = 0,
+    -- Name label gradient
+    NameGradientRotation = 0, -- degrees
     NameGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB( 80, 200, 255), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(180,  80, 255), transparency = 0},
     },
-    -- Distance label gradient (always enabled)
-    DistanceGradientRotation = 0,
+    -- Distance label gradient
+    DistanceGradientRotation = 0, -- degrees
     DistanceGradientStops = {
         {pos = 0,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB(255, 100,  50), transparency = 0},
         {pos = 1,   color = Color3.fromRGB(255, 200,  50), transparency = 0},
     },
-    -- Health text label gradient (always enabled)
-    HealthTextGradientRotation = 0,
+    -- Health text label gradient (the HP/distance text shown below the bar)
+    HealthTextGradientRotation = 0, -- degrees
     HealthTextGradientStops = {
         {pos = 0,   color = Color3.fromRGB(  0, 255,  80), transparency = 0},
         {pos = 0.5, color = Color3.fromRGB(255, 255,   0), transparency = 0},
@@ -160,6 +160,7 @@ local ESPSettings = {
     SkeletonOutlineEnabled = true,
     SkeletonOutlineColor = Color3.fromRGB(0, 0, 0),
     SkeletonOutlineThickness = 1,
+    SkeletonGradientEnabled = false,
     SkeletonGradientSpeed = 0.4,
     SkeletonGradientStops = {
         { pos = 0,   color = Color3.fromRGB(255,  80, 168), transparency = 0 },
@@ -557,10 +558,6 @@ local function createESPObject()
     }
     espObj.GradientAngle = nil
     espObj.OutlineAngle = 0
-    espObj.HealthGradientPhase = nil
-    espObj.NameGradientPhase = nil
-    espObj.DistanceGradientPhase = nil
-    espObj.HealthTextGradientPhase = nil
     
     -- Name label
     local initFont = getEnumFont(ESPSettings.TextFont)
@@ -1033,13 +1030,13 @@ local function updateESP(deltaTime)
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
                 -- Per-frame text gradient phases
                 local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
-                local namePhase = ((getSetting("NameGradientRotation", ESPSettings.NameGradientRotation) or 0) / 360) % 1
+                local namePhase = ((getSetting("NameGradientRotation", ESPSettings.NameGradientRotation or 0) % 360) / 360)
 
                 local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
-                local distPhase = ((getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation) or 0) / 360) % 1
+                local distPhase = ((getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation or 0) % 360) / 360)
 
                 local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
-                local htPhase = ((getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation) or 0) / 360) % 1
+                local htPhase = ((getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation or 0) % 360) / 360)
 
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
@@ -1051,7 +1048,7 @@ local function updateESP(deltaTime)
                     else
                         nameText = (player.Name or player.DisplayName or "")
                     end
-                    espObj.Name.Text = nameGradEnabled and makeGradientText(nameText, nameStops, namePhase) or nameText
+                    espObj.Name.Text = makeGradientText(nameText, nameStops, namePhase)
                     espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
@@ -1304,16 +1301,16 @@ local function updateESP(deltaTime)
                         local belowText
                         local belowRich -- RichText version (used when any gradient is enabled)
                         if showHPTxt and showDist then
-                            local hpPart   = htGradEnabled  and makeGradientText(hpStr,  htGradStops,   htPhase)   or hpStr
-                            local distPart = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
+                            local hpPart   = makeGradientText(hpStr, htGradStops, htPhase)
+                            local distPart = makeGradientText(distStr, distGradStops, distPhase)
                             belowText = hpStr .. "  " .. distStr
                             belowRich = hpPart .. "  " .. distPart
                         elseif showHPTxt then
                             belowText = hpStr
-                            belowRich = htGradEnabled and makeGradientText(hpStr, htGradStops, htPhase) or hpStr
+                            belowRich = makeGradientText(hpStr, htGradStops, htPhase)
                         elseif showDist then
                             belowText = distStr
-                            belowRich = distGradEnabled and makeGradientText(distStr, distGradStops, distPhase) or distStr
+                            belowRich = makeGradientText(distStr, distGradStops, distPhase)
                         end
 
                         if posMode == "Bottom" then
@@ -1396,7 +1393,7 @@ local function updateESP(deltaTime)
                             local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if showDist then
                                 local distOnly = string.format("[%d st]", math.floor(Dist))
-                                espObj.HPText.Text = distGradEnabled and makeGradientText(distOnly, distGradStops, distPhase) or distOnly
+                                espObj.HPText.Text = makeGradientText(distOnly, distGradStops, distPhase)
                                 espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
@@ -1448,7 +1445,10 @@ local function updateESP(deltaTime)
                 if getSetting("SkeletonEnabled", ESPSettings.SkeletonEnabled) and espObj.SkeletonBones then
                     local boneList = (char:FindFirstChild("UpperTorso") and espObj._BONES_R15) or (char:FindFirstChild("Torso") and espObj._BONES_R6)
                     if boneList then
-                        espObj.SkeletonGradientPhase = ((espObj.SkeletonGradientPhase or 0) + dt * (ESPSettings.SkeletonGradientSpeed or 0.4)) % 1
+                        local skelGradEnabled = getSetting("SkeletonGradientEnabled", ESPSettings.SkeletonGradientEnabled)
+                        if skelGradEnabled then
+                            espObj.SkeletonGradientPhase = ((espObj.SkeletonGradientPhase or 0) + dt * (ESPSettings.SkeletonGradientSpeed or 0.4)) % 1
+                        end
                         local boneColor = getSetting("BoneColor", ESPSettings.BoneColor)
                         local boneThick = getSetting("BoneThickness", ESPSettings.BoneThickness)
                         local outEnabled = getSetting("SkeletonOutlineEnabled", ESPSettings.SkeletonOutlineEnabled)
