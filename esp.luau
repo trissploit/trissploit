@@ -355,7 +355,8 @@ end
 -- The `makeGradientText` legacy function is removed.
 
 -- Custom ProggyClean font asset (used when TextFont == "ProggyClean")
-local PROGGY_CLEAN_FONT = Font.new("rbxasset://6879b182e12bdac9912764d972203090/proggyclean_font")
+-- Roblox's TextLabel.Font accepts Enum.Font, number, or string. We provide the asset URL as a string.
+local PROGGY_CLEAN_FONT = "rbxasset://6879b182e12bdac9912764d972203090/proggyclean_font"
 
 local function getEnumFont(fontName)
     if fontName == "ProggyClean" then
