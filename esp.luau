@@ -356,20 +356,18 @@ end
 local function makeGradientText(text, stops, rotationDeg)
     local len = #text
     if len == 0 then return "" end
-    -- Rotation is used to bias the gradient sampling along the text; this is an
-    -- approximation of true 2D rotation for a 1D string (works like UIGradient).
     local theta = math.rad(rotationDeg or 0)
     local cosT = math.cos(theta)
     local sinT = math.sin(theta)
     local parts = {}
     for i = 1, len do
         local u = (len == 1) and 0.5 or ((i - 1) / (len - 1))
-        -- Treat the string as a horizontal line; use a fixed vertical component
-        -- to allow rotation to change the slope of the gradient.
+        -- Treat the text as a 1x1 rect (x = [0..1] along length, y = 0.5 fixed)
+        -- and rotate the sampling axis by the requested angle.
         local x = u - 0.5
-        local y = 0.5
-        local axisPos = x * cosT + y * sinT
-        local samplePos = math.clamp(axisPos + 0.5, 0, 1)
+        local y = 0.0 -- fixed vertical position in [0..1]
+        local rotated = x * cosT - y * sinT
+        local samplePos = math.clamp(rotated + 0.5, 0, 1)
         local color = sampleStopsAtPosition(stops, samplePos)
         local r = math.floor(color.R * 255 + 0.5)
         local g = math.floor(color.G * 255 + 0.5)
