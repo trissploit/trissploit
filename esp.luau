@@ -351,15 +351,33 @@ local function sampleStopsAtPosition(stops, pos)
     return sorted[#sorted].color
 end
 
--- Build a RichText string that colors each character by its position along gradient stops.
--- `phase` offsets the sampling so animated gradients stay in sync with the bar.
-local function makeGradientText(text, stops, phase)
+-- Build a RichText string that colors each character by projecting character
+-- position onto a rotated gradient axis (true angle-based rotation).
+local function makeGradientText(text, stops, rotationDegrees)
     local len = #text
     if len == 0 then return "" end
+    local rot = math.rad(rotationDegrees or 0)
+    local cosR = math.cos(rot)
+    local sinR = math.sin(rot)
+
+    -- Characters are treated as samples on a unit line centered at x=0.5.
+    -- y is fixed at 0.5 (single text row), so rotating toward vertical naturally
+    -- flattens horizontal variation as expected from real gradient rotation.
+    local minProj = (-0.5) * cosR + 0.5 * sinR
+    local maxProj = ( 0.5) * cosR + 0.5 * sinR
+    local projRange = maxProj - minProj
+    if math.abs(projRange) < 1e-6 then
+        projRange = 1e-6
+    end
+
     local parts = {}
     for i = 1, len do
-        local t = (len == 1) and 0 or ((i - 1) / (len - 1))
-        local samplePos = ((t - (phase or 0)) % 1 + 1) % 1
+        local t = (len == 1) and 0.5 or ((i - 1) / (len - 1))
+        local x = t - 0.5
+        local y = 0.5
+        local proj = x * cosR + y * sinR
+        local samplePos = (proj - minProj) / projRange
+        samplePos = math.clamp(samplePos, 0, 1)
         local color = sampleStopsAtPosition(stops, samplePos)
         local r = math.floor(color.R * 255 + 0.5)
         local g = math.floor(color.G * 255 + 0.5)
@@ -1028,15 +1046,15 @@ local function updateESP(deltaTime)
                 local scaledTextSize = math.max(9, math.floor(13 * textScale))
                 -- Consistent pixel gap used above AND below the box for all text labels
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
-                -- Per-frame text gradient phases
+                -- Text gradient rotations (degrees)
                 local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
-                local namePhase = ((getSetting("NameGradientRotation", ESPSettings.NameGradientRotation or 0) % 360) / 360)
+                local nameRotation = getSetting("NameGradientRotation", ESPSettings.NameGradientRotation or 0)
 
                 local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
-                local distPhase = ((getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation or 0) % 360) / 360)
+                local distRotation = getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation or 0)
 
                 local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
-                local htPhase = ((getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation or 0) % 360) / 360)
+                local htRotation = getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation or 0)
 
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
@@ -1048,7 +1066,7 @@ local function updateESP(deltaTime)
                     else
                         nameText = (player.Name or player.DisplayName or "")
                     end
-                    espObj.Name.Text = makeGradientText(nameText, nameStops, namePhase)
+                    espObj.Name.Text = makeGradientText(nameText, nameStops, nameRotation)
                     espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
@@ -1301,16 +1319,16 @@ local function updateESP(deltaTime)
                         local belowText
                         local belowRich -- RichText version (used when any gradient is enabled)
                         if showHPTxt and showDist then
-                            local hpPart   = makeGradientText(hpStr, htGradStops, htPhase)
-                            local distPart = makeGradientText(distStr, distGradStops, distPhase)
+                            local hpPart   = makeGradientText(hpStr, htGradStops, htRotation)
+                            local distPart = makeGradientText(distStr, distGradStops, distRotation)
                             belowText = hpStr .. "  " .. distStr
                             belowRich = hpPart .. "  " .. distPart
                         elseif showHPTxt then
                             belowText = hpStr
-                            belowRich = makeGradientText(hpStr, htGradStops, htPhase)
+                            belowRich = makeGradientText(hpStr, htGradStops, htRotation)
                         elseif showDist then
                             belowText = distStr
-                            belowRich = makeGradientText(distStr, distGradStops, distPhase)
+                            belowRich = makeGradientText(distStr, distGradStops, distRotation)
                         end
 
                         if posMode == "Bottom" then
@@ -1393,7 +1411,7 @@ local function updateESP(deltaTime)
                             local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if showDist then
                                 local distOnly = string.format("[%d st]", math.floor(Dist))
-                                espObj.HPText.Text = makeGradientText(distOnly, distGradStops, distPhase)
+                                espObj.HPText.Text = makeGradientText(distOnly, distGradStops, distRotation)
                                 espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
