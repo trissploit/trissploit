@@ -24,9 +24,6 @@ local RotationAngle = -90
 getgenv()._TrisESP_Persistent = getgenv()._TrisESP_Persistent or {}
 local PERSIST = getgenv()._TrisESP_Persistent
 PERSIST.HealthPhase = PERSIST.HealthPhase or {}
-PERSIST.NamePhase = PERSIST.NamePhase or {}
-PERSIST.DistancePhase = PERSIST.DistancePhase or {}
-PERSIST.HealthTextPhase = PERSIST.HealthTextPhase or {}
 PERSIST.GradientAngle = PERSIST.GradientAngle or {}
 PERSIST.SpinAngle = PERSIST.SpinAngle or RotationAngle
 
@@ -561,9 +558,6 @@ local function createESPObject()
     }
     espObj.GradientAngle = nil
     espObj.OutlineAngle = 0
-    espObj.NameGradientPhase = nil
-    espObj.DistanceGradientPhase = nil
-    espObj.HealthTextGradientPhase = nil
     
     -- Name label
     local initFont = getEnumFont(ESPSettings.TextFont)
@@ -1036,19 +1030,13 @@ local function updateESP(deltaTime)
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
                 -- Per-frame text gradient phases
                 local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
-                local nameSpeed = getSetting("NameGradientRotation", ESPSettings.NameGradientRotation or 0) / 360
-                espObj.NameGradientPhase = ((espObj.NameGradientPhase or 0) + nameSpeed * dt) % 1
-                local namePhase = espObj.NameGradientPhase
+                local namePhase = ((getSetting("NameGradientRotation", ESPSettings.NameGradientRotation or 0) % 360) / 360)
 
                 local distGradStops = espObj.DistanceStops or ESPSettings.DistanceGradientStops
-                local distSpeed = getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation or 0) / 360
-                espObj.DistanceGradientPhase = ((espObj.DistanceGradientPhase or 0) + distSpeed * dt) % 1
-                local distPhase = espObj.DistanceGradientPhase
+                local distPhase = ((getSetting("DistanceGradientRotation", ESPSettings.DistanceGradientRotation or 0) % 360) / 360)
 
                 local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
-                local htSpeed = getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation or 0) / 360
-                espObj.HealthTextGradientPhase = ((espObj.HealthTextGradientPhase or 0) + htSpeed * dt) % 1
-                local htPhase = espObj.HealthTextGradientPhase
+                local htPhase = ((getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation or 0) % 360) / 360)
 
                 -- Name
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
@@ -1248,6 +1236,9 @@ local function updateESP(deltaTime)
                         if healthAnim then
                             espObj.HealthGradientPhase = (espObj.HealthGradientPhase or 0)
                             espObj.HealthGradientPhase = (espObj.HealthGradientPhase + speed * dt) % 1
+                            if espObj.Player and espObj.Player.UserId then
+                                PERSIST.HealthPhase[tostring(espObj.Player.UserId)] = espObj.HealthGradientPhase
+                            end
                         else
                             -- preserve any persisted phase but do not advance it while animation disabled
                             if espObj.Player and espObj.Player.UserId then
@@ -1255,15 +1246,6 @@ local function updateESP(deltaTime)
                             else
                                 espObj.HealthGradientPhase = espObj.HealthGradientPhase or 0
                             end
-                        end
-
-                        -- Persist all text gradient phases so they survive reloads
-                        if espObj.Player and espObj.Player.UserId then
-                            local id = tostring(espObj.Player.UserId)
-                            PERSIST.HealthPhase[id] = espObj.HealthGradientPhase
-                            PERSIST.NamePhase[id] = espObj.NameGradientPhase
-                            PERSIST.DistancePhase[id] = espObj.DistanceGradientPhase
-                            PERSIST.HealthTextPhase[id] = espObj.HealthTextGradientPhase
                         end
 
                         -- Health gradient: always use gradient stops
@@ -1542,15 +1524,9 @@ addESP = function(player)
     if player and player.UserId then
         local id = tostring(player.UserId)
         espObj.HealthGradientPhase = PERSIST.HealthPhase[id] or math.random()
-        espObj.NameGradientPhase = PERSIST.NamePhase[id] or math.random()
-        espObj.DistanceGradientPhase = PERSIST.DistancePhase[id] or math.random()
-        espObj.HealthTextGradientPhase = PERSIST.HealthTextPhase[id] or math.random()
         espObj.GradientAngle = PERSIST.GradientAngle[id] or 0
     else
         espObj.HealthGradientPhase = espObj.HealthGradientPhase or math.random()
-        espObj.NameGradientPhase = espObj.NameGradientPhase or math.random()
-        espObj.DistanceGradientPhase = espObj.DistanceGradientPhase or math.random()
-        espObj.HealthTextGradientPhase = espObj.HealthTextGradientPhase or math.random()
         espObj.GradientAngle = espObj.GradientAngle or 0
     end
     -- Copy gradient stops from global settings
