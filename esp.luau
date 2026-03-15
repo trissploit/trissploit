@@ -351,33 +351,16 @@ local function sampleStopsAtPosition(stops, pos)
     return sorted[#sorted].color
 end
 
--- Build a RichText string that colors each character by sampling a gradient.
--- Rotation matches UIGradient.Rotation behavior (0 = vertical, 90 = horizontal).
-local function makeGradientText(text, stops, rotationDeg)
-    local len = #text
-    if len == 0 then return "" end
-    local theta = math.rad((rotationDeg or 0) % 360)
-    local sinT = math.sin(theta)
-    local weight = math.abs(sinT) -- 0 = vertical, 1 = fully horizontal
-    local reverse = sinT < 0
-    local parts = {}
-    for i = 1, len do
-        local base = (len == 1) and 0.5 or ((i - 1) / (len - 1))
-        local target = reverse and (1 - base) or base
-        local samplePos = (1 - weight) * 0.5 + weight * target
-        local color = sampleStopsAtPosition(stops, samplePos)
-        local r = math.floor(color.R * 255 + 0.5)
-        local g = math.floor(color.G * 255 + 0.5)
-        local b = math.floor(color.B * 255 + 0.5)
-        local char = text:sub(i, i)
-        char = char:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
-        parts[i] = string.format('<font color="rgb(%d,%d,%d)">%s</font>', r, g, b, char)
-    end
-    return table.concat(parts)
-end
+-- NOTE: text gradients are now handled via UIGradient on TextLabels (faster and natively supports rotation).
+-- The `makeGradientText` legacy function is removed.
+
+-- Custom ProggyClean font asset (used when TextFont == "ProggyClean")
+local PROGGY_CLEAN_FONT = Font.new("rbxasset://6879b182e12bdac9912764d972203090/proggyclean_font")
 
 local function getEnumFont(fontName)
-    if fontName == "Tahoma" then
+    if fontName == "ProggyClean" then
+        return PROGGY_CLEAN_FONT
+    elseif fontName == "Tahoma" then
         return Enum.Font.SourceSans
     elseif fontName == "SourceSansBold" then
         return Enum.Font.SourceSansBold
@@ -394,20 +377,9 @@ local function getEnumFont(fontName)
     elseif fontName == "Oswald" then
         return Enum.Font.Oswald
     end
-    return Enum.Font.Code -- ProggyClean (default)
+    return PROGGY_CLEAN_FONT -- default
 end
 
-local function getHealthColor(ratio)
-    if ratio > 0.75 then
-        return Color3.fromRGB(0, 255, 0)
-    elseif ratio > 0.5 then
-        return Color3.fromRGB(255, 255, 0)
-    elseif ratio > 0.25 then
-        return Color3.fromRGB(255, 170, 0)
-    else
-        return Color3.fromRGB(255, 0, 0)
-    end
-end
 
 local function isSameTeam(player1, player2)
     if not player1 or not player2 or player1 == player2 then return false end
@@ -576,10 +548,16 @@ local function createESPObject()
     espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Name.TextStrokeTransparency = 0
     espObj.Name.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    espObj.Name.RichText = true
+    espObj.Name.RichText = false
     espObj.Name.Visible = false
     espObj.Name.ZIndex = 10
     espObj.Name.Parent = container
+
+    -- Name gradient (UIGradient on TextLabel)
+    espObj.NameGradient = Instance.new("UIGradient")
+    espObj.NameGradient.Name = "NameGradient"
+    espObj.NameGradient.Rotation = 0
+    espObj.NameGradient.Parent = espObj.Name
     
     -- Distance label (AnchorPoint top-center so text stays right below the box)
     espObj.Distance = Instance.new("TextLabel")
@@ -590,7 +568,7 @@ local function createESPObject()
     espObj.Distance.Font = initFont
     espObj.Distance.TextSize = 13
     espObj.Distance.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espObj.Distance.RichText = true
+    espObj.Distance.RichText = false
     espObj.Distance.TextStrokeTransparency = 0
     espObj.Distance.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.Distance.Visible = false
@@ -745,7 +723,7 @@ local function createESPObject()
                 end
     espObj.HealthBarGradient.Parent = espObj.HealthBar
     
-    -- Health text (RichText enabled for per-character gradient coloring)
+    -- Health text (unused; kept for compatibility)
     espObj.HealthText = Instance.new("TextLabel")
     espObj.HealthText.Name = "HealthText"
     espObj.HealthText.BackgroundTransparency = 1
@@ -754,7 +732,7 @@ local function createESPObject()
     espObj.HealthText.Font = initFont
     espObj.HealthText.TextSize = 13
     espObj.HealthText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espObj.HealthText.RichText = true
+    espObj.HealthText.RichText = false
     espObj.HealthText.TextStrokeTransparency = 0
     espObj.HealthText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.HealthText.Visible = false
@@ -771,12 +749,18 @@ local function createESPObject()
     espObj.HPText.Font = initFont
     espObj.HPText.TextSize = 13
     espObj.HPText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espObj.HPText.RichText = true
+    espObj.HPText.RichText = false
     espObj.HPText.TextStrokeTransparency = 0
     espObj.HPText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     espObj.HPText.Visible = false
     espObj.HPText.ZIndex = 11
     espObj.HPText.Parent = container
+
+    -- HP text gradient
+    espObj.HPTextGradient = Instance.new("UIGradient")
+    espObj.HPTextGradient.Name = "HPTextGradient"
+    espObj.HPTextGradient.Rotation = 0
+    espObj.HPTextGradient.Parent = espObj.HPText
     
     -- Corner boxes (8 frames)
     espObj.Corners = {}
@@ -1043,7 +1027,7 @@ local function updateESP(deltaTime)
                 local htGradStops = espObj.HealthTextStops or ESPSettings.HealthTextGradientStops
                 local htRotation = getSetting("HealthTextGradientRotation", ESPSettings.HealthTextGradientRotation or 0)
 
-                -- Name
+                -- Name (plain text, gradient handled by UIGradient)
                 if getSetting("ShowName", ESPSettings.ShowName) and espObj.Name then
                     local nameText = ""
                     if getSetting("NameMode", ESPSettings.NameMode) == "DisplayName" then
@@ -1053,11 +1037,17 @@ local function updateESP(deltaTime)
                     else
                         nameText = (player.Name or player.DisplayName or "")
                     end
-                    espObj.Name.Text = makeGradientText(nameText, nameStops, nameRotation)
+
+                    espObj.Name.Text = nameText
                     espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
                     espObj.Name.Visible = true
+
+                    -- Update UIGradient for name
+                    if espObj.NameGradient then
+                        stopsToUIGradient(espObj.NameGradient, nameStops, nameRotation)
+                    end
                 else
                     if espObj.Name then espObj.Name.Visible = false end
                 end
@@ -1302,20 +1292,14 @@ local function updateESP(deltaTime)
                             hpStr = string.format("%d", hpVal)
                         end
                         local distStr    = string.format("[%d st]", math.floor(Dist))
-                        -- Build below-box text with per-label gradients
+                        -- Build below-box text (gradients handled via UIGradient on HPText)
                         local belowText
-                        local belowRich -- RichText version (used when any gradient is enabled)
                         if showHPTxt and showDist then
-                            local hpPart   = makeGradientText(hpStr, htGradStops, htRotation)
-                            local distPart = makeGradientText(distStr, distGradStops, distRotation)
                             belowText = hpStr .. "  " .. distStr
-                            belowRich = hpPart .. "  " .. distPart
                         elseif showHPTxt then
                             belowText = hpStr
-                            belowRich = makeGradientText(hpStr, htGradStops, htRotation)
                         elseif showDist then
                             belowText = distStr
-                            belowRich = makeGradientText(distStr, distGradStops, distRotation)
                         end
 
                         if posMode == "Bottom" then
@@ -1340,14 +1324,15 @@ local function updateESP(deltaTime)
                             -- HPText: same gap below bar as name text uses above box
                             if espObj.HPText then
                                 if belowText then
-                                    espObj.HPText.Text = belowRich or belowText
-                                    espObj.HPText.Font = fontEnum
-                                    espObj.HPText.TextSize = scaledTextSize
-                                    -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
-                                    espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + 5)
-                                    espObj.HPText.Visible = true
-                                else
-                                    espObj.HPText.Visible = false
+                                espObj.HPText.Text = belowText
+                                espObj.HPText.Font = fontEnum
+                                espObj.HPText.TextSize = scaledTextSize
+                                -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
+                                espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + 5)
+                                espObj.HPText.Visible = true
+                                if espObj.HPTextGradient then
+                                    stopsToUIGradient(espObj.HPTextGradient, htGradStops, htRotation)
+                                end
                                 end
                             end
 
@@ -1375,11 +1360,14 @@ local function updateESP(deltaTime)
                             -- HPText: same gap below box as name text uses above box, always centered
                             if espObj.HPText then
                                 if belowText then
-                                    espObj.HPText.Text = belowRich or belowText
+                                    espObj.HPText.Text = belowText
                                     espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
                                     espObj.HPText.Visible = true
+                                    if espObj.HPTextGradient then
+                                        stopsToUIGradient(espObj.HPTextGradient, htGradStops, htRotation)
+                                    end
                                 else
                                     espObj.HPText.Visible = false
                                 end
@@ -1398,11 +1386,14 @@ local function updateESP(deltaTime)
                             local showDist = getSetting("ShowDistance", ESPSettings.ShowDistance)
                             if showDist then
                                 local distOnly = string.format("[%d st]", math.floor(Dist))
-                                espObj.HPText.Text = makeGradientText(distOnly, distGradStops, distRotation)
+                                espObj.HPText.Text = distOnly
                                 espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
                                 espObj.HPText.Visible = true
+                                if espObj.HPTextGradient then
+                                    stopsToUIGradient(espObj.HPTextGradient, distGradStops, distRotation)
+                                end
                             else
                                 espObj.HPText.Visible = false
                             end
