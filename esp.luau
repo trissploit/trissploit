@@ -351,16 +351,25 @@ local function sampleStopsAtPosition(stops, pos)
     return sorted[#sorted].color
 end
 
--- Build a RichText string that colors each character by sampling a gradient.
--- Rotation is treated like UIGradient.Rotation: the gradient is shifted by a phase.
+-- Build a RichText string that colors each character using a rotatable gradient.
+-- This method samples the gradient over a 2D circular stripe so rotation affects
+-- the output even on a 1D text line.
 local function makeGradientText(text, stops, rotationDeg)
     local len = #text
     if len == 0 then return "" end
-    local phase = ((rotationDeg or 0) % 360) / 360
+    local theta = math.rad((rotationDeg or 0) % 360)
+    local cosT = math.cos(theta)
+    local sinT = math.sin(theta)
     local parts = {}
+
     for i = 1, len do
-        local t = (len == 1) and 0.5 or ((i - 1) / (len - 1))
-        local samplePos = (t + phase) % 1
+        -- Map index into a circle so any rotation produces visible variation.
+        local angle = (i - 1) / math.max(1, len - 1) * math.pi * 2
+        local x = math.cos(angle)
+        local y = math.sin(angle)
+        -- Project onto rotated gradient axis (cosT, sinT).
+        local proj = x * cosT + y * sinT
+        local samplePos = (proj + 1) / 2  -- map [-1,1] → [0,1]
         local color = sampleStopsAtPosition(stops, samplePos)
         local r = math.floor(color.R * 255 + 0.5)
         local g = math.floor(color.G * 255 + 0.5)
