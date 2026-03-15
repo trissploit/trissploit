@@ -358,12 +358,13 @@ local function makeGradientText(text, stops, rotationDeg)
     if len == 0 then return "" end
     local theta = math.rad((rotationDeg or 0) % 360)
     local sinT = math.sin(theta)
+    local weight = math.abs(sinT) -- 0 = vertical, 1 = fully horizontal
+    local reverse = sinT < 0
     local parts = {}
     for i = 1, len do
-        local t = (len == 1) and 0.5 or ((i - 1) / (len - 1))
-        -- Map character position into [0,1] along the gradient direction.
-        -- At 0°, gradient is vertical (no change along text). At 90°, gradient is horizontal.
-        local samplePos = math.clamp((t - 0.5) * sinT + 0.5, 0, 1)
+        local base = (len == 1) and 0.5 or ((i - 1) / (len - 1))
+        local target = reverse and (1 - base) or base
+        local samplePos = (1 - weight) * 0.5 + weight * target
         local color = sampleStopsAtPosition(stops, samplePos)
         local r = math.floor(color.R * 255 + 0.5)
         local g = math.floor(color.G * 255 + 0.5)
