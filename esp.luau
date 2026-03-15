@@ -351,33 +351,22 @@ local function sampleStopsAtPosition(stops, pos)
     return sorted[#sorted].color
 end
 
--- Build a RichText string that colors each character by projecting character
--- position onto a rotated gradient axis (true angle-based rotation).
-local function makeGradientText(text, stops, rotationDegrees)
+-- Build a RichText string that colors each character using an angle-rotated
+-- gradient axis (similar to UIGradient.Rotation behavior).
+local function makeGradientText(text, stops, rotationDeg)
     local len = #text
     if len == 0 then return "" end
-    local rot = math.rad(rotationDegrees or 0)
-    local cosR = math.cos(rot)
-    local sinR = math.sin(rot)
-
-    -- Characters are treated as samples on a unit line centered at x=0.5.
-    -- y is fixed at 0.5 (single text row), so rotating toward vertical naturally
-    -- flattens horizontal variation as expected from real gradient rotation.
-    local minProj = (-0.5) * cosR + 0.5 * sinR
-    local maxProj = ( 0.5) * cosR + 0.5 * sinR
-    local projRange = maxProj - minProj
-    if math.abs(projRange) < 1e-6 then
-        projRange = 1e-6
-    end
-
+    local theta = math.rad(rotationDeg or 0)
+    local cosT = math.cos(theta)
+    local sinT = math.sin(theta)
     local parts = {}
     for i = 1, len do
-        local t = (len == 1) and 0.5 or ((i - 1) / (len - 1))
-        local x = t - 0.5
-        local y = 0.5
-        local proj = x * cosR + y * sinR
-        local samplePos = (proj - minProj) / projRange
-        samplePos = math.clamp(samplePos, 0, 1)
+        local u = (len == 1) and 0.5 or ((i - 1) / (len - 1))
+        -- Treat text as normalized [0..1] x [0..1] quad and rotate around center.
+        local x = u - 0.5
+        local y = 0
+        local axisPos = x * cosT + y * sinT
+        local samplePos = math.clamp(axisPos + 0.5, 0, 1)
         local color = sampleStopsAtPosition(stops, samplePos)
         local r = math.floor(color.R * 255 + 0.5)
         local g = math.floor(color.G * 255 + 0.5)
@@ -1046,7 +1035,7 @@ local function updateESP(deltaTime)
                 local scaledTextSize = math.max(9, math.floor(13 * textScale))
                 -- Consistent pixel gap used above AND below the box for all text labels
                 local nameGap = math.max(8, math.floor(scaledTextSize * 1.1))
-                -- Text gradient rotations (degrees)
+                -- Text gradients use fixed rotation in degrees.
                 local nameStops = espObj.NameStops or ESPSettings.NameGradientStops
                 local nameRotation = getSetting("NameGradientRotation", ESPSettings.NameGradientRotation or 0)
 
