@@ -1842,6 +1842,11 @@ function Library:AddShadowFrame(Frame: GuiObject)
         return nil
     end
 
+    -- Skip shadow frame for clipped parents; the shadow must be visible outside parent bounds.
+    if Frame.ClipsDescendants then
+        return nil
+    end
+
     -- Transparent child frame with a dark UIStroke. Gives a black outer border
     -- visible around the colored outline without stacking UIStrokes on the same object.
     local corner = Frame:FindFirstChildOfClass("UICorner")
@@ -1906,7 +1911,7 @@ function Library:AddSmallOutline(Frame: GuiObject)
         Color = "OutlineColor",
         Thickness = 1,
         LineJoinMode = joinMode,
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         Parent = Frame,
     })
     return Stroke, DarkStroke or Stroke
@@ -1919,7 +1924,7 @@ function Library:AddOutline(Frame: GuiObject)
         Color = "OutlineColor",
         Thickness = 1,
         LineJoinMode = joinMode,
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         Parent = Frame,
     })
     -- Return value shape (OutlineStroke, ShadowStroke, OuterBlackStroke) for compatible callers
