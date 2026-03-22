@@ -1855,7 +1855,8 @@ function Library:AddShadowFrame(Frame: GuiObject)
     Shadow.BackgroundTransparency = 1
     Shadow.Size = UDim2.new(1, 2, 1, 2)
     Shadow.Position = UDim2.fromOffset(-1, -1)
-    Shadow.ZIndex = math.max(1, Frame.ZIndex - 1)
+    -- Force the shadow behind the parent frame so it doesn't overlay edges (some executors have ZIndex rounding quirks)
+    Shadow.ZIndex = math.max(0, Frame.ZIndex - 1)
     Shadow.Name = "_OutlineShadow"
     Shadow.Parent = Frame
 
@@ -1866,26 +1867,12 @@ function Library:AddShadowFrame(Frame: GuiObject)
     Library._ShadowCorners = Library._ShadowCorners or {}
     table.insert(Library._ShadowCorners, ShadowCorner)
 
-    local DarkStroke
-
-    if Frame.ClipsDescendants then
-        -- Child shadow can be clipped; fallback to stroking parent frame directly to keep consistent edges.
-        DarkStroke = Instance.new("UIStroke")
-        DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
-        DarkStroke.Thickness = 1
-        DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        DarkStroke.Parent = Frame
-        Library.Registry[DarkStroke] = { Color = "Dark" }
-    else
-        DarkStroke = Instance.new("UIStroke")
-        DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
-        DarkStroke.Thickness = 1
-        DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-        DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        DarkStroke.Parent = Shadow
-        Library.Registry[DarkStroke] = { Color = "Dark" }
-    end
+    local DarkStroke = Instance.new("UIStroke")
+    DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
+    DarkStroke.Thickness = 1
+    DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+    DarkStroke.Parent = Shadow
+    Library.Registry[DarkStroke] = { Color = "Dark" }
 
     -- If UIPadding exists now, counteract it. Also listen for future UIPadding.
     local function AdjustForPadding()
@@ -1918,24 +1905,25 @@ function Library:AddSmallOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
         Parent = Frame,
     })
     return Stroke, DarkStroke or Stroke
 end
 
 function Library:AddOutline(Frame: GuiObject)
-    Library:AddShadowFrame(Frame)
+    local DarkStroke = Library:AddShadowFrame(Frame)
     local joinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
         Parent = Frame,
     })
-    return Stroke, Stroke, Stroke
+    -- Return value shape (OutlineStroke, ShadowStroke, OuterBlackStroke) for compatible callers
+    return Stroke, DarkStroke or Stroke, DarkStroke or Stroke
 end
 
 function Library:AddDraggableLabel(Text: string)
