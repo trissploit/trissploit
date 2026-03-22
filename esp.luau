@@ -354,14 +354,8 @@ end
 -- NOTE: text gradients are now handled via UIGradient on TextLabels (faster and natively supports rotation).
 -- The `makeGradientText` legacy function is removed.
 
--- Custom ProggyClean font asset (used when TextFont == "ProggyClean")
--- Roblox's TextLabel.Font accepts Enum.Font, number, or string. We provide the asset URL as a string.
-local PROGGY_CLEAN_FONT = "rbxasset://6879b182e12bdac9912764d972203090/proggyclean_font"
-
 local function getEnumFont(fontName)
-    if fontName == "ProggyClean" then
-        return PROGGY_CLEAN_FONT
-    elseif fontName == "Tahoma" then
+    if fontName == "Tahoma" then
         return Enum.Font.SourceSans
     elseif fontName == "SourceSansBold" then
         return Enum.Font.SourceSansBold
@@ -378,7 +372,7 @@ local function getEnumFont(fontName)
     elseif fontName == "Oswald" then
         return Enum.Font.Oswald
     end
-    return PROGGY_CLEAN_FONT -- default
+    return Enum.Font.Code -- ProggyClean (default)
 end
 
 
