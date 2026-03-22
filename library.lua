@@ -1866,12 +1866,26 @@ function Library:AddShadowFrame(Frame: GuiObject)
     Library._ShadowCorners = Library._ShadowCorners or {}
     table.insert(Library._ShadowCorners, ShadowCorner)
 
-    local DarkStroke = Instance.new("UIStroke")
-    DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
-    DarkStroke.Thickness = 1
-    DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
-    DarkStroke.Parent = Shadow
-    Library.Registry[DarkStroke] = { Color = "Dark" }
+    local DarkStroke
+
+    if Frame.ClipsDescendants then
+        -- Child shadow can be clipped; fallback to stroking parent frame directly to keep consistent edges.
+        DarkStroke = Instance.new("UIStroke")
+        DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
+        DarkStroke.Thickness = 1
+        DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+        DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        DarkStroke.Parent = Frame
+        Library.Registry[DarkStroke] = { Color = "Dark" }
+    else
+        DarkStroke = Instance.new("UIStroke")
+        DarkStroke.Color = Library.Scheme.Dark or Color3.new(0, 0, 0)
+        DarkStroke.Thickness = 1
+        DarkStroke.LineJoinMode = Library.CornerRadius > 0 and Enum.LineJoinMode.Round or Enum.LineJoinMode.Miter
+        DarkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        DarkStroke.Parent = Shadow
+        Library.Registry[DarkStroke] = { Color = "Dark" }
+    end
 
     -- If UIPadding exists now, counteract it. Also listen for future UIPadding.
     local function AdjustForPadding()
@@ -1904,6 +1918,7 @@ function Library:AddSmallOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
         Parent = Frame,
     })
@@ -1916,6 +1931,7 @@ function Library:AddOutline(Frame: GuiObject)
     local Stroke = New("UIStroke", {
         Color = "OutlineColor",
         Thickness = 1,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         LineJoinMode = joinMode,
         Parent = Frame,
     })
