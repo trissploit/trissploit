@@ -10911,5 +10911,12 @@ Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 -- all functions closed above; library ready to return
-getgenv().Library = Library
+if getgenv then
+    getgenv().Library = Library
+end
+
+if not Library then
+    error("[Obsidian] Library is nil and could not be initialized.")
+end
+
 return Library
