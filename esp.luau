@@ -1,17 +1,9 @@
---[[
-    TrisESP - ScreenGui ESP System
-    
-    Complete rewrite using ScreenGui instead of Drawing.new
-    Includes rotation animation and vertical gradients
-    
-    Load via: loadstring(game:HttpGet("YOUR_URL_HERE"))()
---]]
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local Teams = game:GetService("Teams")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -67,7 +59,7 @@ local ESPSettings = {
     NameMode = "DisplayName",
     ShowHealthText = false,
     ShowDistance = false,
-    -- Font selection: "ProggyClean" | "Tahoma"
+    -- Font selection: supports built-in enums and custom faces (ProggyClean, Tahoma, Verdana, SmallestPixel, ProggyTiny, Minecraftia, Tahoma Bold, Rubik)
     TextFont = "ProggyClean",
     -- Name label gradient
     NameGradientRotation = 0, -- degrees
@@ -180,7 +172,7 @@ Documentation: TrisESP usage & API
 Settings (table: `getgenv().TrisESP.Settings`)
 - Enabled (bool): Master system toggle. When false, all ESP is removed.
 - MaxDistance (number): Max render distance (studs).
-- TextFont (string): "ProggyClean" (monospace) or "Tahoma" (sans-serif).
+- TextFont (string): Built-in enums plus custom fonts (ProggyClean, Tahoma, Verdana, SmallestPixel, ProggyTiny, Minecraftia, Tahoma Bold, Rubik).
 - AnimateBoxRotation (bool): Rotate box-fill gradients when true.
 - BoxRotationSpeed (number): Rotation speed used when AnimateBoxRotation is enabled.
 - Boxes (bool): Enable box outlines.
@@ -240,11 +232,6 @@ Examples
 
 - Make a single player always invisible to ESP (override):
     getgenv().TrisESP.AddPlayerOverride("Enemy", { Enabled = false })
-
-Notes
-- Many settings can also be overridden per-player using `AddPlayerOverride`.
-- The system persists per-player gradient/phase angles in `getgenv()._TrisESP_Persistent` where supported by the executor.
-- If you want help converting an external UI to call these helpers, provide the UI code and I can wire it.
 ]]
 
 -- Spin integrator & constants
@@ -354,25 +341,162 @@ end
 -- NOTE: text gradients are now handled via UIGradient on TextLabels (faster and natively supports rotation).
 -- The `makeGradientText` legacy function is removed.
 
-local function getEnumFont(fontName)
-    if fontName == "Tahoma" then
-        return Enum.Font.SourceSans
-    elseif fontName == "SourceSansBold" then
-        return Enum.Font.SourceSansBold
-    elseif fontName == "GothamBold" then
-        return Enum.Font.GothamBold
-    elseif fontName == "Gotham" then
-        return Enum.Font.Gotham
-    elseif fontName == "Roboto" then
-        return Enum.Font.Roboto
-    elseif fontName == "RobotoMono" then
-        return Enum.Font.RobotoMono
-    elseif fontName == "Ubuntu" then
-        return Enum.Font.Ubuntu
-    elseif fontName == "Oswald" then
-        return Enum.Font.Oswald
+local BuiltInFontMap = {
+    Tahoma = Enum.Font.SourceSans,
+    ProggyClean = Enum.Font.Code,
+    Verdana = Enum.Font.Code,
+    SmallestPixel = Enum.Font.Code,
+    ProggyTiny = Enum.Font.Code,
+    Minecraftia = Enum.Font.Code,
+    ["Tahoma Bold"] = Enum.Font.SourceSansBold,
+    Rubik = Enum.Font.Code,
+}
+
+local CustomFontFiles = {
+    ProggyClean = "ProggyClean.ttf",
+    Tahoma = "fs-tahoma-8px.ttf",
+    Verdana = "Verdana-Font.ttf",
+    SmallestPixel = "smallest_pixel-7.ttf",
+    ProggyTiny = "ProggyTiny.ttf",
+    Minecraftia = "Minecraftia-Regular.ttf",
+    ["Tahoma Bold"] = "tahoma_bold.ttf",
+    Rubik = "Rubik-Regular.ttf",
+}
+
+local CustomFontWeights = {
+    ["Tahoma Bold"] = Enum.FontWeight.Bold.Value,
+    Rubik = Enum.FontWeight.Heavy.Value,
+}
+
+local CustomFontFolder = "TrisRocks/fonts"
+local CustomFontBaseURL = "https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/"
+local LoadedCustomFonts = {}
+
+local function ensureFolder(path)
+    if not (isfolder and makefolder) then
+        return false
     end
-    return Enum.Font.Code -- ProggyClean (default)
+
+    if not isfolder(path) then
+        pcall(makefolder, path)
+    end
+
+    return isfolder(path)
+end
+
+local function registerCustomFontFace(name, filePath)
+    local assetOk, assetId = pcall(getcustomasset, filePath)
+    if not (assetOk and typeof(assetId) == "string") then
+        return nil
+    end
+
+    local descriptorPath = string.format("%s/%s.font", CustomFontFolder, tostring(name):gsub("[^%w_%-]", "_"))
+    local descriptor = {
+        name = name,
+        faces = {
+            {
+                name = "Regular",
+                weight = CustomFontWeights[name] or Enum.FontWeight.Regular.Value,
+                style = "Normal",
+                assetId = assetId,
+            },
+        },
+    }
+
+    local encodedOk, encoded = pcall(HttpService.JSONEncode, HttpService, descriptor)
+    if not (encodedOk and typeof(encoded) == "string") then
+        return nil
+    end
+
+    pcall(writefile, descriptorPath, encoded)
+
+    local descriptorAssetOk, descriptorAsset = pcall(getcustomasset, descriptorPath)
+    if not (descriptorAssetOk and typeof(descriptorAsset) == "string") then
+        return nil
+    end
+
+    local fontOk, fontObj = pcall(function()
+        return Font.new(descriptorAsset, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    end)
+
+    if not fontOk then
+        return nil
+    end
+
+    return fontObj
+end
+
+local function loadCustomFonts()
+    if not (getcustomasset and writefile and isfile and ensureFolder("TrisRocks") and ensureFolder(CustomFontFolder)) then
+        return
+    end
+
+    for name, fileName in pairs(CustomFontFiles) do
+        local filePath = string.format("%s/%s", CustomFontFolder, fileName)
+
+        if not isfile(filePath) then
+            local downloadOk, fileContents = pcall(function()
+                return game:HttpGet(CustomFontBaseURL .. fileName)
+            end)
+
+            if downloadOk and typeof(fileContents) == "string" then
+                pcall(writefile, filePath, fileContents)
+            end
+        end
+
+        if isfile(filePath) then
+            local fontFace = registerCustomFontFace(name, filePath)
+            if fontFace then
+                LoadedCustomFonts[name] = fontFace
+            end
+        end
+    end
+end
+
+loadCustomFonts()
+
+local function getEnumFont(fontName)
+    return BuiltInFontMap[fontName] or Enum.Font.Code
+end
+
+local function applyTextFont(label, fontName)
+    local customFont = LoadedCustomFonts[fontName]
+    if customFont then
+        local customOk = pcall(function()
+            label.FontFace = customFont
+        end)
+        if customOk then
+            return
+        end
+    end
+
+    label.Font = getEnumFont(fontName)
+end
+
+local function applyFontToESPObject(espObj, fontName)
+    if not espObj then
+        return
+    end
+
+    if espObj.AppliedFontName == fontName then
+        return
+    end
+
+    espObj.AppliedFontName = fontName
+
+    if espObj.Name then applyTextFont(espObj.Name, fontName) end
+    if espObj.Distance then applyTextFont(espObj.Distance, fontName) end
+    if espObj.Weapon then applyTextFont(espObj.Weapon, fontName) end
+    if espObj.HealthText then applyTextFont(espObj.HealthText, fontName) end
+    if espObj.HPText then applyTextFont(espObj.HPText, fontName) end
+
+    if espObj.CustomTextLabels then
+        for _, lbl in ipairs(espObj.CustomTextLabels) do
+            if lbl then
+                applyTextFont(lbl, fontName)
+            end
+        end
+    end
 end
 
 
@@ -532,13 +656,13 @@ local function createESPObject()
     espObj.OutlineAngle = 0
     
     -- Name label
-    local initFont = getEnumFont(ESPSettings.TextFont)
+    local initFontName = tostring(ESPSettings.TextFont or "ProggyClean")
     espObj.Name = Instance.new("TextLabel")
     espObj.Name.Name = "NameLabel"
     espObj.Name.BackgroundTransparency = 1
     espObj.Name.Size = UDim2.new(0, 100, 0, 20)
     espObj.Name.AnchorPoint = Vector2.new(0.5, 0.5)
-    espObj.Name.Font = initFont
+    applyTextFont(espObj.Name, initFontName)
     espObj.Name.TextSize = 13
     espObj.Name.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Name.TextStrokeTransparency = 0
@@ -560,7 +684,7 @@ local function createESPObject()
     espObj.Distance.BackgroundTransparency = 1
     espObj.Distance.Size = UDim2.new(0, 100, 0, 20)
     espObj.Distance.AnchorPoint = Vector2.new(0.5, 0)
-    espObj.Distance.Font = initFont
+    applyTextFont(espObj.Distance, initFontName)
     espObj.Distance.TextSize = 13
     espObj.Distance.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Distance.RichText = false
@@ -580,7 +704,7 @@ local function createESPObject()
     espObj.Weapon.BackgroundTransparency = 1
     espObj.Weapon.Size = UDim2.new(0, 100, 0, 20)
     espObj.Weapon.AnchorPoint = Vector2.new(0.5, 0.5)
-    espObj.Weapon.Font = initFont
+    applyTextFont(espObj.Weapon, initFontName)
     espObj.Weapon.TextSize = 13
     espObj.Weapon.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.Weapon.TextStrokeTransparency = 0
@@ -724,7 +848,7 @@ local function createESPObject()
     espObj.HealthText.BackgroundTransparency = 1
     espObj.HealthText.Size = UDim2.new(0, 60, 0, 20)
     espObj.HealthText.AnchorPoint = Vector2.new(0.5, 0.5)
-    espObj.HealthText.Font = initFont
+    applyTextFont(espObj.HealthText, initFontName)
     espObj.HealthText.TextSize = 13
     espObj.HealthText.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.HealthText.RichText = false
@@ -741,7 +865,7 @@ local function createESPObject()
     espObj.HPText.Size = UDim2.new(0, 120, 0, 18)
     -- AnchorPoint (0.5, 0) means Position Y sets the TOP edge of the label, preventing overlap with the bar
     espObj.HPText.AnchorPoint = Vector2.new(0.5, 0)
-    espObj.HPText.Font = initFont
+    applyTextFont(espObj.HPText, initFontName)
     espObj.HPText.TextSize = 13
     espObj.HPText.TextColor3 = Color3.fromRGB(255, 255, 255)
     espObj.HPText.RichText = false
@@ -756,6 +880,8 @@ local function createESPObject()
     espObj.HPTextGradient.Name = "HPTextGradient"
     espObj.HPTextGradient.Rotation = 0
     espObj.HPTextGradient.Parent = espObj.HPText
+
+    espObj.AppliedFontName = initFontName
     
     -- Corner boxes (8 frames)
     espObj.Corners = {}
@@ -1006,7 +1132,8 @@ local function updateESP(deltaTime)
             local Dist = distance / 3.5714285714
             
             if getSetting("Enabled", ESPSettings.Enabled) then
-                local fontEnum = getEnumFont(getSetting("TextFont", ESPSettings.TextFont))
+                local fontName = tostring(getSetting("TextFont", ESPSettings.TextFont) or "ProggyClean")
+                applyFontToESPObject(espObj, fontName)
                 -- Dynamic text scale factor based on box height (encodes distance)
                 local textScale = math.clamp(h / 80, 0.65, 1.0)
                 local scaledTextSize = math.max(9, math.floor(13 * textScale))
@@ -1034,7 +1161,6 @@ local function updateESP(deltaTime)
                     end
 
                     espObj.Name.Text = nameText
-                    espObj.Name.Font = fontEnum
                     espObj.Name.TextSize = scaledTextSize
                     espObj.Name.Position = UDim2.new(0, x + w/2, 0, y - nameGap)
                     espObj.Name.Visible = true
@@ -1053,7 +1179,6 @@ local function updateESP(deltaTime)
                 -- Weapon (placeholder)
                 if espObj.Weapon then
                     espObj.Weapon.Text = "none"
-                    espObj.Weapon.Font = fontEnum
                     espObj.Weapon.Position = UDim2.new(0, x + w/2, 0, y + h + 18)
                     espObj.Weapon.Visible = false
                 end
@@ -1191,7 +1316,7 @@ local function updateESP(deltaTime)
                             if not lbl then
                                 lbl = Instance.new("TextLabel")
                                 lbl.BackgroundTransparency = 1
-                                lbl.Font = fontEnum
+                                applyTextFont(lbl, fontName)
                                 lbl.TextSize = 13
                                 lbl.TextColor3 = Color3.fromRGB(255,255,255)
                                 lbl.TextStrokeTransparency = 0
@@ -1200,7 +1325,6 @@ local function updateESP(deltaTime)
                                 lbl.Parent = espObj.Container
                                 espObj.CustomTextLabels[i] = lbl
                             end
-                            lbl.Font = fontEnum
                             lbl.Text = textStr
                             lbl.Position = UDim2.new(0, startX, 0, y + (i-1) * lineHeight)
                             lbl.Visible = true
@@ -1320,7 +1444,6 @@ local function updateESP(deltaTime)
                             if espObj.HPText then
                                 if belowText then
                                 espObj.HPText.Text = belowText
-                                espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 -- AnchorPoint.Y=0 → Position.Y is TOP of label, preventing overlap
                                 espObj.HPText.Position = UDim2.new(0, barX + fullWidth / 2, 0, barY + thickness + 5)
@@ -1356,7 +1479,6 @@ local function updateESP(deltaTime)
                             if espObj.HPText then
                                 if belowText then
                                     espObj.HPText.Text = belowText
-                                    espObj.HPText.Font = fontEnum
                                     espObj.HPText.TextSize = scaledTextSize
                                     espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
                                     espObj.HPText.Visible = true
@@ -1382,7 +1504,6 @@ local function updateESP(deltaTime)
                             if showDist then
                                 local distOnly = string.format("[%d st]", math.floor(Dist))
                                 espObj.HPText.Text = distOnly
-                                espObj.HPText.Font = fontEnum
                                 espObj.HPText.TextSize = scaledTextSize
                                 espObj.HPText.Position = UDim2.new(0, x + w / 2, 0, y + h + 5)
                                 espObj.HPText.Visible = true
@@ -1588,11 +1709,70 @@ getgenv().TrisESP = {
                 {pos = 0, color = payload, transparency = 0},
                 {pos = 1, color = payload, transparency = 0},
             }
-        elseif type(payload) == "table" and payload.Stops then
-            stops = payload.Stops
+        elseif type(payload) == "table" then
+            if type(payload.Stops) == "table" then
+                -- Legacy format: { Stops = { ... } }
+                stops = payload.Stops
+            elseif type(payload[1]) == "table" then
+                -- mspaintlinoria format: { {pos,color,transparency}, ... }
+                stops = payload
+            end
         else
             return false
         end
+
+        if type(stops) ~= "table" or #stops == 0 then
+            return false
+        end
+
+        local normalizedStops = {}
+        local stopCount = #stops
+        for index, stop in ipairs(stops) do
+            if type(stop) == "table" and typeof(stop.color) == "Color3" then
+                local defaultPos = if stopCount > 1 then (index - 1) / (stopCount - 1) else 0
+                local pos = math.clamp(tonumber(stop.pos) or defaultPos, 0, 1)
+                local transparency = math.clamp(tonumber(stop.transparency or stop.transp) or 0, 0, 1)
+                table.insert(normalizedStops, {
+                    pos = pos,
+                    color = stop.color,
+                    transparency = transparency,
+                })
+            end
+        end
+
+        if #normalizedStops == 0 then
+            return false
+        end
+
+        table.sort(normalizedStops, function(a, b)
+            return (a.pos or 0) < (b.pos or 0)
+        end)
+
+        if #normalizedStops == 1 then
+            local s = normalizedStops[1]
+            normalizedStops = {
+                { pos = 0, color = s.color, transparency = s.transparency },
+                { pos = 1, color = s.color, transparency = s.transparency },
+            }
+        elseif normalizedStops[1].pos > 0 or normalizedStops[#normalizedStops].pos < 1 then
+            if normalizedStops[1].pos > 0 then
+                table.insert(normalizedStops, 1, {
+                    pos = 0,
+                    color = normalizedStops[1].color,
+                    transparency = normalizedStops[1].transparency,
+                })
+            end
+            if normalizedStops[#normalizedStops].pos < 1 then
+                table.insert(normalizedStops, {
+                    pos = 1,
+                    color = normalizedStops[#normalizedStops].color,
+                    transparency = normalizedStops[#normalizedStops].transparency,
+                })
+            end
+        end
+
+        stops = normalizedStops
+
         -- Store globally
         ESPSettings[settingPrefix .. "GradientStops"] = stops
         -- Update all existing ESP objects
